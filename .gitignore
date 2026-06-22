@@ -1,0 +1,103 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+develop-eggs/
+.installed.cfg
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+MANIFEST
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ---- Environment / secrets ----
+.env
+.env.*
+!.env.example
+*.local
+
+# ---- Test / type / lint caches ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# ---- ML / model artifacts & caches ----
+.cache/
+.cache/huggingface/
+**/.cache/huggingface/
+huggingface/
+transformers_cache/
+sentence-transformers/
+.torch/
+.keras/
+wandb/
+mlruns/
+outputs/
+checkpoints/
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.gguf
+*.ckpt
+*.h5
+*.npz
+*.npy
+*.faiss
+
+# ---- Ray / serving runtime ----
+ray_results/
+/tmp/ray/
+*.ray
+
+# ---- Data / local stores ----
+data/
+*.parquet
+qdrant_storage/
+pgdata/
+redpanda_data/
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- Build / packaging tools ----
+.pdm-build/
+__pypackages__/
+poetry.lock.bak
+
+# ---- IDE / editor ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+logs/
