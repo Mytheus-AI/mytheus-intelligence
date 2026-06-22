@@ -1,19 +1,19 @@
-# Reprise AI — Intelligence / Inference Tier (`reprise-intelligence`)
+# Reprise AI - Intelligence / Inference Tier (`reprise-intelligence`)
 
-> The AI/inference tier of **Reprise AI** — the six LangGraph agents, the hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. Internal architecture codename: **NEXUS**.
+> The AI/inference tier of **Reprise AI** - the six LangGraph agents, the hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. Internal architecture codename: **NEXUS**.
 
 ## What this is
 
-`reprise-intelligence` is the **AI / inference tier** of Reprise AI — an intelligent meeting-orchestration multi-tenant SaaS where every participant gets a personal AI agent. This repo owns the intelligence and retrieval surfaces of the platform:
+`reprise-intelligence` is the **AI / inference tier** of Reprise AI - an intelligent meeting-orchestration multi-tenant SaaS where every participant gets a personal AI agent. This repo owns the intelligence and retrieval surfaces of the platform:
 
-- **Agents** — six LangGraph agents that turn a live meeting into personal notes, confirmed decisions and actions, real-time questions, cross-meeting context fills, and proactive alerts, on a cost-controlled LLM pipeline.
-- **RAG** — request-time hybrid retrieval (`expand → retrieve → rerank → assemble → cite`) that fuses vector, graph, and full-text-search signals and returns cited passages.
-- **GPU inference** — dedicated embedding and reranker model servers on Ray Serve / vLLM, off the API tier.
-- **Knowledge graph** — the Apache AGE `nexus_knowledge` graph, recording confirmed decisions and actions.
-- **Search** — the Postgres FTS arm of hybrid retrieval.
-- **Ingestion** — document parsing into typed, chunked elements.
+- **Agents** - six LangGraph agents that turn a live meeting into personal notes, confirmed decisions and actions, real-time questions, cross-meeting context fills, and proactive alerts, on a cost-controlled LLM pipeline.
+- **RAG** - request-time hybrid retrieval (`expand → retrieve → rerank → assemble → cite`) that fuses vector, graph, and full-text-search signals and returns cited passages.
+- **GPU inference** - dedicated embedding and reranker model servers on Ray Serve / vLLM, off the API tier.
+- **Knowledge graph** - the Apache AGE `nexus_knowledge` graph, recording confirmed decisions and actions.
+- **Search** - the Postgres FTS arm of hybrid retrieval.
+- **Ingestion** - document parsing into typed, chunked elements.
 
-This tier is its own **scaling family and cost center**: it autoscales on queue depth, GPU utilization, and token throughput — independently of the CRUD/control plane (req/s) and the real-time tier (concurrent connections). It is **stateless against the relational core**: it reads context and emits events, and durable agent output reaches Postgres only via `core-api`'s transactional outbox. It never writes Postgres directly.
+This tier is its own **scaling family and cost center**: it autoscales on queue depth, GPU utilization, and token throughput - independently of the CRUD/control plane (req/s) and the real-time tier (concurrent connections). It is **stateless against the relational core**: it reads context and emits events, and durable agent output reaches Postgres only via `core-api`'s transactional outbox. It never writes Postgres directly.
 
 See the canon architecture docs for the full picture: `08-ai-agent-architecture.md` (agents), `09-rag-and-inference-serving.md` (RAG + inference serving), `03-container-architecture.md` (containers + gRPC mesh + ownership), `05-data-architecture.md` (stores), `07-event-architecture.md` (topics).
 
@@ -31,25 +31,25 @@ See the canon architecture docs for the full picture: `08-ai-agent-architecture.
 
 ## The six agents
 
-- **`PersonalListenerAgent`** — per participant per meeting; scores each `transcript-chunks` window's relevance to the user's role and emits role-relevant worklog notes.
-- **`DecisionAgent`** — detects decisions, extracts rationale/stakeholders/confidence; emits a *candidate* only (no silent commit).
-- **`ActionAgent`** — detects action items, extracts assignee/due-date/dependencies/confidence; emits a *candidate* only.
-- **`QuestionAgent`** — detects context gaps in live conversation and proposes role-specific questions with priority 1–3.
-- **`ContextGapAgent`** — the cross-meeting collaborator: asks other users' agents over `agent-requests`/`agent-responses`, falling through peer-agents → related-meeting agents → RAG → silent.
-- **`ProactiveAgent`** — conflict / workload / missing-stakeholder detection over confirmed `decisions`/`actions` and the AGE graph.
+- **`PersonalListenerAgent`** - per participant per meeting; scores each `transcript-chunks` window's relevance to the user's role and emits role-relevant worklog notes.
+- **`DecisionAgent`** - detects decisions, extracts rationale/stakeholders/confidence; emits a *candidate* only (no silent commit).
+- **`ActionAgent`** - detects action items, extracts assignee/due-date/dependencies/confidence; emits a *candidate* only.
+- **`QuestionAgent`** - detects context gaps in live conversation and proposes role-specific questions with priority 1–3.
+- **`ContextGapAgent`** - the cross-meeting collaborator: asks other users' agents over `agent-requests`/`agent-responses`, falling through peer-agents → related-meeting agents → RAG → silent.
+- **`ProactiveAgent`** - conflict / workload / missing-stakeholder detection over confirmed `decisions`/`actions` and the AGE graph.
 
 Confidence surfacing policy (verbatim canon): `> 0.7` surface · `0.4–0.7` silent log to `worklogs` · `< 0.4` drop.
 
 ## Tech stack
 
 - **FastAPI** + **Python 3.11+**
-- **LangGraph** — the agent graphs and shared `BaseAgent` lifecycle
-- **LiteLLM** — tiered LLM routing (Haiku → Sonnet → Opus)
-- **Ray Serve** + **vLLM** — GPU model serving
-- **Qdrant client** — per-tenant vector collections
-- **Apache AGE / Cypher** — the `nexus_knowledge` graph
-- **sentence-transformers** — BGE-small-en (embeddings) + BGE-reranker-base (reranker)
-- **gRPC** — internal inference mesh
+- **LangGraph** - the agent graphs and shared `BaseAgent` lifecycle
+- **LiteLLM** - tiered LLM routing (Haiku → Sonnet → Opus)
+- **Ray Serve** + **vLLM** - GPU model serving
+- **Qdrant client** - per-tenant vector collections
+- **Apache AGE / Cypher** - the `nexus_knowledge` graph
+- **sentence-transformers** - BGE-small-en (embeddings) + BGE-reranker-base (reranker)
+- **gRPC** - internal inference mesh
 
 ## Repo structure
 
@@ -123,19 +123,19 @@ pytest
 
 ## Testing
 
-- **`pytest`** — unit and integration tests; mock the GPU model servers and LLM calls in CI.
-- **Eval harness** — golden-set quality gates for the agents (extraction F1, confidence calibration, relevance precision/recall, conflict false-positive rate) and for RAG (citation validity, retrieval quality). Prompt changes must pass the eval suite before rollout.
+- **`pytest`** - unit and integration tests; mock the GPU model servers and LLM calls in CI.
+- **Eval harness** - golden-set quality gates for the agents (extraction F1, confidence calibration, relevance precision/recall, conflict false-positive rate) and for RAG (citation validity, retrieval quality). Prompt changes must pass the eval suite before rollout.
 
 ## Related repos
 
-- `reprise-intelligence` (this repo) — AI / inference tier.
-- `reprise-core` — CRUD / control plane (identity-tenant, core-api, meeting, billing-metering, integration, admin-ops, notification).
-- `reprise-realtime` — real-time tier (realtime-gateway, transcription-service).
-- `reprise-workflows` — async orchestration (Temporal workers).
-- `reprise-web` — the Next.js 14 web app and agent sidebar.
-- `reprise-gateway` — api-gateway and bff edge.
-- `reprise-infra` — Kubernetes (EKS/GKE) + Terraform IaC, CI/CD.
-- `reprise-docs` — the canon architecture set, `_canon/` source of truth, and the Glossary (doc 24).
+- `reprise-intelligence` (this repo) - AI / inference tier.
+- `reprise-core` - CRUD / control plane (identity-tenant, core-api, meeting, billing-metering, integration, admin-ops, notification).
+- `reprise-realtime` - real-time tier (realtime-gateway, transcription-service).
+- `reprise-workflows` - async orchestration (Temporal workers).
+- `reprise-web` - the Next.js 14 web app and agent sidebar.
+- `reprise-gateway` - api-gateway and bff edge.
+- `reprise-infra` - Kubernetes (EKS/GKE) + Terraform IaC, CI/CD.
+- `reprise-docs` - the canon architecture set, `_canon/` source of truth, and the Glossary (doc 24).
 
 ## License
 
