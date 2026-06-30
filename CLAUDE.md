@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This is `reprise-intelligence`, the AI / inference tier of Reprise AI (internal codename NEXUS): six LangGraph agents, a hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. The single most important thing to internalize: this tier NEVER writes Postgres directly. It emits `agent-results` and `core-api` commits them through its transactional outbox; the knowledge graph is written only on user confirmation. The agent tier proposes; `core-api` commits.
+This is `mytheus-intelligence`, the AI / inference tier of Mytheus (internal codename NEXUS): six LangGraph agents, a hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. The single most important thing to internalize: this tier NEVER writes Postgres directly. It emits `agent-results` and `core-api` commits them through its transactional outbox; the knowledge graph is written only on user confirmation. The agent tier proposes; `core-api` commits.
 
 ## Repo at a glance
 
-Reprise AI is a multi-tenant meeting-orchestration SaaS where every participant gets a personal AI agent. The platform is split into three scaling families: the CRUD/control plane (`reprise-core`), the real-time tier (`reprise-realtime`), and this AI/inference tier. This repo is its own cost center: it autoscales on queue depth, GPU utilization, and token throughput, independently of CRUD req/s and real-time connection count. Seven services live here:
+Mytheus is a multi-tenant meeting-orchestration SaaS where every participant gets a personal AI agent. The platform is split into three scaling families: the CRUD/control plane (`mytheus-core`), the real-time tier (`mytheus-realtime`), and this AI/inference tier. This repo is its own cost center: it autoscales on queue depth, GPU utilization, and token throughput, independently of CRUD req/s and real-time connection count. Seven services live here:
 
 - `agent-runtime-service` - the six LangGraph agents and the cost-controlled LLM pipeline.
 - `rag-service` - the sync orchestrator of hybrid retrieval.
@@ -86,7 +86,7 @@ Exception to the Postgres rule: `ingestion-service` owns `document_chunks` / `do
 
 ## Naming authority
 
-Agent class names, topic names, AGE node/edge labels, and Qdrant collection names are frozen in `reprise-docs` `_canon/` and doc 24 (Glossary & Naming). Never invent or rename. A rename lands in the Glossary and a superseding ADR first, then propagates here.
+Agent class names, topic names, AGE node/edge labels, and Qdrant collection names are frozen in `mytheus-docs` `_canon/` and doc 24 (Glossary & Naming). Never invent or rename. A rename lands in the Glossary and a superseding ADR first, then propagates here.
 
 - Agent classes: `PersonalListenerAgent`, `DecisionAgent`, `ActionAgent`, `QuestionAgent`, `ContextGapAgent`, `ProactiveAgent`.
 - Topics (kebab-case): `transcript-chunks`, `document-chunks`, `agent-requests`, `agent-responses`, `agent-results`, `agent-stream`, plus `decisions`, `actions`, `notifications`, `usage-events`, `integration-events`.
@@ -176,10 +176,10 @@ Environment variables: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (LiteLLM), `LITELL
 
 ## Working with other repos
 
-- Consumes event schemas from `reprise-events` (frozen Avro envelopes in `07-event-architecture.md` / `_canon/`).
-- Receives `transcript-chunks` from `reprise-realtime` (transcription) and `document-chunks` work driven from `reprise-backend` integrations.
-- Emits `agent-results` consumed by `reprise-backend` `core-api`, which is the producer of confirmed `decisions` / `actions`.
-- Fans out `agent-stream` token deltas to `reprise-realtime` (`realtime-gateway`) for the live UI.
+- Consumes event schemas from `mytheus-events` (frozen Avro envelopes in `07-event-architecture.md` / `_canon/`).
+- Receives `transcript-chunks` from `mytheus-realtime` (transcription) and `document-chunks` work driven from `mytheus-backend` integrations.
+- Emits `agent-results` consumed by `mytheus-backend` `core-api`, which is the producer of confirmed `decisions` / `actions`.
+- Fans out `agent-stream` token deltas to `mytheus-realtime` (`realtime-gateway`) for the live UI.
 
 ## Commit and PR conventions
 

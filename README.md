@@ -1,10 +1,10 @@
-# Reprise AI - Intelligence / Inference Tier (`reprise-intelligence`)
+# Mytheus - Intelligence / Inference Tier (`mytheus-intelligence`)
 
-> The AI/inference tier of **Reprise AI** - the six LangGraph agents, the hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. Internal architecture codename: **NEXUS**.
+> The AI/inference tier of **Mytheus** - the six LangGraph agents, the hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. Internal architecture codename: **NEXUS**.
 
 ## What this is
 
-`reprise-intelligence` is the **AI / inference tier** of Reprise AI - an intelligent meeting-orchestration multi-tenant SaaS where every participant gets a personal AI agent. This repo owns the intelligence and retrieval surfaces of the platform:
+`mytheus-intelligence` is the **AI / inference tier** of Mytheus - an intelligent meeting-orchestration multi-tenant SaaS where every participant gets a personal AI agent. This repo owns the intelligence and retrieval surfaces of the platform:
 
 - **Agents** - six LangGraph agents that turn a live meeting into personal notes, confirmed decisions and actions, real-time questions, cross-meeting context fills, and proactive alerts, on a cost-controlled LLM pipeline.
 - **RAG** - request-time hybrid retrieval (`expand → retrieve → rerank → assemble → cite`) that fuses vector, graph, and full-text-search signals and returns cited passages.
@@ -54,7 +54,7 @@ Confidence surfacing policy (verbatim canon): `> 0.7` surface · `0.4–0.7` sil
 ## Repo structure
 
 ```
-reprise-intelligence/
+mytheus-intelligence/
 ├── services/
 │   ├── agent-runtime-service/
 │   ├── rag-service/
@@ -128,15 +128,15 @@ pytest
 
 ## Related repos
 
-- `reprise-intelligence` (this repo) - AI / inference tier.
-- `reprise-core` - CRUD / control plane (identity-tenant, core-api, meeting, billing-metering, integration, admin-ops, notification).
-- `reprise-realtime` - real-time tier (realtime-gateway, transcription-service).
-- `reprise-workflows` - async orchestration (Temporal workers).
-- `reprise-web` - the Next.js 14 web app and agent sidebar.
-- `reprise-gateway` - api-gateway and bff edge.
-- `reprise-infra` - Kubernetes (EKS/GKE) + Terraform IaC, CI/CD.
-- `reprise-docs` - the canon architecture set, `_canon/` source of truth, and the Glossary (doc 24).
+- `mytheus-intelligence` (this repo) - AI / inference tier.
+- `mytheus-core` - CRUD / control plane (identity-tenant, core-api, meeting, billing-metering, integration, admin-ops, notification).
+- `mytheus-realtime` - real-time tier (realtime-gateway, transcription-service).
+- `mytheus-workflows` - async orchestration (Temporal workers).
+- `mytheus-web` - the Next.js 14 web app and agent sidebar.
+- `mytheus-gateway` - api-gateway and bff edge.
+- `mytheus-infra` - Kubernetes (EKS/GKE) + Terraform IaC, CI/CD.
+- `mytheus-docs` - the canon architecture set, `_canon/` source of truth, and the Glossary (doc 24).
 
 ## License
 
-Proprietary. © Reprise AI. All rights reserved.
+Proprietary. © Mytheus. All rights reserved.

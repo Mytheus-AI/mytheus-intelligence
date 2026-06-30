@@ -1,14 +1,14 @@
-# `reprise-intelligence` - System Documentation
+# `mytheus-intelligence` - System Documentation
 
-Deep architecture reference for the **Reprise AI** intelligence / inference tier (internal codename **NEXUS**). This document is derived from the canon set; where a name, number, or rule is frozen, it is reproduced verbatim. Authoritative sources: `08-ai-agent-architecture.md`, `09-rag-and-inference-serving.md`, `03-container-architecture.md`, `05-data-architecture.md`, `07-event-architecture.md`, and the `_canon/` files they cite.
+Deep architecture reference for the **Mytheus** intelligence / inference tier (internal codename **NEXUS**). This document is derived from the canon set; where a name, number, or rule is frozen, it is reproduced verbatim. Authoritative sources: `08-ai-agent-architecture.md`, `09-rag-and-inference-serving.md`, `03-container-architecture.md`, `05-data-architecture.md`, `07-event-architecture.md`, and the `_canon/` files they cite.
 
 ---
 
 ## 1. Purpose & bounded context
 
-Reprise AI is an intelligent meeting-orchestration multi-tenant SaaS. Every participant gets a **personal AI agent** that attends their meetings, captures role-relevant notes, suggests questions in real time, detects decisions / conflicts / workload issues, and manages follow-ups. The differentiator is twofold: **personalized per-participant intelligence** (not one shared note-taker) plus **agent-to-agent collaboration across meetings** to fill context gaps.
+Mytheus is an intelligent meeting-orchestration multi-tenant SaaS. Every participant gets a **personal AI agent** that attends their meetings, captures role-relevant notes, suggests questions in real time, detects decisions / conflicts / workload issues, and manages follow-ups. The differentiator is twofold: **personalized per-participant intelligence** (not one shared note-taker) plus **agent-to-agent collaboration across meetings** to fill context gaps.
 
-`reprise-intelligence` is the **AI / inference tier** - one of three scaling families (CRUD/control plane, real-time, AI/inference). Its bounded context is intelligence and retrieval: agents, RAG, GPU model serving, the knowledge graph, lexical search, and document ingestion. It is a distinct **cost center** that autoscales on queue depth, GPU utilization, and token throughput, independently of CRUD req/s and real-time connections.
+`mytheus-intelligence` is the **AI / inference tier** - one of three scaling families (CRUD/control plane, real-time, AI/inference). Its bounded context is intelligence and retrieval: agents, RAG, GPU model serving, the knowledge graph, lexical search, and document ingestion. It is a distinct **cost center** that autoscales on queue depth, GPU utilization, and token throughput, independently of CRUD req/s and real-time connections.
 
 **Out of scope** (lives in other repos / tiers): meeting transport and transcription (LiveKit → Deepgram → `transcript-chunks`); the relational system of record and the confirmation write path (`core-api`); billing/metering aggregation and Stripe; the realtime WebSocket fan-out; Temporal workflows.
 
