@@ -1,0 +1,15 @@
+// Placeholder for the internal gRPC mesh of the AI/inference tier.
+//
+// rag-service fans out to embedding / reranker / knowledge-graph / search over this mesh; org_id
+// rides in gRPC metadata on every hop (never in the message body). The real service and message
+// definitions land in the RAG band; this file only reserves the package + path.
+
+syntax = "proto3";
+
+package mytheus.intelligence.rag.v1;
+
+// TODO(RAG band): define RagService (Query), plus Embed/Rerank/GraphTraverse/FtsSearch messages.
+// org_id travels in gRPC metadata, not in these messages.
+message RagQueryPlaceholder {
+  string query = 1;
+}
