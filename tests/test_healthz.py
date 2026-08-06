@@ -7,13 +7,15 @@ import importlib
 import pytest
 from starlette.testclient import TestClient
 
-# (module path, canonical service name) for the five FastAPI services.
+# (module path, canonical service name) for the FastAPI services.
 FASTAPI_SERVICES = [
     ("services.agent_runtime_service.main", "agent-runtime-service"),
     ("services.rag_service.main", "rag-service"),
     ("services.knowledge_graph_service.main", "knowledge-graph-service"),
     ("services.search_service.main", "search-service"),
     ("services.ingestion_service.main", "ingestion-service"),
+    ("services.embedding_service.main", "embedding-service"),
+    ("services.reranker_service.main", "reranker-service"),
 ]
 
 

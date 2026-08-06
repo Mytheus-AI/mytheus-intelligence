@@ -13,6 +13,34 @@ dependencies = [
     "grpcio>=1.63",
     "httpx>=0.27",
     "redis[hiredis]>=5",
+    # Plan 5-6 task 7 (embedding-service): real BGE-small-en on CPU (dev) / GPU (prod),
+    # the 600/60 splitter, and this repo's own outbox/inbox/relay Postgres history.
+    "sentence-transformers>=3",
+    "langchain-text-splitters>=0.3",
+    "sqlalchemy[asyncio]>=2",
+    "asyncpg>=0.29",
+    "psycopg2-binary>=2.9",
+    "alembic>=1.13",
+    # Plan 5-6 task 9 (ingestion-service): real document parsing + real object storage.
+    # Deliberately NOT `unstructured[pdf]` — that extra pulls unstructured_inference (torch,
+    # torchvision, onnxruntime, opencv-python, pandas, matplotlib, timm, accelerate; ~2GB,
+    # verified) just to make its hi-res layout model importable, even for the lightweight `fast`
+    # PDF strategy this repo never uses. PDF is handled directly via pdfminer.six instead (see
+    # services/ingestion_service/parser.py's module docstring for the full story).
+    "unstructured>=0.25,<0.26",
+    "markdown>=3.6",  # unstructured's partition_md
+    "python-docx>=1.1",  # unstructured's partition_docx
+    "python-pptx>=1.0",  # unstructured's partition_pptx
+    "pdfminer.six>=20231228",  # direct PDF text extraction (see parser.py)
+    "boto3>=1.34",  # real S3-API client against MinIO (nexus-documents / nexus-attachments)
+    "python-multipart>=0.0.9",  # FastAPI multipart/form-data (POST /ingest file upload)
+    # Security fix (whole-band review, Important finding): every REST route here used to trust
+    # a client-supplied X-Org-Id header outright. `libs/shared/auth.py` now verifies a Clerk
+    # RS256 session token against cached JWKS before any org_id is trusted — same library and
+    # version floor as `mytheus-backend`'s reference `libs/shared/auth.py`, which this module
+    # reimplements the pattern of (no cross-repo import).
+    "PyJWT>=2.8",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +74,12 @@ select = ["E", "F", "I", "UP", "B"]
 line-length = 100
 
 [tool.mypy]
-python_version = "3.11"
+# Bumped from 3.11 to 3.12 (task 7): numpy's stubs (a transitive dep of sentence-transformers,
+# added for the real BGE-small-en embedding model) use PEP 695 `type` statement syntax that
+# mypy only parses under a 3.12+ target. `.python-version` and this repo's dev venv are already
+# 3.12; `[project] requires-python = ">=3.11"` is unaffected (that's the supported runtime
+# floor, not mypy's parse target).
+python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 exclude = ["tests/"]

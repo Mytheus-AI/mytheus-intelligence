@@ -1,0 +1,52 @@
+# Plan 3.7 step 6: KEDA/autoscaler signal, recorded as CONFIG only. Deployment to Kubernetes
+# is POST-W36 (system.md #14 "Scaling & SLOs": the tier autoscales on queue depth, GPU
+# utilization, and token throughput). In the MVP modular monolith this repo runs today
+# (services.embedding_service.worker / .relay_main as plain processes, still off the API
+# tier), nothing reads this file — it is the target-state scaling contract, not live config.
+#
+# Two triggers, matching the two lanes serve.py stands up:
+#   1. Kafka consumer lag on transcript-chunks/document-chunks (the embed-on-ingest lane,
+#      IngestEmbedder) — target lag < 5s warn / 30s alert (system.md #14's frozen SLO row).
+#   2. GPU utilization on the Ray Serve deployment, once the GPU path lands (currently
+#      BLOCKED in this dev environment per this task's scope note).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: embedding-service-ingest
+  namespace: mytheus-intelligence
+spec:
+  scaleTargetRef:
+    name: embedding-service-worker
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: redpanda.mytheus-intelligence.svc:9092
+        consumerGroup: embedding-service.embed-on-ingest
+        topic: transcript-chunks
+        lagThreshold: "150" # ~5s of lag at the T2 throughput anchor before scale-out
+      # A second `kafka` trigger block (topic: document-chunks) is added identically when
+      # ingestion-service (task 9) is live and producing to it.
+    # GPU-utilization trigger (Prometheus, Ray Serve's exported per-replica GPU busy %) is
+    # added here once the GPU packaging itself lands — BLOCKED in this task per the scope note.
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: embedding-service-query
+  namespace: mytheus-intelligence
+spec:
+  scaleTargetRef:
+    name: embedding-service-query-embedder
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  triggers:
+    - type: prometheus
+      metadata:
+        # Ray Serve's default replica-queue-length metric, so the query-embed lane (warm-RAG
+        # budget < 500ms) scales independently of the ingest lane's consumer lag — the two
+        # deployments in serve.py never share a scaling signal, matching the plan's explicit
+        # reason for splitting them ("a query-embed burst never starves ingest").
+        query: ray_serve_deployment_queued_queries{deployment="QueryEmbedder"}
+        threshold: "10"
