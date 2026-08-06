@@ -1,21 +1,9 @@
-"""600/60 chunking — plan 3.7 step 4 verbatim: `RecursiveCharacterTextSplitter` from LangChain,
-chunk size 600, overlap 60. Used for BOTH `transcript-chunks` and `document-chunks` text before
-embedding, so a long transcript utterance or document element is split into embedding-sized
-pieces rather than truncated or embedded whole."""
+"""Re-export of the 600/60 splitter, promoted to `libs/shared/splitter.py` (Plan 5-6 task 9)
+because `ingestion-service` needs the byte-identical splitter too. Kept here so
+`EmbeddingConsumer`'s existing import and `tests/test_splitter.py` need no changes."""
 
 from __future__ import annotations
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from libs.shared.splitter import CHUNK_OVERLAP, CHUNK_SIZE, split_600_60
 
-CHUNK_SIZE = 600
-CHUNK_OVERLAP = 60
-
-_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
-
-
-def split_600_60(text: str) -> list[str]:
-    """Never returns an empty list for non-empty input; a text shorter than CHUNK_SIZE comes
-    back as a single-element list (one embed call, not zero)."""
-    if not text:
-        return []
-    return _splitter.split_text(text)
+__all__ = ["CHUNK_OVERLAP", "CHUNK_SIZE", "split_600_60"]

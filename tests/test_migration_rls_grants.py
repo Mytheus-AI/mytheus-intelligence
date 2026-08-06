@@ -63,7 +63,13 @@ async def test_two_independent_alembic_version_tables(migrated_db):
             await conn.execute(text("SELECT to_regclass('public.alembic_version') IS NOT NULL"))
         ).scalar_one()
     await engine.dispose()
-    assert mine == "9c2b7e4a1d03"
+    # HEAD of THIS repo's Alembic history, not a fixed revision: task 7's original assertion
+    # hardcoded "9c2b7e4a1d03" (the only revision that existed then). Task 9 added
+    # "b3f7a1c9e402" on top (down_revision = 9c2b7e4a1d03), so head moved — updating this to the
+    # new head is the correct, expected consequence of a later migration landing, not a
+    # regression; the test's actual intent ("this repo's own history advanced to head, the
+    # backend's did not move") is unchanged.
+    assert mine == "b3f7a1c9e402"
     # mytheus-backend's own alembic_version table exists independently, if that repo's
     # migrations have ever run against this database. This repo does not touch it either way.
     assert backend_exists in (True, False)

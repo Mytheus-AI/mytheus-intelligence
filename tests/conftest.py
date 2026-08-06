@@ -37,6 +37,11 @@ os.environ.setdefault("REDPANDA_BROKERS", "localhost:9092")
 os.environ.setdefault("SCHEMA_REGISTRY_URL", "http://localhost:8081")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6380")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
+# Plan 5-6 task 9 (ingestion-service): real MinIO, S3-API compatible — see
+# libs/shared/object_storage.py. Same dev credentials the task brief specified.
+os.environ.setdefault("MINIO_ENDPOINT_URL", "http://localhost:9002")
+os.environ.setdefault("MINIO_ACCESS_KEY", "mytheus")
+os.environ.setdefault("MINIO_SECRET_KEY", "mytheus-dev-secret")
 
 BOOTSTRAP_URL = os.environ.get("BOOTSTRAP_DATABASE_URL") or _DEFAULT_BOOTSTRAP
 os.environ.setdefault("DATABASE_URL", BOOTSTRAP_URL)
@@ -149,3 +154,25 @@ def avro_codec():
     from libs.shared.avro_codec import AvroCodec
 
     return AvroCodec(os.environ["SCHEMA_REGISTRY_URL"])
+
+
+def minio_reachable() -> bool:
+    try:
+        import httpx
+
+        return (
+            httpx.get(
+                os.environ["MINIO_ENDPOINT_URL"] + "/minio/health/live", timeout=2
+            ).status_code
+            == 200
+        )
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def s3_client():
+    _require_or_skip(minio_reachable(), "MinIO", "MYTHEUS_REQUIRE_MINIO")
+    from libs.shared.object_storage import get_client
+
+    return get_client()

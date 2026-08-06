@@ -21,6 +21,19 @@ dependencies = [
     "asyncpg>=0.29",
     "psycopg2-binary>=2.9",
     "alembic>=1.13",
+    # Plan 5-6 task 9 (ingestion-service): real document parsing + real object storage.
+    # Deliberately NOT `unstructured[pdf]` — that extra pulls unstructured_inference (torch,
+    # torchvision, onnxruntime, opencv-python, pandas, matplotlib, timm, accelerate; ~2GB,
+    # verified) just to make its hi-res layout model importable, even for the lightweight `fast`
+    # PDF strategy this repo never uses. PDF is handled directly via pdfminer.six instead (see
+    # services/ingestion_service/parser.py's module docstring for the full story).
+    "unstructured>=0.25,<0.26",
+    "markdown>=3.6",  # unstructured's partition_md
+    "python-docx>=1.1",  # unstructured's partition_docx
+    "python-pptx>=1.0",  # unstructured's partition_pptx
+    "pdfminer.six>=20231228",  # direct PDF text extraction (see parser.py)
+    "boto3>=1.34",  # real S3-API client against MinIO (nexus-documents / nexus-attachments)
+    "python-multipart>=0.0.9",  # FastAPI multipart/form-data (POST /ingest file upload)
 ]
 
 [project.optional-dependencies]
