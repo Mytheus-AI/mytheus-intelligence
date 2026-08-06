@@ -234,17 +234,17 @@ async def test_missing_org_id_goes_to_dlq_never_guessed(consumer):
     """R6: identical proof shape to `test_embedding_consumer.py`'s equivalent test, re-run for
     THIS consumer group — do not trust the base class's own suite by inference.
 
-    A genuine, disclosed finding while writing this test: `BaseConsumer._to_dlq` names the DLQ
-    topic purely from the SOURCE topic (`f"{topic}.dlq"`), not the consumer group — so
-    `transcript-chunks.dlq` is SHARED between every consumer group of `transcript-chunks`
-    (`embedding-service.embed-on-ingest` AND `search-service.transcript-index` both land here).
-    That is the existing, correct design (the plan's own naming is topic-scoped, and no
-    per-group `.dlq` subject exists), but it means a test reading this topic from `earliest`
-    with a fresh consumer group can genuinely read ANOTHER consumer's old poison message first
-    (this happened here: `test_embedding_consumer.py`'s DLQ test uses the same hardcoded
-    `idempotency_key = "chunk:whatever"` literal, and its own old message was what a first
-    version of this test actually picked up). The fix is a unique idempotency_key PLUS scanning
-    forward for the matching envelope, not trusting "the first message on the topic is mine."
+    A genuine, disclosed finding from an earlier version of this test (whole-band review):
+    `BaseConsumer._to_dlq` used to name the DLQ topic purely from the SOURCE topic
+    (`f"{topic}.dlq"`), not the consumer group, so `transcript-chunks.dlq` was SHARED between
+    every consumer group of `transcript-chunks` (`embedding-service.embed-on-ingest` AND
+    `search-service.transcript-index` both landed there, distinguishable only by the in-payload
+    `consumer_group` field) — a test reading it from `earliest` with a fresh reader group could
+    genuinely pick up ANOTHER consumer's old poison message first, and once did. `_to_dlq` now
+    scopes the topic name itself by consumer group (`BaseConsumer.dlq_topic_for`), so this
+    consumer's DLQ topic is structurally its own; a unique idempotency_key plus scanning for
+    the matching envelope is kept anyway as cheap insurance against a stale message from an
+    EARLIER run of this same test/topic combination, not against a different consumer group.
     """
     unique_idem = f"chunk:search-service-test-{uuid.uuid4()}"
 
@@ -280,7 +280,8 @@ async def test_missing_org_id_goes_to_dlq_never_guessed(consumer):
             "auto.offset.reset": "earliest",
         }
     )
-    real_consumer.subscribe(["transcript-chunks.dlq"])
+    dlq_topic = consumer.dlq_topic_for("transcript-chunks")
+    real_consumer.subscribe([dlq_topic])
     real_consumer.poll(0)
 
     outcome = await consumer.process_raw(
@@ -289,7 +290,7 @@ async def test_missing_org_id_goes_to_dlq_never_guessed(consumer):
     assert outcome == "dlq"
 
     envelope = None
-    for _ in range(200):  # scan past any older poison messages from other consumer groups
+    for _ in range(200):  # scan past any older poison messages from earlier runs of this test
         msg = real_consumer.poll(1.0)
         if msg is None or msg.error():
             continue
@@ -298,7 +299,7 @@ async def test_missing_org_id_goes_to_dlq_never_guessed(consumer):
             envelope = candidate
             break
     real_consumer.close()
-    assert envelope is not None, "expected this test's own message on transcript-chunks.dlq"
+    assert envelope is not None, f"expected this test's own message on {dlq_topic}"
     assert envelope["failure_class"] == "BUSINESS_INVALID"
     assert envelope["org_id"] == "not-a-uuid"
     assert envelope["consumer_group"] == "search-service.transcript-index"

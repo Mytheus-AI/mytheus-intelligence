@@ -178,7 +178,8 @@ async def test_missing_org_id_goes_to_dlq_never_guessed(consumer):
             "auto.offset.reset": "earliest",
         }
     )
-    real_consumer.subscribe(["transcript-chunks.dlq"])
+    dlq_topic = consumer.dlq_topic_for("transcript-chunks")
+    real_consumer.subscribe([dlq_topic])
     real_consumer.poll(0)  # trigger subscription/assignment
 
     outcome = await consumer.process_raw(
@@ -192,7 +193,7 @@ async def test_missing_org_id_goes_to_dlq_never_guessed(consumer):
         if msg is not None and not msg.error():
             break
     real_consumer.close()
-    assert msg is not None, "expected a message on transcript-chunks.dlq"
+    assert msg is not None, f"expected a message on {dlq_topic}"
     envelope = json.loads(msg.value())
     assert envelope["failure_class"] == "BUSINESS_INVALID"
     assert envelope["org_id"] == "not-a-uuid"

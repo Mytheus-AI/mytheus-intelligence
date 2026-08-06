@@ -212,11 +212,24 @@ class BaseConsumer(ABC):
         error: str,
         raw_value: bytes,
     ) -> None:
-        """Publish a `DlqEnvelope`-shaped JSON message to `{topic}.dlq`. Deliberately not
-        Avro-encoded (matches `mytheus-backend`'s relay `_dead_letter`: the message is here
+        """Publish a `DlqEnvelope`-shaped JSON message to `{topic}.{group}.dlq`. Deliberately
+        not Avro-encoded (matches `mytheus-backend`'s relay `_dead_letter`: the message is here
         because it already failed to conform, so re-encoding it would fail the same way; no
         `.dlq` subject is registered in the Schema Registry either, confirming this is the
-        intended shape)."""
+        intended shape).
+
+        The topic is scoped by `self.group`, not just the source topic. A prior version named
+        it `f"{topic}.dlq"` alone, so every consumer group of the same source topic shared one
+        DLQ — `embedding-service.embed-on-ingest` and `search-service.transcript-index` both
+        land on `transcript-chunks.dlq` for the same reason they both subscribe to
+        `transcript-chunks` (see `mytheus-events` CLAUDE.md's topic-per-event-not-per-consumer
+        shape). `consumer_group` inside the envelope let a reader distinguish them, but a
+        replay tool driven by TOPIC NAME (redrive everything on `X.dlq`) could not, and would
+        silently replay one consumer's poison message into the other's `apply`. Scoping the
+        topic name itself by consumer group makes that impossible structurally rather than by
+        convention, matching this repo's own tests (`tests/test_embedding_consumer.py`,
+        `tests/test_search_consumer.py`) needing to scan past each other's old messages on the
+        shared topic to find their own — the exact symptom of not having this fix."""
         envelope = {
             "original_topic": topic,
             "original_partition": partition,
@@ -231,11 +244,18 @@ class BaseConsumer(ABC):
             "raw_value_b64": base64.b64encode(raw_value).decode("ascii"),
         }
         self._dlq_producer.produce(
-            topic=f"{topic}.dlq",
+            topic=self.dlq_topic_for(topic),
             key=org_id.encode() if org_id != "unknown" else None,
             value=json.dumps(envelope).encode(),
         )
         self._dlq_producer.flush(5)
+
+    def dlq_topic_for(self, topic: str) -> str:
+        """The consumer-group-scoped DLQ topic name for a given source topic. A `classmethod`
+        would also work (`self.group` is a `ClassVar`), but an instance method reads naturally
+        alongside `_to_dlq` and lets a test target one consumer instance's own DLQ topic
+        without importing the class separately."""
+        return f"{topic}.{self.group}.dlq"
 
     def run_forever(self, *, brokers: str, poll_timeout: float = 1.0) -> None:
         """The real confluent-kafka wiring: subscribe, poll, `process_raw`, THEN commit —
