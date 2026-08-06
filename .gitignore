@@ -101,3 +101,6 @@ Thumbs.db
 # ---- Logs ----
 *.log
 logs/
+
+# Local git worktrees (scratch; never committed)
+.worktrees/
