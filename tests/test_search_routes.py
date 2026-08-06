@@ -25,7 +25,7 @@ from starlette.testclient import TestClient
 from libs.shared.app import create_app
 from services.search_service.consumer import TranscriptChunkSearchConsumer
 from services.search_service.routes import create_search_router
-from tests.conftest import APP_URL
+from tests.conftest import APP_URL, auth_headers
 
 _INSERT = text("""
     INSERT INTO intelligence.transcript_chunk_search
@@ -97,18 +97,49 @@ def test_healthz_still_works_alongside_search_router(client):
     assert resp.json() == {"status": "ok", "service": "search-service"}
 
 
-def test_get_search_missing_org_id_header_is_422(client):
+def test_get_search_missing_token_is_401(client):
     resp = client.get("/search", params={"q": "hello"})
-    assert resp.status_code == 422
+    assert resp.status_code == 401
 
 
-def test_get_search_malformed_org_id_is_400(client):
-    resp = client.get("/search", params={"q": "hello"}, headers={"X-Org-Id": "not-a-uuid"})
-    assert resp.status_code == 400
+def test_get_search_malformed_token_is_401(client):
+    resp = client.get(
+        "/search",
+        params={"q": "hello"},
+        headers={"Authorization": "Bearer not-a-real-token"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_search_with_another_orgs_id_in_the_header_but_no_valid_token_is_rejected(
+    client, engine
+):
+    """The exploit this whole fix closes: `X-Org-Id` carrying a victim org's id used to be
+    trusted outright, letting anyone with network reachability read another tenant's
+    transcript index. A request that supplies it but presents no valid bearer token must now
+    be rejected with 401 before the search query ever runs."""
+    victim_org, meeting_id, chunk_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    try:
+        await _insert_chunk(
+            engine,
+            org_id=victim_org,
+            meeting_id=meeting_id,
+            chunk_id=chunk_id,
+            text_="a secret only the victim org should be able to find",
+        )
+        resp = client.get(
+            "/search",
+            params={"q": "secret"},
+            headers={"X-Org-Id": str(victim_org)},  # the old, now-untrusted header
+        )
+        assert resp.status_code == 401
+    finally:
+        await _delete_org(engine, victim_org)
 
 
 def test_get_search_missing_q_is_422(client):
-    resp = client.get("/search", headers={"X-Org-Id": str(uuid.uuid4())})
+    resp = client.get("/search", headers=auth_headers(uuid.uuid4()))
     assert resp.status_code == 422
 
 
@@ -116,7 +147,7 @@ def test_get_search_malformed_meeting_id_is_400(client):
     resp = client.get(
         "/search",
         params={"q": "hello", "meeting_id": "not-a-uuid"},
-        headers={"X-Org-Id": str(uuid.uuid4())},
+        headers=auth_headers(uuid.uuid4()),
     )
     assert resp.status_code == 400
 
@@ -142,7 +173,7 @@ async def test_get_search_returns_ranked_hits_shaped_for_rerank(client, engine):
             text_="roadmap roadmap roadmap: the quarterly roadmap review",
         )
 
-        resp = client.get("/search", params={"q": "roadmap"}, headers={"X-Org-Id": str(org_id)})
+        resp = client.get("/search", params={"q": "roadmap"}, headers=auth_headers(org_id))
         assert resp.status_code == 200
         body = resp.json()
         assert body["query"] == "roadmap"
@@ -191,7 +222,7 @@ async def test_meeting_id_filter_narrows_results(client, engine):
         resp = client.get(
             "/search",
             params={"q": "synchronization", "meeting_id": str(meeting_a)},
-            headers={"X-Org-Id": str(org_id)},
+            headers=auth_headers(org_id),
         )
         assert resp.status_code == 200
         results = resp.json()["results"]
@@ -242,7 +273,7 @@ async def test_asymmetric_candidate_set_org_with_fewer_matches_is_not_starved(cl
         resp_a = client.get(
             "/search",
             params={"q": shared_term, "limit": 5},
-            headers={"X-Org-Id": str(org_a)},
+            headers=auth_headers(org_a),
         )
         assert resp_a.status_code == 200
         results_a = resp_a.json()["results"]
@@ -254,7 +285,7 @@ async def test_asymmetric_candidate_set_org_with_fewer_matches_is_not_starved(cl
         resp_b = client.get(
             "/search",
             params={"q": shared_term, "limit": 5},
-            headers={"X-Org-Id": str(org_b)},
+            headers=auth_headers(org_b),
         )
         assert resp_b.status_code == 200
         results_b = resp_b.json()["results"]
@@ -357,7 +388,7 @@ async def test_end_to_end_via_real_consumer_then_real_route(
         resp = client.get(
             "/search",
             params={"q": "onboarding friction"},
-            headers={"X-Org-Id": str(org_id)},
+            headers=auth_headers(org_id),
         )
         assert resp.status_code == 200
         results = resp.json()["results"]

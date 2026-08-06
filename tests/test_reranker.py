@@ -20,6 +20,7 @@ import httpx
 
 from services.reranker_service.model import rerank_batch
 from services.reranker_service.rerank import create_rerank_app
+from tests.conftest import auth_headers
 
 # No module-level `pytestmark = pytest.mark.asyncio`: `asyncio_mode = "auto"` (pyproject.toml)
 # already collects `async def` tests without it, and this module also has one sync test
@@ -47,7 +48,7 @@ async def test_rerank_returns_topk_scored_passages_ranked_by_relevance():
         resp = await client.post(
             "/rerank",
             json={"query": query, "passages": passages, "top_k": 3},
-            headers={"X-Org-Id": str(uuid.uuid4())},
+            headers=auth_headers(uuid.uuid4()),
         )
     assert resp.status_code == 200
     body = resp.json()
@@ -73,7 +74,7 @@ async def test_rerank_top_k_is_capped_at_the_number_of_passages_supplied():
         resp = await client.post(
             "/rerank",
             json={"query": query, "passages": passages, "top_k": 50},
-            headers={"X-Org-Id": str(uuid.uuid4())},
+            headers=auth_headers(uuid.uuid4()),
         )
     assert resp.status_code == 200
     assert len(resp.json()["results"]) == 2  # never more results than passages supplied
@@ -98,7 +99,7 @@ async def test_rerank_batch_of_50_measured_latency_warm_cpu(capsys):
         resp = await client.post(
             "/rerank",
             json={"query": query, "passages": passages, "top_k": 10},
-            headers={"X-Org-Id": str(uuid.uuid4())},
+            headers=auth_headers(uuid.uuid4()),
         )
     e2e_elapsed = time.perf_counter() - t0
 
@@ -116,14 +117,33 @@ async def test_rerank_batch_of_50_measured_latency_warm_cpu(capsys):
         )
 
 
-async def test_rerank_rejects_missing_or_malformed_org_id():
+async def test_rerank_rejects_missing_token():
+    async with await _client() as client:
+        resp = await client.post("/rerank", json={"query": "q", "passages": ["p1"]})
+    assert resp.status_code == 401
+
+
+async def test_rerank_rejects_malformed_token():
     async with await _client() as client:
         resp = await client.post(
             "/rerank",
             json={"query": "q", "passages": ["p1"]},
-            headers={"X-Org-Id": "not-a-uuid"},
+            headers={"Authorization": "Bearer not-a-real-token"},
         )
-    assert resp.status_code == 400
+    assert resp.status_code == 401
+
+
+async def test_rerank_with_another_orgs_id_in_the_header_but_no_valid_token_is_rejected():
+    """The exploit this whole fix closes: `X-Org-Id` used to be trusted outright for
+    audit/rate accounting. A request that supplies a victim org's id in it, with no valid
+    bearer token, must now be rejected with 401."""
+    async with await _client() as client:
+        resp = await client.post(
+            "/rerank",
+            json={"query": "q", "passages": ["p1"]},
+            headers={"X-Org-Id": str(uuid.uuid4())},  # the old, now-untrusted header
+        )
+    assert resp.status_code == 401
 
 
 async def test_rerank_rejects_empty_passages_list():
@@ -131,7 +151,7 @@ async def test_rerank_rejects_empty_passages_list():
         resp = await client.post(
             "/rerank",
             json={"query": "q", "passages": []},
-            headers={"X-Org-Id": str(uuid.uuid4())},
+            headers=auth_headers(uuid.uuid4()),
         )
     assert resp.status_code == 422
 
@@ -141,7 +161,7 @@ async def test_rerank_rejects_more_than_fifty_passages():
         resp = await client.post(
             "/rerank",
             json={"query": "q", "passages": [f"p{i}" for i in range(51)]},
-            headers={"X-Org-Id": str(uuid.uuid4())},
+            headers=auth_headers(uuid.uuid4()),
         )
     assert resp.status_code == 422
 
@@ -161,7 +181,7 @@ async def test_concurrent_requests_from_two_orgs_never_cross_contaminate_passage
             return await client.post(
                 "/rerank",
                 json={"query": query, "passages": passages, "top_k": 20},
-                headers={"X-Org-Id": org_id},
+                headers=auth_headers(org_id),
             )
 
     resp_a, resp_b = await asyncio.gather(

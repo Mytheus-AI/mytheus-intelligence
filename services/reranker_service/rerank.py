@@ -1,11 +1,18 @@
 """The rerank path — plan 3.8 steps 2-3.
 
 `POST /rerank`: top-50 candidates in, joint (query, passage) cross-encoder scoring, top-10 out.
-`org_id` rides on every request (`X-Org-Id` header, same convention as
-`embedding-service`'s `POST /embed`) for audit/rate accounting ONLY — reranker-service owns no
-data and makes no tenant-scoped storage decision from it — but it is threaded through to every
-log line regardless, per the task brief ("a request carries its org_id through to every log and
+`org_id` rides on every request for audit/rate accounting ONLY — reranker-service owns no data
+and makes no tenant-scoped storage decision from it — but it is threaded through to every log
+line regardless, per the task brief ("a request carries its org_id through to every log and
 metric").
+
+Security fix (whole-band review, Important finding): `org_id` used to come from a
+client-supplied `X-Org-Id` header, same convention as `embedding-service`'s `POST /embed`,
+fail-closed only on a malformed UUID — with nothing verifying the caller held a legitimate
+identity for that org. Audit-log data is still sensitive even when it gates no storage
+decision: a forged `org_id` here pollutes another tenant's log/metric trail. `org_id` now comes
+ONLY from `libs.shared.auth.verified_org_id` — see that module's docstring for the full
+verification chain.
 
 Built here as REST for the same reason `embedding-service`'s `query_embed.py` was: this repo's
 internal gRPC mesh (`proto/rag.proto`) is still a placeholder (`RagQueryPlaceholder`, reserved
@@ -21,9 +28,10 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel, Field
 
+from libs.shared.auth import verified_org_id
 from services.reranker_service.model import rerank_batch
 
 logger = logging.getLogger("reranker_service")
@@ -53,15 +61,8 @@ def create_rerank_app() -> FastAPI:
     @app.post("/rerank", response_model=RerankResponse)
     async def rerank(
         req: RerankRequest,
-        x_org_id: str = Header(..., alias="X-Org-Id"),
+        org_id: UUID = Depends(verified_org_id),  # noqa: B008 - FastAPI's own required pattern
     ) -> RerankResponse:
-        try:
-            org_id = UUID(x_org_id)
-        except ValueError:
-            # Same fail-closed rule as embedding-service's query-embed path: never guess a
-            # tenant, even though this value is audit/rate-accounting only here.
-            raise HTTPException(status_code=400, detail="X-Org-Id must be a valid UUID") from None
-
         top_k = max(1, min(req.top_k, len(req.passages)))
         ranked, elapsed = rerank_batch(req.query, req.passages, top_k=top_k)
 

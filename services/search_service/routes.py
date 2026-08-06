@@ -4,10 +4,14 @@ now, the same REST contract the internal gRPC FTS arm for `rag-service` would us
 tasks 7-9 already established for this repo's other "internal gRPC only" contracts — see e.g.
 `reranker_service/rerank.py`'s module docstring).
 
-`X-Org-Id` header, fail-closed `UUID` parse — the same interim REST-authn convention
-`embedding-service`'s `query_embed.py`, `reranker-service`'s `rerank.py`, and
-`ingestion-service`'s `routes.py` already established for this repo (no JWT/gRPC-metadata authn
-middleware exists anywhere in this tier yet).
+Security fix (whole-band review, Important finding): `org_id` used to come from a
+client-supplied `X-Org-Id` header, fail-closed only on a malformed UUID — the same interim
+REST-authn convention `embedding-service`'s `query_embed.py`, `reranker-service`'s `rerank.py`,
+and `ingestion-service`'s `routes.py` had also established. Nothing verified the caller held a
+legitimate identity for that org, so anyone with network reachability could read another
+tenant's transcript index by supplying its id in that header. `org_id` now comes ONLY from
+`libs.shared.auth.verified_org_id` — see that module's docstring for the full verification
+chain and for why this repo cannot do Clerk-opaque-id resolution itself.
 
 --- Response shape: built to feed `POST /rerank` with zero adapter ---
 
@@ -43,11 +47,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from libs.shared.auth import verified_org_id
 from libs.shared.tenancy import set_rls
 
 _MAX_LIMIT = 50
@@ -68,13 +73,6 @@ class SearchResponse(BaseModel):
     results: list[SearchHit]
 
 
-def _parse_org_id(x_org_id: str) -> UUID:
-    try:
-        return UUID(x_org_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="X-Org-Id must be a valid UUID") from None
-
-
 def _parse_meeting_id(meeting_id: str) -> UUID:
     try:
         return UUID(meeting_id)
@@ -90,9 +88,8 @@ def create_search_router(*, session_factory: async_sessionmaker) -> APIRouter:  
         q: str = Query(..., min_length=1),
         meeting_id: str | None = Query(None),
         limit: int = Query(20, ge=1, le=_MAX_LIMIT),
-        x_org_id: str = Header(..., alias="X-Org-Id"),
+        org_id: UUID = Depends(verified_org_id),  # noqa: B008 - FastAPI's own required pattern
     ) -> SearchResponse:
-        org_id = _parse_org_id(x_org_id)
         meeting_filter = _parse_meeting_id(meeting_id) if meeting_id is not None else None
 
         # websearch_to_tsquery (not to_tsquery/plainto_tsquery): the one PostgreSQL tsquery

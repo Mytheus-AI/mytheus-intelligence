@@ -16,7 +16,7 @@ from starlette.testclient import TestClient
 from libs.shared.app import create_app
 from libs.shared.object_storage import BUCKET_DOCUMENTS, document_key
 from services.ingestion_service.routes import create_ingestion_router
-from tests.conftest import APP_URL
+from tests.conftest import APP_URL, auth_headers
 from tests.fixtures import sample_documents as docs
 
 
@@ -45,23 +45,43 @@ def test_healthz_still_works_alongside_the_ingest_router(client):
     assert resp.json() == {"status": "ok", "service": "ingestion-service"}
 
 
-def test_post_ingest_missing_org_id_header_is_rejected(client):
+def test_post_ingest_missing_token_is_401(client):
     resp = client.post("/ingest", files={"file": ("notes.md", docs.make_md(), "text/markdown")})
-    assert resp.status_code == 422  # FastAPI's own required-header validation
+    assert resp.status_code == 401
 
 
-def test_post_ingest_malformed_org_id_is_400(client):
+def test_post_ingest_malformed_token_is_401(client):
     resp = client.post(
         "/ingest",
-        headers={"X-Org-Id": "not-a-uuid"},
+        headers={"Authorization": "Bearer not-a-real-token"},
         files={"file": ("notes.md", docs.make_md(), "text/markdown")},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 401
+
+
+def test_post_ingest_with_another_orgs_id_in_the_header_but_no_valid_token_is_rejected(
+    client, s3_client
+):
+    """The exploit this whole fix closes: `X-Org-Id` carrying a victim org's id used to be
+    trusted outright. A request that supplies it but presents no valid bearer token must now
+    be rejected with 401 BEFORE any store is touched — proven here by confirming the object
+    never lands in `nexus-documents` under that org's prefix."""
+    victim_org = uuid.uuid4()
+    resp = client.post(
+        "/ingest",
+        headers={"X-Org-Id": str(victim_org)},  # the old, now-untrusted header
+        files={"file": ("notes.md", docs.make_md(), "text/markdown")},
+    )
+    assert resp.status_code == 401
+
+    # Nothing was written under the victim org's object-storage prefix.
+    listing = s3_client.list_objects_v2(Bucket=BUCKET_DOCUMENTS, Prefix=f"{victim_org}/")
+    assert listing.get("KeyCount", 0) == 0
 
 
 def test_post_ingest_neither_file_nor_url_is_422(client):
     org_id = uuid.uuid4()
-    resp = client.post("/ingest", headers={"X-Org-Id": str(org_id)})
+    resp = client.post("/ingest", headers=auth_headers(org_id))
     assert resp.status_code == 422
 
 
@@ -69,7 +89,7 @@ def test_post_ingest_both_file_and_url_is_422(client):
     org_id = uuid.uuid4()
     resp = client.post(
         "/ingest",
-        headers={"X-Org-Id": str(org_id)},
+        headers=auth_headers(org_id),
         files={"file": ("notes.md", docs.make_md(), "text/markdown")},
         data={"url": "http://example.invalid/notes.md"},
     )
@@ -80,7 +100,7 @@ def test_post_ingest_unsupported_extension_is_422(client):
     org_id = uuid.uuid4()
     resp = client.post(
         "/ingest",
-        headers={"X-Org-Id": str(org_id)},
+        headers=auth_headers(org_id),
         files={"file": ("malware.exe", b"MZ\x90\x00", "application/octet-stream")},
     )
     assert resp.status_code == 422
@@ -90,7 +110,7 @@ def test_post_ingest_uploads_real_object_and_writes_real_chunks(client, s3_clien
     org_id = uuid.uuid4()
     resp = client.post(
         "/ingest",
-        headers={"X-Org-Id": str(org_id)},
+        headers=auth_headers(org_id),
         files={
             "file": (
                 "notes.docx",
@@ -114,7 +134,7 @@ def test_post_ingest_uploads_real_object_and_writes_real_chunks(client, s3_clien
         s3_client.delete_object(Bucket=BUCKET_DOCUMENTS, Key=key)
 
     # GET /ingest/jobs/:id, same org — reflects the terminal state.
-    get_resp = client.get(f"/ingest/jobs/{document_id}", headers={"X-Org-Id": str(org_id)})
+    get_resp = client.get(f"/ingest/jobs/{document_id}", headers=auth_headers(org_id))
     assert get_resp.status_code == 200
     job = get_resp.json()
     assert job["status"] == "completed"
@@ -128,7 +148,7 @@ def test_post_ingest_of_a_sample_pdf_is_the_plans_literal_acceptance_check(clien
     org_id = uuid.uuid4()
     resp = client.post(
         "/ingest",
-        headers={"X-Org-Id": str(org_id)},
+        headers=auth_headers(org_id),
         files={"file": ("kickoff.pdf", docs.make_pdf(), "application/pdf")},
     )
     assert resp.status_code == 201
@@ -180,7 +200,7 @@ def test_get_job_from_a_different_org_is_404_not_a_leak(client, s3_client):
     other_org_id = uuid.uuid4()
     resp = client.post(
         "/ingest",
-        headers={"X-Org-Id": str(org_id)},
+        headers=auth_headers(org_id),
         files={"file": ("notes.txt", docs.make_txt(), "text/plain")},
     )
     assert resp.status_code == 201
@@ -188,13 +208,11 @@ def test_get_job_from_a_different_org_is_404_not_a_leak(client, s3_client):
 
     try:
         wrong_org_resp = client.get(
-            f"/ingest/jobs/{document_id}", headers={"X-Org-Id": str(other_org_id)}
+            f"/ingest/jobs/{document_id}", headers=auth_headers(other_org_id)
         )
         assert wrong_org_resp.status_code == 404
 
-        right_org_resp = client.get(
-            f"/ingest/jobs/{document_id}", headers={"X-Org-Id": str(org_id)}
-        )
+        right_org_resp = client.get(f"/ingest/jobs/{document_id}", headers=auth_headers(org_id))
         assert right_org_resp.status_code == 200
     finally:
         s3_client.delete_object(Bucket=BUCKET_DOCUMENTS, Key=f"{org_id}/{document_id}/source.txt")
@@ -202,13 +220,13 @@ def test_get_job_from_a_different_org_is_404_not_a_leak(client, s3_client):
 
 def test_get_job_that_never_existed_is_404(client):
     org_id = uuid.uuid4()
-    resp = client.get(f"/ingest/jobs/{uuid.uuid4()}", headers={"X-Org-Id": str(org_id)})
+    resp = client.get(f"/ingest/jobs/{uuid.uuid4()}", headers=auth_headers(org_id))
     assert resp.status_code == 404
 
 
 def test_get_job_with_malformed_job_id_is_404(client):
     org_id = uuid.uuid4()
-    resp = client.get("/ingest/jobs/not-a-uuid", headers={"X-Org-Id": str(org_id)})
+    resp = client.get("/ingest/jobs/not-a-uuid", headers=auth_headers(org_id))
     assert resp.status_code == 404
 
 
@@ -241,9 +259,7 @@ def test_post_ingest_url_fetches_over_a_real_http_server(client, s3_client, loca
     """A REAL local TCP HTTP server (Python's stdlib `http.server`), not a mocked `httpx`
     transport — the url-ingest branch really performs an HTTP GET."""
     org_id = uuid.uuid4()
-    resp = client.post(
-        "/ingest", headers={"X-Org-Id": str(org_id)}, data={"url": local_http_server}
-    )
+    resp = client.post("/ingest", headers=auth_headers(org_id), data={"url": local_http_server})
     assert resp.status_code == 201
     body = resp.json()
     assert body["status"] == "completed"

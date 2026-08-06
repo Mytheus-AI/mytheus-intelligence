@@ -1,9 +1,16 @@
 """`POST /ingest` (file/url) and `GET /ingest/jobs/:id` — plan step 4's surfaces, verbatim
-paths. `X-Org-Id` header, fail-closed `UUID` parse — the SAME interim REST-authn contract
-`embedding-service`'s `query_embed.py` and `reranker-service`'s `rerank.py` already established
-for this repo (no JWT/gRPC-metadata authn middleware exists yet anywhere in this tier; see those
-modules' docstrings for the identical reasoning). `org_id` NEVER comes from the request body —
-only from this header — matching `libs/shared/object_storage.py`'s key-safety contract.
+paths.
+
+Security fix (whole-band review, Important finding): `org_id` used to come from a
+client-supplied `X-Org-Id` header, fail-closed only on a malformed UUID — the SAME interim
+REST-authn contract `embedding-service`'s `query_embed.py` and `reranker-service`'s `rerank.py`
+had also established. Nothing verified the caller held a legitimate identity for that org, so
+anyone with network reachability could carry another organization's id in that header and write
+into that org's MinIO objects. `org_id` now comes ONLY from `libs.shared.auth.verified_org_id`
+— a Clerk RS256 session token, verified against JWKS, whose claim is this repo's own resolved
+internal `org_id` (see `libs/shared/auth.py`'s module docstring for why this repo cannot do
+Clerk-opaque-id resolution itself). `org_id` still NEVER comes from the request body, matching
+`libs/shared/object_storage.py`'s key-safety contract.
 
 Processing is synchronous within the request (no background job queue): this repo has no task
 runner anywhere else to build on top of, and a synchronous MVP is simpler, honest, and fully
@@ -19,11 +26,12 @@ from uuid import UUID, uuid4
 
 import boto3
 import httpx
-from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from libs.shared.auth import verified_org_id
 from libs.shared.events import EventEnvelope
 from libs.shared.object_storage import (
     BUCKET_DOCUMENTS,
@@ -45,13 +53,6 @@ class JobResponse(BaseModel):
     chunk_count: int = 0
     element_count: int = 0
     error: str | None = None
-
-
-def _parse_org_id(x_org_id: str) -> UUID:
-    try:
-        return UUID(x_org_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="X-Org-Id must be a valid UUID") from None
 
 
 def _filename_from_url(url: str) -> str:
@@ -76,12 +77,10 @@ def create_ingestion_router(
 
     @router.post("/ingest", response_model=JobResponse, status_code=201)
     async def ingest(
-        x_org_id: str = Header(..., alias="X-Org-Id"),
+        org_id: UUID = Depends(verified_org_id),  # noqa: B008 - FastAPI's own required pattern
         file: UploadFile | None = File(None),  # noqa: B008 - FastAPI's own required pattern
         url: str | None = Form(None),
     ) -> JobResponse:
-        org_id = _parse_org_id(x_org_id)
-
         if (file is None) == (url is None):
             raise HTTPException(status_code=422, detail="provide exactly one of `file` or `url`")
 
@@ -169,8 +168,10 @@ def create_ingestion_router(
         )
 
     @router.get("/ingest/jobs/{job_id}", response_model=JobResponse)
-    async def get_job(job_id: str, x_org_id: str = Header(..., alias="X-Org-Id")) -> JobResponse:
-        org_id = _parse_org_id(x_org_id)
+    async def get_job(
+        job_id: str,
+        org_id: UUID = Depends(verified_org_id),  # noqa: B008 - FastAPI's own required pattern
+    ) -> JobResponse:
         try:
             job_uuid = UUID(job_id)
         except ValueError:

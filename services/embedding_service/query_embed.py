@@ -13,6 +13,13 @@ Real BGE-small-en query embeds (the SAME model as the ingest lane, via the SEPAR
 `QueryEmbedder` Ray Serve deployment when Ray is running — `embed_batch` directly otherwise,
 so this endpoint works even without a Ray cluster in dev, matching this repo's "GPU optional
 locally" convention).
+
+Security fix (whole-band review, Important finding): `org_id` used to come from a
+client-supplied `X-Org-Id` header, fail-closed only on a malformed UUID — nothing verified the
+caller held a legitimate identity for that org, so a forged header could poison another
+tenant's `nexus:{org_id}:qembed:` cache. `org_id` now comes ONLY from
+`libs.shared.auth.verified_org_id` — see that module's docstring for the full verification
+chain.
 """
 
 from __future__ import annotations
@@ -21,10 +28,11 @@ import hashlib
 import json
 from uuid import UUID
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from redis.asyncio import Redis
 
+from libs.shared.auth import verified_org_id
 from services.embedding_service.model import embed_batch
 
 _QEMBED_TTL = 600  # ~10 minutes, per plan 3.7 step 5
@@ -55,15 +63,10 @@ def create_query_embed_app(redis: Redis) -> FastAPI:
     @app.post("/embed", response_model=EmbedResponse)
     async def embed(
         req: EmbedRequest,
-        x_org_id: str = Header(..., alias="X-Org-Id"),
+        org_id: UUID = Depends(verified_org_id),  # noqa: B008 - FastAPI's own required pattern
     ) -> EmbedResponse:
         if not (1 <= len(req.queries) <= 3):
             raise HTTPException(status_code=422, detail="queries must contain 1-3 variants")
-        try:
-            org_id = UUID(x_org_id)
-        except ValueError:
-            # Same fail-closed rule as the consumer path: never guess a tenant.
-            raise HTTPException(status_code=400, detail="X-Org-Id must be a valid UUID") from None
 
         vectors: list[list[float]] = [None] * len(req.queries)  # type: ignore[list-item]
         cached_flags = [False] * len(req.queries)

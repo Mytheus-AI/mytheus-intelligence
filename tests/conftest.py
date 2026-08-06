@@ -27,6 +27,8 @@ already-`postgres`-owned `public` schema.
 from __future__ import annotations
 
 import os
+import time
+import uuid
 
 import psycopg2
 import pytest
@@ -176,3 +178,83 @@ def s3_client():
     from libs.shared.object_storage import get_client
 
     return get_client()
+
+
+# --- Clerk auth test doubles (libs/shared/auth.py) ---------------------------------------
+#
+# Every REST route in this repo now depends on `libs.shared.auth.verified_org_id`, which
+# verifies a real Clerk RS256 session token against JWKS. Signing a token that a REAL Clerk
+# JWKS endpoint will verify requires an actual Clerk sign-in; tests instead generate their own
+# RSA keypair and monkeypatch `libs.shared.auth._jwks_client` to serve its public half, exactly
+# matching mytheus-backend's own `tests/test_auth.py` fixture shape (`_FakeJWKS`, `_keypair`)
+# rather than inventing a second test-doubling convention. `CLERK_ISSUER` is set here (not
+# hardcoded in `auth.py`, which still reads it from the environment in production) so
+# `verify_token`'s `issuer=` check has something real to compare against.
+os.environ.setdefault("CLERK_ISSUER", "https://test.clerk.accounts.dev")
+os.environ.setdefault("CLERK_JWKS_URL", "https://test.clerk.accounts.dev/.well-known/jwks.json")
+
+
+def _generate_test_keypair() -> tuple[bytes, bytes]:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    priv = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    pub = key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return priv, pub
+
+
+_TEST_PRIVATE_KEY, _TEST_PUBLIC_KEY = _generate_test_keypair()
+
+
+class _FakeJWKS:
+    """Stands in for `PyJWKClient`: hands back this session's own test public key regardless
+    of the token's `kid`, so no network call to a real Clerk JWKS endpoint is ever made."""
+
+    def get_signing_key_from_jwt(self, token: str):  # noqa: ARG002
+        return type("K", (), {"key": _TEST_PUBLIC_KEY})()
+
+
+@pytest.fixture(autouse=True)
+def _patch_clerk_jwks(monkeypatch):
+    """Every test gets a working, fully-local Clerk verifier for free — opt out is never
+    needed since this only replaces the network-calling JWKS lookup, not the real RS256/claims
+    verification logic in `libs.shared.auth.verify_token`."""
+    from libs.shared import auth as auth_mod
+
+    monkeypatch.setattr(auth_mod, "_jwks_client", lambda: _FakeJWKS())
+
+
+def sign_test_token(org_id: uuid.UUID | str | None = None, **claim_overrides: object) -> str:
+    """A real, correctly-signed (against `_FakeJWKS`'s keypair) Clerk-shaped session token.
+    Pass `org_id=None` to omit the org claim entirely (a personal-account session); pass an
+    explicit `<claim name>=...` override to build a malformed/expired/wrong-issuer token for a
+    fail-closed test, matching mytheus-backend's `tests/test_auth.py::_sign` shape."""
+    import jwt as pyjwt
+
+    from libs.shared.auth import org_claim_name
+
+    now = int(time.time())
+    claims: dict[str, object] = {
+        "sub": f"user_{uuid.uuid4().hex[:8]}",
+        "iss": os.environ["CLERK_ISSUER"],
+        "iat": now,
+        "nbf": now,
+        "exp": now + 3600,
+    }
+    if org_id is not None:
+        claims[org_claim_name()] = str(org_id)
+    claims.update(claim_overrides)
+    return pyjwt.encode(claims, _TEST_PRIVATE_KEY, algorithm="RS256")
+
+
+def auth_headers(org_id: uuid.UUID | str, **claim_overrides: object) -> dict[str, str]:
+    """The `Authorization: Bearer ...` header every authenticated test request now carries, in
+    place of the old (vulnerable) bare `X-Org-Id` header."""
+    return {"Authorization": f"Bearer {sign_test_token(org_id, **claim_overrides)}"}
