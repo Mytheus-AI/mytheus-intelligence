@@ -48,6 +48,50 @@ async def test_relay_publishes_embedding_events_row_to_real_redpanda(migrated_db
     idem = f"emb:transcript_chunks:relay-test-{uuid.uuid4()}"
     collection = f"transcript_chunks__{org_id.hex}"
 
+    # Subscribe and pin every assigned partition's start offset to its CURRENT high watermark
+    # BEFORE the outbox row is even inserted, not merely before producing. `embedding-events` is
+    # a long-lived topic that both a live ambient relay worker (per the shared dev stack) and
+    # this repo's own embedding-consumer tests keep appending to across every run, all day -
+    # scanning from `earliest` is wrong on any topic with history: with a growing backlog spread
+    # across partitions, a bounded scan from the beginning can exhaust its budget before ever
+    # reaching the message this run just produced, and a bigger fixed budget only pushes the
+    # same failure out to a bigger topic. Pinning to "whatever is newest right now, per
+    # partition" means this test's correctness never depends on how much history the topic
+    # already has - it holds on an empty topic and on one with a million messages the same way,
+    # because it only ever reads messages produced AFTER this point, never the backlog. The pin
+    # must happen before the INSERT below, not just before this test's own `relay_once` call:
+    # the ambient relay worker can drain a newly inserted row before this test ever gets to
+    # subscribing, and if the pin happened after the INSERT, that worker's produce could land
+    # before the pin and be missed entirely.
+    real_consumer = Consumer(
+        {
+            "bootstrap.servers": "localhost:9092",
+            "group.id": f"test-relay-{uuid.uuid4()}",
+            "auto.offset.reset": "latest",  # defensive fallback; the on_assign below is what
+            # actually pins the offset, so this only matters if that somehow does not run
+        }
+    )
+    assigned_partitions: list[int] = []
+
+    def _pin_to_latest(consumer: Consumer, partitions: list) -> None:
+        for p in partitions:
+            _, high_watermark = consumer.get_watermark_offsets(p, timeout=10, cached=False)
+            p.offset = high_watermark
+        consumer.assign(partitions)
+        assigned_partitions.extend(p.partition for p in partitions)
+
+    real_consumer.subscribe(["embedding-events"], on_assign=_pin_to_latest)
+
+    # Block until the subscription above has actually run (on_assign fires from inside poll()),
+    # so "pinned to latest" is resolved to real offsets before anything is produced.
+    assign_deadline = time.monotonic() + 15
+    while not assigned_partitions and time.monotonic() < assign_deadline:
+        real_consumer.poll(0.5)
+    assert assigned_partitions, (
+        "consumer group never received a partition assignment for 'embedding-events' within "
+        "15s - cannot prove the round trip without one"
+    )
+
     # Insert as mytheus_ai_app (the role this repo's consumers actually write outbox rows as),
     # with app.current_org set — mytheus_ai_relay deliberately holds no INSERT grant on
     # intelligence.outbox (SELECT, UPDATE only, per migration 9c2b7e4a1d03), so writing the
@@ -94,16 +138,6 @@ async def test_relay_publishes_embedding_events_row_to_real_redpanda(migrated_db
     kafka_producer = Producer({"bootstrap.servers": "localhost:9092"})
     relay_producer = _KafkaAvroProducer(kafka_producer, avro_codec)
 
-    real_consumer = Consumer(
-        {
-            "bootstrap.servers": "localhost:9092",
-            "group.id": f"test-relay-{uuid.uuid4()}",
-            "auto.offset.reset": "earliest",
-        }
-    )
-    real_consumer.subscribe(["embedding-events"])
-    real_consumer.poll(0)
-
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session, session.begin():
         published = await relay_once(session, relay_producer)
@@ -111,18 +145,36 @@ async def test_relay_publishes_embedding_events_row_to_real_redpanda(migrated_db
     await engine.dispose()
     assert published >= 1
 
-    msg = None
-    for _ in range(20):
+    # Consume the message back and confirm it round-tripped. Deadline-based, not a fixed poll
+    # count: a fixed count still silently assumes how long delivery/visibility takes, which is
+    # exactly the assumption that breaks once the topic grows - a wall-clock budget is what
+    # "search until it's really not showing up, then say so accurately" actually means.
+    found = None
+    scanned = 0
+    partitions_seen: set[int] = set()
+    search_deadline = time.monotonic() + 30
+    while found is None and time.monotonic() < search_deadline:
         msg = real_consumer.poll(1.0)
-        if msg is not None and not msg.error():
-            decoded = avro_codec.deserialize_for("embedding-events", msg.value())
-            if str(decoded["header"]["idempotency_key"]) == idem:
-                break
-            msg = None
+        if msg is None or msg.error():
+            continue
+        scanned += 1
+        partitions_seen.add(msg.partition())
+        decoded = avro_codec.deserialize_for("embedding-events", msg.value())
+        if str(decoded["header"]["idempotency_key"]) == idem:
+            found = decoded
     real_consumer.close()
 
-    assert msg is not None, "expected the relayed embedding-events message on the real topic"
-    decoded = avro_codec.deserialize_for("embedding-events", msg.value())
-    assert decoded["collection"] == collection
-    assert decoded["point_count"] == 1
-    assert str(decoded["header"]["org_id"]) == str(org_id)
+    # A message-not-found failure here used to read "relayed message not found on the bus",
+    # which points at the relay - and is exactly why this test's real failure mode (the search
+    # window exhausted, not the message ever being absent) got misread as a broker flake. Say
+    # what this test actually knows.
+    assert found is not None, (
+        f"did not find idempotency_key={idem!r} on 'embedding-events' within the 30s search "
+        f"window - scanned {scanned} message(s) across {len(partitions_seen)} partition(s) "
+        f"({sorted(partitions_seen)}) of {len(assigned_partitions)} assigned. The search window "
+        "was exhausted; this does NOT mean the message is absent from the topic - relay_once() "
+        "reported published >= 1 above, so the produce itself succeeded."
+    )
+    assert found["collection"] == collection
+    assert found["point_count"] == 1
+    assert str(found["header"]["org_id"]) == str(org_id)
