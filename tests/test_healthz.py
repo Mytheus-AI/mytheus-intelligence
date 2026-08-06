@@ -15,6 +15,7 @@ FASTAPI_SERVICES = [
     ("services.search_service.main", "search-service"),
     ("services.ingestion_service.main", "ingestion-service"),
     ("services.embedding_service.main", "embedding-service"),
+    ("services.reranker_service.main", "reranker-service"),
 ]
 
 
