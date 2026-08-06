@@ -10,6 +10,7 @@ import threading
 import uuid
 
 import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.testclient import TestClient
 
 from libs.shared.app import create_app
@@ -21,8 +22,6 @@ from tests.fixtures import sample_documents as docs
 
 @pytest.fixture()
 def client(migrated_db, s3_client, redis_client):
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
     engine = create_async_engine(APP_URL, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -120,6 +119,60 @@ def test_post_ingest_uploads_real_object_and_writes_real_chunks(client, s3_clien
     job = get_resp.json()
     assert job["status"] == "completed"
     assert job["chunk_count"] == body["chunk_count"]
+
+
+def test_post_ingest_of_a_sample_pdf_is_the_plans_literal_acceptance_check(client, s3_client):
+    """The plan's acceptance check, verbatim: 'POST /ingest of a sample PDF writes the blob to
+    nexus-documents/{org_id}/{document_id}/, rows into document_chunks with element_type in
+    {Title, NarrativeText, Table, ListItem}, and emits one document-chunks event per chunk.'"""
+    org_id = uuid.uuid4()
+    resp = client.post(
+        "/ingest",
+        headers={"X-Org-Id": str(org_id)},
+        files={"file": ("kickoff.pdf", docs.make_pdf(), "application/pdf")},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["status"] == "completed"
+    assert body["chunk_count"] > 0
+    document_id = uuid.UUID(body["document_id"])
+
+    key = document_key(org_id, document_id, ".pdf")
+    assert key == f"{org_id}/{document_id}/source.pdf"  # nexus-documents/{org_id}/{document_id}/
+    try:
+        head = s3_client.head_object(Bucket=BUCKET_DOCUMENTS, Key=key)
+        assert head["ContentLength"] > 0
+
+        # Plain sync psycopg2 (like conftest.py's own fixtures), not the async SQLAlchemy engine
+        # — this test function is sync (it drives the sync TestClient), and mixing a fresh
+        # asyncio engine into TestClient's own anyio portal thread is exactly the "attached to a
+        # different loop" hazard the `client` fixture's docstring already explains avoiding.
+        import psycopg2
+
+        conn = psycopg2.connect(APP_URL.replace("+asyncpg", ""))
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT set_config('app.current_org', %s, false)", (str(org_id),))
+                cur.execute(
+                    "SELECT element_type FROM intelligence.document_chunks "
+                    "WHERE org_id = %s AND document_id = %s",
+                    (str(org_id), str(document_id)),
+                )
+                element_types = [row[0] for row in cur.fetchall()]
+                cur.execute(
+                    "SELECT count(*) FROM intelligence.outbox "
+                    "WHERE org_id = %s AND topic = 'document-chunks'",
+                    (str(org_id),),
+                )
+                outbox_count = cur.fetchone()[0]
+        finally:
+            conn.close()
+
+        assert len(element_types) == body["chunk_count"]
+        assert all(t in {"Title", "NarrativeText", "Table", "ListItem"} for t in element_types)
+        assert outbox_count == body["chunk_count"]  # one document-chunks event per chunk
+    finally:
+        s3_client.delete_object(Bucket=BUCKET_DOCUMENTS, Key=key)
 
 
 def test_get_job_from_a_different_org_is_404_not_a_leak(client, s3_client):
