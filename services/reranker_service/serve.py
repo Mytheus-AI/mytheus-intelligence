@@ -11,10 +11,17 @@ from __future__ import annotations
 
 from typing import Any
 
+# Typed as Any (not inferred as the `ray.serve` Module type from the successful-import branch)
+# so the except branch's `= None` is a valid assignment under mypy strict mode (Plan 5-6 task 7
+# fix; the same shape as services/embedding_service/serve.py, applied here too so `mypy .`
+# stays clean repo-wide rather than leaving this pre-existing Plan 0 stub as the one exception).
+serve: Any = None
 try:
-    from ray import serve
+    from ray import serve as _serve
+
+    serve = _serve
 except ModuleNotFoundError:  # Ray only present with the `gpu` extra
-    serve = None
+    pass
 
 if serve is not None:
 

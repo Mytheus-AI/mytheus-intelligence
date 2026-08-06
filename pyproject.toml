@@ -13,6 +13,14 @@ dependencies = [
     "grpcio>=1.63",
     "httpx>=0.27",
     "redis[hiredis]>=5",
+    # Plan 5-6 task 7 (embedding-service): real BGE-small-en on CPU (dev) / GPU (prod),
+    # the 600/60 splitter, and this repo's own outbox/inbox/relay Postgres history.
+    "sentence-transformers>=3",
+    "langchain-text-splitters>=0.3",
+    "sqlalchemy[asyncio]>=2",
+    "asyncpg>=0.29",
+    "psycopg2-binary>=2.9",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +54,12 @@ select = ["E", "F", "I", "UP", "B"]
 line-length = 100
 
 [tool.mypy]
-python_version = "3.11"
+# Bumped from 3.11 to 3.12 (task 7): numpy's stubs (a transitive dep of sentence-transformers,
+# added for the real BGE-small-en embedding model) use PEP 695 `type` statement syntax that
+# mypy only parses under a 3.12+ target. `.python-version` and this repo's dev venv are already
+# 3.12; `[project] requires-python = ">=3.11"` is unaffected (that's the supported runtime
+# floor, not mypy's parse target).
+python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 exclude = ["tests/"]

@@ -1,0 +1,151 @@
+"""Shared fixtures for this repo's tests.
+
+Tests run against the REAL local dev stack (task brief: "The infrastructure is real. Do not
+build fakes for it."): the shared Postgres (`localhost:5433`, db `mytheus` — the SAME physical
+database `mytheus-backend` uses), Redis (`localhost:6380`), Redpanda + Schema Registry
+(`localhost:9092` / `:8081`, all 21 subjects registered under BACKWARD), and Qdrant
+(`localhost:6333`). Tests that need a service they cannot reach skip gracefully, EXCEPT when
+`MYTHEUS_REQUIRE_DB=1` (or the per-service equivalents below), matching `mytheus-backend`'s
+`tests/conftest.py` fail-loud-not-skip convention (defect D7 there: a silently-skipped
+isolation suite reported green for a year).
+
+Roles. This repo's own migration (`9c2b7e4a1d03`) creates two least-privilege roles, neither
+holding `rolsuper` or `rolbypassrls`:
+- `mytheus_ai_app`    the consumer/request path. Subject to `intelligence.*`'s `tenant_isolation`.
+- `mytheus_ai_relay`  drains `intelligence.outbox` only, via `outbox_relay_drain`.
+
+`BOOTSTRAP_URL` is the privileged credential that owns the `intelligence` schema and runs
+migrations. `mytheus-backend`'s bootstrap is `postgres:postgres`; this repo's bootstrap is
+`supabase_admin:postgres` instead, because `CREATE SCHEMA` needs database-level CREATE, which
+this Supabase Postgres image's `postgres` role does not hold (PG15+ revokes `CREATE ON
+DATABASE` from non-owners by default; `mytheus`'s actual owner is `supabase_admin`) — confirmed
+live before writing the migration (`has_database_privilege('postgres','mytheus','CREATE')` =
+false). `mytheus-backend`'s migrations never hit this because they only ever used the
+already-`postgres`-owned `public` schema.
+"""
+
+from __future__ import annotations
+
+import os
+
+import psycopg2
+import pytest
+
+_DEFAULT_BOOTSTRAP = "postgresql+asyncpg://supabase_admin:postgres@localhost:5433/mytheus"
+
+os.environ.setdefault("REDPANDA_BROKERS", "localhost:9092")
+os.environ.setdefault("SCHEMA_REGISTRY_URL", "http://localhost:8081")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6380")
+os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
+
+BOOTSTRAP_URL = os.environ.get("BOOTSTRAP_DATABASE_URL") or _DEFAULT_BOOTSTRAP
+os.environ.setdefault("DATABASE_URL", BOOTSTRAP_URL)
+_SYNC_URL = BOOTSTRAP_URL.replace("+asyncpg", "")
+
+# Dev-only passwords, same convention as mytheus-backend: the migration creates these roles
+# with no password; a real environment sets one via a bootstrap script from the secrets
+# manager, and here the fixture does it directly.
+ROLE_PASSWORDS = {
+    "mytheus_ai_app": "mytheus_ai_app",
+    "mytheus_ai_relay": "mytheus_ai_relay",
+}
+
+
+def _role_url(role: str) -> str:
+    scheme, _, rest = BOOTSTRAP_URL.partition("://")
+    _credentials, _, host_and_db = rest.rpartition("@")
+    return f"{scheme}://{role}:{ROLE_PASSWORDS[role]}@{host_and_db}"
+
+
+APP_URL = _role_url("mytheus_ai_app")
+RELAY_URL = _role_url("mytheus_ai_relay")
+
+
+def _db_reachable() -> bool:
+    try:
+        psycopg2.connect(_SYNC_URL, connect_timeout=2).close()
+        return True
+    except Exception:
+        return False
+
+
+def _require_or_skip(reachable: bool, what: str, env_flag: str) -> None:
+    if reachable:
+        return
+    if os.environ.get(env_flag) == "1":
+        raise RuntimeError(f"{env_flag}=1 but {what} is unreachable. Refusing to skip.")
+    pytest.skip(f"{what} not reachable (expected in the real local dev stack)")
+
+
+@pytest.fixture(scope="session")
+def migrated_db() -> str:
+    """Apply this repo's Alembic history once and give the two roles a dev password."""
+    _require_or_skip(_db_reachable(), f"Postgres at {_SYNC_URL}", "MYTHEUS_REQUIRE_DB")
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config("alembic.ini")
+    command.upgrade(cfg, "head")
+
+    conn = psycopg2.connect(_SYNC_URL)
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        for role, password in ROLE_PASSWORDS.items():
+            cur.execute(f"ALTER ROLE {role} WITH LOGIN PASSWORD %s", (password,))
+    conn.close()
+    return BOOTSTRAP_URL
+
+
+def qdrant_reachable() -> bool:
+    try:
+        import httpx
+
+        return httpx.get(os.environ["QDRANT_URL"] + "/collections", timeout=2).status_code == 200
+    except Exception:
+        return False
+
+
+def redis_reachable() -> bool:
+    try:
+        import redis as redis_sync
+
+        redis_sync.from_url(os.environ["REDIS_URL"]).ping()
+        return True
+    except Exception:
+        return False
+
+
+def schema_registry_reachable() -> bool:
+    try:
+        import httpx
+
+        return (
+            httpx.get(os.environ["SCHEMA_REGISTRY_URL"] + "/subjects", timeout=2).status_code == 200
+        )
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def qdrant_client():
+    _require_or_skip(qdrant_reachable(), "Qdrant", "MYTHEUS_REQUIRE_QDRANT")
+    from qdrant_client import AsyncQdrantClient
+
+    return AsyncQdrantClient(url=os.environ["QDRANT_URL"])
+
+
+@pytest.fixture()
+def redis_client():
+    _require_or_skip(redis_reachable(), "Redis", "MYTHEUS_REQUIRE_REDIS")
+    from redis.asyncio import Redis
+
+    return Redis.from_url(os.environ["REDIS_URL"])
+
+
+@pytest.fixture(scope="session")
+def avro_codec():
+    _require_or_skip(schema_registry_reachable(), "Schema Registry", "MYTHEUS_REQUIRE_REGISTRY")
+    from libs.shared.avro_codec import AvroCodec
+
+    return AvroCodec(os.environ["SCHEMA_REGISTRY_URL"])
