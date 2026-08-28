@@ -36,7 +36,7 @@ Agent-to-agent collaboration. `ContextGapAgent` asks other users' agents for con
 | `reranker-service` | BGE-reranker-base cross-encoder; top-50 -> top-10; warm-replica floor | Owns no data | (sync gRPC from rag-service) | none |
 | `knowledge-graph-service` | The only writer of AGE `nexus_knowledge`; Cypher parameterized by `$org_id` | Reads served to rag-service and ProactiveAgent | `decisions`, `actions` (confirmed, from core-api) | (writes AGE edges) |
 | `search-service` | Postgres FTS arm; `tsvector` over `transcript_chunks` + `chat_messages`, RLS by `org_id` | Builds and owns its FTS indexes | `transcript-chunks` | (sync gRPC from rag-service) |
-| `ingestion-service` | `unstructured.io` parsing into typed chunked elements; blobs to object storage | Owns `document_chunks` / `document_elements` + object key prefix `{org_id}/` | `integration-events` | `document-chunks` |
+| `ingestion-service` | `unstructured.io` parsing into typed chunked elements; blobs to object storage (**Cloudflare R2**, S3-compatible; MinIO locally) | Owns `document_chunks` / `document_elements` + object key prefix `{org_id}/` | `integration-events` | `document-chunks` |
 
 ## The six agents
 
