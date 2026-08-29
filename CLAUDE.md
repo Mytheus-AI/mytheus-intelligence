@@ -8,7 +8,7 @@ Mytheus is a multi-tenant meeting-orchestration SaaS where every participant get
 
 - `agent-runtime-service` - the six LangGraph agents and the cost-controlled LLM pipeline.
 - `rag-service` - the sync orchestrator of hybrid retrieval.
-- `embedding-service` - GPU embeddings; the only writer of Qdrant.
+- `embedding-service` - GPU embeddings; the only writer of Qdrant, enforced by holding the only write API key rather than by convention.
 - `reranker-service` - GPU cross-encoder rerank.
 - `knowledge-graph-service` - the only writer of the AGE `nexus_knowledge` graph.
 - `search-service` - the Postgres FTS arm of hybrid retrieval.
@@ -163,7 +163,7 @@ pytest -m eval
 ruff check . && black --check . && mypy .
 ```
 
-Environment variables: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY`, `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`. A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
+Environment variables: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY` (write; embedding-service only) / `QDRANT_READ_ONLY_API_KEY` (every other consumer), `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`. A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
 
 ## Pitfalls
 

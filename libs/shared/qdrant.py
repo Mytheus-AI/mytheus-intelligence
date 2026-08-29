@@ -18,6 +18,7 @@ this module's `upsert()` is therefore the single write path other services must 
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -42,6 +43,66 @@ EMBEDDING_DIM = 384  # BGE-small-en
 LOGICAL_TRANSCRIPT_CHUNKS = "transcript_chunks"
 LOGICAL_DOCUMENT_CHUNKS = "document_chunks"
 LOGICAL_DECISIONS = "decisions"
+
+
+class QdrantAuthNotConfigured(RuntimeError):
+    """Raised at construction when the credential this client needs is absent or misconfigured.
+
+    Deliberately not a warning-and-continue. A client built with no key keeps working against a
+    Qdrant that does not enforce one and fails the first time it meets a Qdrant that does, which
+    moves the failure from startup in dev to a request in production.
+    """
+
+
+def _url() -> str:
+    return os.environ.get("QDRANT_URL", "http://localhost:6333")
+
+
+def _distinct_or_raise(write: str | None, read: str | None) -> None:
+    """Both keys set to the same value is not a control, and it is invisible without this check.
+
+    Every isolation test still passes in that configuration, because the "read-only" client is
+    the write client wearing another name. This is the one coupling between the two factories
+    and it exists precisely because the failure is silent.
+    """
+    if write and read and write == read:
+        raise QdrantAuthNotConfigured(
+            "QDRANT_API_KEY and QDRANT_READ_ONLY_API_KEY must not be the same value: "
+            "a shared key gives every reader write access while looking correctly configured"
+        )
+
+
+def write_client() -> AsyncQdrantClient:
+    """The privileged client. `embedding-service` is the ONLY service that may call this.
+
+    Holding the write key is what makes the sole-writer property real rather than a convention
+    the next contributor has to know about (status-overview gap 19).
+    """
+    key = os.environ.get("QDRANT_API_KEY")
+    if not key:
+        raise QdrantAuthNotConfigured(
+            "QDRANT_API_KEY is not set. embedding-service cannot write to Qdrant without the "
+            "write credential, and there is deliberately no unauthenticated fallback."
+        )
+    _distinct_or_raise(key, os.environ.get("QDRANT_READ_ONLY_API_KEY"))
+    return AsyncQdrantClient(url=_url(), api_key=key)
+
+
+def read_client() -> AsyncQdrantClient:
+    """The client every non-writing consumer uses: `rag-service`, `search-service`, tooling.
+
+    Qdrant refuses collection creation and upserts for this credential with `403 Forbidden:
+    Global manage access is required`, verified against `qdrant/qdrant:v1.12.4`. Searching and
+    listing are unaffected, which is all a reader needs.
+    """
+    key = os.environ.get("QDRANT_READ_ONLY_API_KEY")
+    if not key:
+        raise QdrantAuthNotConfigured(
+            "QDRANT_READ_ONLY_API_KEY is not set. A reader must not fall back to the write "
+            "credential, which is exactly the collapse this split exists to prevent."
+        )
+    _distinct_or_raise(os.environ.get("QDRANT_API_KEY"), key)
+    return AsyncQdrantClient(url=_url(), api_key=key)
 
 
 def physical_collection(logical: str, org_id: UUID) -> str:

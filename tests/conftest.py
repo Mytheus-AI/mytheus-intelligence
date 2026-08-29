@@ -39,6 +39,11 @@ os.environ.setdefault("REDPANDA_BROKERS", "localhost:9092")
 os.environ.setdefault("SCHEMA_REGISTRY_URL", "http://localhost:8081")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6380")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
+# Must match docker-compose.yml's defaults. Both keys are required and must differ: the
+# read-only key is what makes "embedding-service is the only writer" an infrastructure control
+# rather than a convention (status-overview gap 19).
+os.environ.setdefault("QDRANT_API_KEY", "dev-qdrant-write")
+os.environ.setdefault("QDRANT_READ_ONLY_API_KEY", "dev-qdrant-read")
 # Plan 5-6 task 9 (ingestion-service): real MinIO, S3-API compatible — see
 # libs/shared/object_storage.py. Same dev credentials the task brief specified.
 os.environ.setdefault("MINIO_ENDPOINT_URL", "http://localhost:9002")
@@ -108,7 +113,14 @@ def qdrant_reachable() -> bool:
     try:
         import httpx
 
-        return httpx.get(os.environ["QDRANT_URL"] + "/collections", timeout=2).status_code == 200
+        return (
+            httpx.get(
+                os.environ["QDRANT_URL"] + "/collections",
+                headers={"api-key": os.environ["QDRANT_API_KEY"]},
+                timeout=2,
+            ).status_code
+            == 200
+        )
     except Exception:
         return False
 
@@ -136,6 +148,26 @@ def schema_registry_reachable() -> bool:
 
 @pytest.fixture(scope="session")
 def qdrant_client():
+    """The privileged client, as `embedding-service` holds it."""
+    _require_or_skip(qdrant_reachable(), "Qdrant", "MYTHEUS_REQUIRE_QDRANT")
+    from libs.shared.qdrant import write_client
+
+    return write_client()
+
+
+@pytest.fixture(scope="session")
+def qdrant_read_client():
+    """The read-only client every other consumer holds. Used to prove it cannot write."""
+    _require_or_skip(qdrant_reachable(), "Qdrant", "MYTHEUS_REQUIRE_QDRANT")
+    from libs.shared.qdrant import read_client
+
+    return read_client()
+
+
+@pytest.fixture(scope="session")
+def qdrant_unauthenticated():
+    """No credential at all, to prove the server requires one. Without this the two keyed
+    fixtures prove only that Qdrant honours a key it was given, not that it demands one."""
     _require_or_skip(qdrant_reachable(), "Qdrant", "MYTHEUS_REQUIRE_QDRANT")
     from qdrant_client import AsyncQdrantClient
 

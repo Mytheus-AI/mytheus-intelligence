@@ -12,11 +12,11 @@ import logging
 import os
 
 from confluent_kafka import Producer
-from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from libs.shared.avro_codec import AvroCodec
+from libs.shared.qdrant import write_client
 from services.embedding_service.consumer import EmbeddingConsumer
 
 
@@ -31,7 +31,7 @@ def main() -> None:
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     consumer = EmbeddingConsumer(
-        qdrant=AsyncQdrantClient(url=os.environ.get("QDRANT_URL", "http://localhost:6333")),
+        qdrant=write_client(),
         session_factory=session_factory,
         redis=Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6380")),
         codec=AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8081")),
