@@ -128,13 +128,13 @@ pytest
 
 ## Related repos
 
-- `mytheus-intelligence` (this repo) - AI / inference tier.
-- `mytheus-core` - CRUD / control plane (identity-tenant, core-api, meeting, billing-metering, integration, admin-ops, notification).
-- `mytheus-realtime` - real-time tier (realtime-gateway, transcription-service).
-- `mytheus-workflows` - async orchestration (Temporal workers).
-- `mytheus-web` - the Next.js 14 web app and agent sidebar.
-- `mytheus-gateway` - api-gateway and bff edge.
-- `mytheus-infra` - Kubernetes (EKS/GKE) + Terraform IaC, CI/CD.
+- `mytheus-intelligence` (this repo) - AI / inference tier (`agent-runtime-service`, `rag-service`, `embedding-service`, `reranker-service`, `knowledge-graph-service`, `search-service`, `ingestion-service`).
+- `mytheus-backend` - CRUD / control plane plus async orchestration: `api-gateway`, `bff`, `identity-tenant-service`, `core-api`, `meeting-service`, `integration-service`, `billing-metering-service`, `admin-ops-service`, `notification-service`, `workflow-service`.
+- `mytheus-realtime` - real-time tier (`realtime-gateway`, `transcription-service`).
+- `mytheus-events` - Avro schemas, the topic taxonomy, and Schema Registry contracts.
+- `mytheus-platform` - deploy substrate: Docker Compose, the deploy scripts, CI templates.
+- `mytheus-ui` - the Next.js 14 web app (`web-app`) and agent sidebar.
+- `mytheus-mobile` - the Expo / React Native client.
 - `mytheus-docs` - the canon architecture set, `_canon/` source of truth, and the Glossary (doc 24).
 
 ## License

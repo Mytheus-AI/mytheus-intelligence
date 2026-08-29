@@ -4,7 +4,7 @@ This is `mytheus-intelligence`, the AI / inference tier of Mytheus (internal cod
 
 ## Repo at a glance
 
-Mytheus is a multi-tenant meeting-orchestration SaaS where every participant gets a personal AI agent. The platform is split into three scaling families: the CRUD/control plane (`mytheus-core`), the real-time tier (`mytheus-realtime`), and this AI/inference tier. This repo is its own cost center: it autoscales on queue depth, GPU utilization, and token throughput, independently of CRUD req/s and real-time connection count. Seven services live here:
+Mytheus is a multi-tenant meeting-orchestration SaaS where every participant gets a personal AI agent. The platform is split into three scaling families: the CRUD/control plane (`mytheus-backend`), the real-time tier (`mytheus-realtime`), and this AI/inference tier. This repo is its own cost center: it autoscales on queue depth, GPU utilization, and token throughput, independently of CRUD req/s and real-time connection count. Seven services live here:
 
 - `agent-runtime-service` - the six LangGraph agents and the cost-controlled LLM pipeline.
 - `rag-service` - the sync orchestrator of hybrid retrieval.
