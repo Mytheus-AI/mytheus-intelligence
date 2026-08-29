@@ -2763,6 +2763,7 @@ dependencies = [
     { name = "redis", extra = ["hiredis"] },
     { name = "sentence-transformers" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "transformers" },
     { name = "unstructured" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -2807,6 +2808,7 @@ requires-dist = [
     { name = "redis", extras = ["hiredis"], specifier = ">=5" },
     { name = "sentence-transformers", specifier = ">=3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
+    { name = "transformers", specifier = ">=4.40" },
     { name = "unstructured", specifier = ">=0.25,<0.26" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]

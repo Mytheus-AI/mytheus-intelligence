@@ -41,6 +41,11 @@ dependencies = [
     # reimplements the pattern of (no cross-repo import).
     "PyJWT>=2.8",
     "cryptography>=42",
+    # ner-service (ADR-0020 D5): dslim/bert-base-NER through transformers' token-classification
+    # pipeline. Declared explicitly rather than leaned on transitively through
+    # sentence-transformers, because this repo now imports `transformers` directly and an
+    # undeclared import is one dependency resolution away from vanishing.
+    "transformers>=4.40",
 ]
 
 [project.optional-dependencies]
