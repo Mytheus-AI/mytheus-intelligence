@@ -86,3 +86,6 @@ exclude = ["tests/"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "slow: real-model, real-broker load tests; skipped by `make test-fast`",
+]

@@ -264,10 +264,19 @@ class BaseConsumer(ABC):
         effect and then crashing silently skips that message forever, since the broker never
         redelivers a committed offset).
 
-        Not exercised in unit tests (it blocks forever); `process_raw` above carries all the
-        tested business logic. Kept here, not left unwritten, because the plan calls for the
-        embed-on-ingest consumer to actually run, and the wiring around it is a few lines once
-        `process_raw` exists.
+        ONE event loop for the life of the consumer, deliberately, and this is load-bearing.
+        The obvious `asyncio.run(self.process_raw(...))` per message creates and CLOSES a fresh
+        loop each time. The async clients a consumer holds (`redis.asyncio.Redis`, the Qdrant
+        client, the SQLAlchemy async engine) are constructed ONCE in the worker entrypoint and
+        bind their connection pools to the first loop that uses them, so the second message
+        raises `RuntimeError: Event loop is closed`, that exception escapes this `while` loop,
+        and the consumer dies having committed exactly one offset.
+
+        That was the real behaviour until 2026-08-29 and it was invisible: every test called
+        `process_raw` directly inside a single loop, so no test ever ran a second message
+        through this method. It surfaced the first time a sustained backlog was put through the
+        real loop, as a consumer group whose lag went from 24 to 23 and then stopped
+        (`tests/test_embedding_sustained_load.py`).
         """
         consumer = Consumer(
             {
@@ -278,6 +287,10 @@ class BaseConsumer(ABC):
             }
         )
         consumer.subscribe(self.topics)
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             while True:
                 msg = consumer.poll(poll_timeout)
@@ -286,8 +299,6 @@ class BaseConsumer(ABC):
                 if msg.error():
                     logger.error("consumer %s: broker error: %s", self.group, msg.error())
                     continue
-                import asyncio
-
                 # confluent-kafka's stubs type these Optional even though a message with no
                 # `.error()` always carries them; the `assert`s make that guarantee explicit
                 # for mypy rather than silencing the check.
@@ -298,7 +309,7 @@ class BaseConsumer(ABC):
                 assert partition is not None
                 assert offset is not None
 
-                asyncio.run(
+                loop.run_until_complete(
                     self.process_raw(
                         topic=topic, raw_value=raw_value, partition=partition, offset=offset
                     )
@@ -306,3 +317,4 @@ class BaseConsumer(ABC):
                 consumer.commit(message=msg, asynchronous=False)
         finally:
             consumer.close()
+            loop.close()
