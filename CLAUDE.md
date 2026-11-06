@@ -163,7 +163,7 @@ pytest -m eval
 ruff check . && black --check . && mypy .
 ```
 
-Environment variables: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY` (write; embedding-service only) / `QDRANT_READ_ONLY_API_KEY` (every other consumer), `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`. A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
+Environment variables: `ANTHROPIC_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY` (write; embedding-service only) / `QDRANT_READ_ONLY_API_KEY` (every other consumer), `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`. A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
 
 ## Pitfalls
 
