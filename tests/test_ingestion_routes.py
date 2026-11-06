@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.testclient import TestClient
 
 from libs.shared.app import create_app
-from libs.shared.object_storage import BUCKET_DOCUMENTS, document_key
+from libs.shared.object_storage import BUCKET_DOCUMENTS, document_key, ensure_bucket
 from services.ingestion_service.routes import create_ingestion_router
 from tests.conftest import APP_URL, auth_headers
 from tests.fixtures import sample_documents as docs
@@ -65,7 +65,7 @@ def test_post_ingest_with_another_orgs_id_in_the_header_but_no_valid_token_is_re
     """The exploit this whole fix closes: `X-Org-Id` carrying a victim org's id used to be
     trusted outright. A request that supplies it but presents no valid bearer token must now
     be rejected with 401 BEFORE any store is touched — proven here by confirming the object
-    never lands in `nexus-documents` under that org's prefix."""
+    never lands in `mytheus-documents` under that org's prefix."""
     victim_org = uuid.uuid4()
     resp = client.post(
         "/ingest",
@@ -75,6 +75,7 @@ def test_post_ingest_with_another_orgs_id_in_the_header_but_no_valid_token_is_re
     assert resp.status_code == 401
 
     # Nothing was written under the victim org's object-storage prefix.
+    ensure_bucket(s3_client, BUCKET_DOCUMENTS)  # a fresh MinIO has no bucket until something writes
     listing = s3_client.list_objects_v2(Bucket=BUCKET_DOCUMENTS, Prefix=f"{victim_org}/")
     assert listing.get("KeyCount", 0) == 0
 
@@ -125,7 +126,7 @@ def test_post_ingest_uploads_real_object_and_writes_real_chunks(client, s3_clien
     assert body["chunk_count"] > 0
     document_id = uuid.UUID(body["document_id"])
 
-    # The object really landed in nexus-documents at the expected, filename-blind key.
+    # The object really landed in mytheus-documents at the expected, filename-blind key.
     key = document_key(org_id, document_id, ".docx")
     try:
         head = s3_client.head_object(Bucket=BUCKET_DOCUMENTS, Key=key)
@@ -143,7 +144,7 @@ def test_post_ingest_uploads_real_object_and_writes_real_chunks(client, s3_clien
 
 def test_post_ingest_of_a_sample_pdf_is_the_plans_literal_acceptance_check(client, s3_client):
     """The plan's acceptance check, verbatim: 'POST /ingest of a sample PDF writes the blob to
-    nexus-documents/{org_id}/{document_id}/, rows into document_chunks with element_type in
+    mytheus-documents/{org_id}/{document_id}/, rows into document_chunks with element_type in
     {Title, NarrativeText, Table, ListItem}, and emits one document-chunks event per chunk.'"""
     org_id = uuid.uuid4()
     resp = client.post(
@@ -158,7 +159,7 @@ def test_post_ingest_of_a_sample_pdf_is_the_plans_literal_acceptance_check(clien
     document_id = uuid.UUID(body["document_id"])
 
     key = document_key(org_id, document_id, ".pdf")
-    assert key == f"{org_id}/{document_id}/source.pdf"  # nexus-documents/{org_id}/{document_id}/
+    assert key == f"{org_id}/{document_id}/source.pdf"  # mytheus-documents/{org_id}/{document_id}/
     try:
         head = s3_client.head_object(Bucket=BUCKET_DOCUMENTS, Key=key)
         assert head["ContentLength"] > 0

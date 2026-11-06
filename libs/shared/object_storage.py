@@ -1,5 +1,5 @@
 r"""Object storage chokepoint — the ONLY module in this repo allowed to construct an S3 key or
-touch `nexus-documents` / `nexus-attachments`. Mirrors `libs/shared/qdrant.py`'s role for
+touch `mytheus-documents` / `mytheus-attachments`. Mirrors `libs/shared/qdrant.py`'s role for
 Qdrant: one resolution function, everything else calls through it, so "everyone remembers to
 do it right" is never the isolation mechanism.
 
@@ -55,8 +55,8 @@ import boto3
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
 
-BUCKET_DOCUMENTS = "nexus-documents"  # direct /ingest uploads — {org_id}/{document_id}/
-BUCKET_ATTACHMENTS = "nexus-attachments"  # calendar attachments — {org_id}/{meeting_id}/
+BUCKET_DOCUMENTS = "mytheus-documents"  # direct /ingest uploads — {org_id}/{document_id}/
+BUCKET_ATTACHMENTS = "mytheus-attachments"  # calendar attachments — {org_id}/{meeting_id}/
 
 # The ONLY extensions this service can genuinely parse (services/ingestion_service/parser.py).
 # `safe_extension` never returns anything outside this set, and `document_key`/`attachment_key`
@@ -77,7 +77,7 @@ def safe_extension(filename: str) -> str | None:
 
 
 def document_key(org_id: UUID, document_id: UUID, ext: str) -> str:
-    """`nexus-documents` key for a direct `/ingest` upload: `{org_id}/{document_id}/source{ext}`.
+    """`mytheus-documents` key for a direct `/ingest` upload: `{org_id}/{document_id}/source{ext}`.
     `org_id` is always the verified tenant identity; `document_id` is always server-generated
     (`uuid.uuid4()`, never caller-supplied); `ext` must already be a `SUPPORTED_EXTENSIONS`
     member. The filename itself never appears in the key — the constant name `source` is used
@@ -90,8 +90,9 @@ def document_key(org_id: UUID, document_id: UUID, ext: str) -> str:
 
 
 def attachment_key(org_id: UUID, meeting_id: UUID, document_id: UUID, ext: str) -> str:
-    """`nexus-attachments` key for a calendar attachment: `{org_id}/{meeting_id}/{document_id}{ext}`
-    — the canonical `{org_id}/{meeting_id}/` prefix (`_canon/02-data-model.md` §6), with
+    """`mytheus-attachments` key for a calendar attachment:
+    `{org_id}/{meeting_id}/{document_id}{ext}` — the canonical `{org_id}/{meeting_id}/` prefix
+    (`_canon/02-data-model.md` §6), with
     `document_id` (always server-generated) distinguishing multiple attachments on one meeting.
     Same guarantees as `document_key`: no caller-supplied string reaches this key."""
     if ext not in SUPPORTED_EXTENSIONS:

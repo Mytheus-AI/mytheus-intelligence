@@ -5,7 +5,7 @@ real RLS), real MinIO (the consumer reads an attachment object exactly as
 
 Covers:
 - R8: a `(google_calendar, attachment_to_ingest)` event triggers ingestion end to end (object
-  read from `nexus-attachments`, `document_chunks`/`document_elements` written,
+  read from `mytheus-attachments`, `document_chunks`/`document_elements` written,
   `document-chunks` outbox rows enqueued, `ingestion_jobs` completed).
 - R8: any OTHER `integration-events` message (wrong provider, or right provider but wrong
   `event_type`) is a no-op — consumed and inbox-recorded (BaseConsumer's normal at-least-once
