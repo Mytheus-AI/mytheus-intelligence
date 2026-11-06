@@ -49,13 +49,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from libs.shared.auth import verified_org_id
-from libs.shared.tenancy import set_rls
+from services.search_service.fts import MAX_LIMIT, fts_search
 
-_MAX_LIMIT = 50
+_MAX_LIMIT = MAX_LIMIT
 
 
 class SearchHit(BaseModel):
@@ -92,40 +91,27 @@ def create_search_router(*, session_factory: async_sessionmaker) -> APIRouter:  
     ) -> SearchResponse:
         meeting_filter = _parse_meeting_id(meeting_id) if meeting_id is not None else None
 
-        # websearch_to_tsquery (not to_tsquery/plainto_tsquery): the one PostgreSQL tsquery
-        # constructor designed for raw, adversarial user search-box input — it never raises a
-        # syntax error on unbalanced quotes or stray operator characters the way `to_tsquery`
-        # would, and unlike `plainto_tsquery` it still understands quoted phrases and `-exclude`.
-        sql = """
-            SELECT chunk_id, meeting_id, speaker_id, start_ms, end_ms, text,
-                   ts_rank(tsv, websearch_to_tsquery('english', :q)) AS rank
-            FROM intelligence.transcript_chunk_search
-            WHERE org_id = :org_id
-              AND tsv @@ websearch_to_tsquery('english', :q)
-        """
-        params: dict[str, object] = {"org_id": str(org_id), "q": q, "limit": limit}
-        if meeting_filter is not None:
-            sql += " AND meeting_id = :meeting_id"
-            params["meeting_id"] = str(meeting_filter)
-        sql += " ORDER BY rank DESC LIMIT :limit"
-
-        async with session_factory() as session, session.begin():
-            await set_rls(session, org_id)
-            rows = (await session.execute(text(sql), params)).all()
+        rows = await fts_search(
+            session_factory=session_factory,
+            org_id=org_id,
+            q=q,
+            meeting_id=meeting_filter,
+            limit=limit,
+        )
 
         return SearchResponse(
             query=q,
             results=[
                 SearchHit(
-                    passage=row.text,
-                    rank=float(row.rank),
-                    chunk_id=str(row.chunk_id),
-                    meeting_id=str(row.meeting_id),
-                    speaker_id=row.speaker_id,
-                    start_ms=row.start_ms,
-                    end_ms=row.end_ms,
+                    passage=r.passage,
+                    rank=r.rank,
+                    chunk_id=r.chunk_id,
+                    meeting_id=r.meeting_id,
+                    speaker_id=r.speaker_id,
+                    start_ms=r.start_ms,
+                    end_ms=r.end_ms,
                 )
-                for row in rows
+                for r in rows
             ],
         )
 
