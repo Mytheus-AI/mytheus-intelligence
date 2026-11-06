@@ -1,4 +1,4 @@
-# Local Qdrant for mytheus-intelligence.
+# Local Qdrant, MinIO and Apache AGE Postgres for mytheus-intelligence.
 #
 # This repo had no compose file at all, which is the root of status-overview gap 19: the dev
 # Qdrant everyone used was started by hand with `docker run` and no API key, so the
@@ -66,6 +66,34 @@ services:
       timeout: 3s
       retries: 20
 
+  # Apache AGE Postgres for `knowledge-graph-service`'s `nexus_knowledge` graph (Plan 5-6 gap 16).
+  #
+  # Why a SEPARATE Postgres and not the backend's shared one on 5433: that one is
+  # `supabase/postgres:15.8.1.060`, and it does not ship the `age` extension (checked
+  # 2026-11-06 by listing every extension `.control` file in the image's layers: no
+  # `age.control`). That is risk R1 ("AGE on managed Supabase may be operationally awkward")
+  # materializing, and this is its pre-authorized fallback: self-host Postgres+AGE.
+  #
+  # Port 5434: clear of 5433 (backend Postgres), 6380, 6333, 9002. Only knowledge-graph-service
+  # holds AGE_DATABASE_URL. Credentials are dev dummies; a real deployment supplies them from the
+  # secrets manager.
+  age:
+    image: apache/age:release_PG16_1.6.0
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: ${AGE_POSTGRES_USER:-nexus_graph}
+      POSTGRES_PASSWORD: ${AGE_POSTGRES_PASSWORD:-nexus-graph-dev}
+      POSTGRES_DB: nexus_graph
+    volumes:
+      - agedata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d nexus_graph"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   qdrantdata:
   miniodata:
+  agedata:

@@ -1,0 +1,11 @@
+{
+  "version": "v1",
+  "roles": {
+    "engineer": ["architecture", "api-design", "infra", "incidents", "code-review", "performance"],
+    "designer": ["ux", "design-system", "prototypes", "research", "accessibility"],
+    "product_manager": ["roadmap", "pricing", "prioritization", "metrics", "stakeholders"],
+    "sales": ["pipeline", "pricing", "contracts", "renewals", "objections"],
+    "finance": ["budget", "forecast", "billing", "runway"],
+    "member": ["general"]
+  }
+}
