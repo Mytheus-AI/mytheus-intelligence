@@ -179,6 +179,15 @@ async def _scalar(org_id: uuid.UUID, sql: str) -> int:
         await engine.dispose()
 
 
+def _dlq_contents(broker):  # type: ignore[no-untyped-def]
+    """Non-empty dead-letter topics with a short decoded preview, for failure messages."""
+    out = {}
+    for topic, msgs in broker.topics.items():
+        if topic.endswith(".dlq") and msgs:
+            out[topic] = [bytes(v)[:300] for _, v in msgs[:3]]
+    return out
+
+
 async def test_calendar_attachment_flows_through_relay_into_qdrant(
     migrated_db, s3_client, qdrant_client, avro_codec, monkeypatch
 ):
@@ -209,7 +218,7 @@ async def test_calendar_attachment_flows_through_relay_into_qdrant(
     )
     await _run_loop(ingestion)
     assert broker.committed[(ingestion.group, "integration-events")] == 1
-    assert not any(t.endswith(".dlq") for t in broker.topics if broker.topics[t])
+    assert not _dlq_contents(broker), _dlq_contents(broker)
 
     n_chunks = await _scalar(
         org_id, "SELECT count(*) FROM intelligence.document_chunks WHERE org_id = :o"
@@ -239,7 +248,7 @@ async def test_calendar_attachment_flows_through_relay_into_qdrant(
     )
     await _run_loop(embedding)
     assert broker.committed[(embedding.group, "document-chunks")] == n_chunks
-    assert not any(t.endswith(".dlq") for t in broker.topics if broker.topics[t])
+    assert not _dlq_contents(broker), _dlq_contents(broker)
 
     collection = physical_collection(LOGICAL_DOCUMENT_CHUNKS, org_id)
     points, _ = await qdrant_client.scroll(collection, limit=100, with_payload=True)
