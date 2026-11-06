@@ -31,6 +31,7 @@ from qdrant_client.models import PointStruct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.shared.consumer import BaseConsumer, ConsumedEvent
+from libs.shared.metrics import observe_embedding_batch
 from libs.shared.qdrant import LOGICAL_DOCUMENT_CHUNKS, LOGICAL_TRANSCRIPT_CHUNKS, upsert
 from services.embedding_service.model import embed_batch
 from services.embedding_service.splitter import split_600_60
@@ -102,6 +103,7 @@ class EmbeddingConsumer(BaseConsumer):
             return
 
         vectors, _elapsed = embed_batch(pieces)
+        observe_embedding_batch(_elapsed, len(pieces))
         points = [
             PointStruct(id=_point_id(stable_key, i), vector=vector, payload=payload_base)
             for i, vector in enumerate(vectors)
