@@ -79,8 +79,8 @@ def age_database_url() -> str:
     if not url:
         raise RuntimeError(
             "AGE_DATABASE_URL not set. Expected postgresql://<user>:<pw>@localhost:5434/"
-            "nexus_graph "
-            "(the dedicated apache/age container in mytheus-intelligence/docker-compose.yml)."
+            "nexus_graph (the dedicated apache/age container in "
+            "mytheus-intelligence/docker-compose.yml)."
         )
     return url.replace("postgresql+asyncpg://", "postgresql://", 1)
 

@@ -85,6 +85,9 @@ class _Msg:
     def value(self) -> bytes:
         return self._v
 
+    def timestamp(self) -> tuple[int, int]:
+        return (0, -1)  # TIMESTAMP_NOT_AVAILABLE
+
 
 def _install_fake_kafka_consumer(monkeypatch, broker: InMemoryBroker, key_prefix: bytes):
     """Swap `confluent_kafka.Consumer` inside libs.shared.consumer so the REAL run_forever loop

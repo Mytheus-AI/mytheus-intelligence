@@ -17,6 +17,7 @@
 #
 services:
   qdrant:
+    network_mode: bridge  # default bridge: daemon is out of address pools for new project networks
     image: qdrant/qdrant:v1.12.4
     ports:
       - "6333:6333"
@@ -50,7 +51,8 @@ services:
   # Port 9002 (not MinIO's default 9000) matches what `.env.example` and `conftest.py` already
   # expect, and keeps this off anything else bound to 9000.
   minio:
-    image: minio/minio:RELEASE.2024-09-13T20-26-02Z
+    network_mode: bridge  # default bridge: daemon is out of address pools for new project networks
+    image: minio/minio:latest  # pinned RELEASE tags are not pullable from Docker Hub (verified 2026-11-06); verified build RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9003"
     ports:
       - "9002:9000"
@@ -78,6 +80,7 @@ services:
   # holds AGE_DATABASE_URL. Credentials are dev dummies; a real deployment supplies them from the
   # secrets manager.
   age:
+    network_mode: bridge  # default bridge: daemon is out of address pools for new project networks
     image: apache/age:release_PG16_1.6.0
     ports:
       - "5434:5432"
@@ -97,3 +100,4 @@ volumes:
   qdrantdata:
   miniodata:
   agedata:
+
