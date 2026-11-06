@@ -1,5 +1,5 @@
 """ner-service's synchronous FastAPI process: `/healthz` (liveness, `libs.shared.app`), plus
-`/readyz` and `POST /ner/detect` (`detect.py`). Owns no data. Detects only; never redacts.
+`/readyz` and `POST /ner` (`detect.py`). Owns no data. Detects only; never redacts.
 `/readyz` is 200 only once the model is loaded; `/healthz` stays 200 regardless.
 """
 

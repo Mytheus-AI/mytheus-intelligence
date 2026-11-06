@@ -2,7 +2,7 @@
 
 The spaCy dependency lives in the optional `ner` extra (`pip install .[ner]`) and is imported
 only inside `SpacyNerModel.load()`, so this module and the whole service import cleanly without
-it (readiness then reports not-ready and `/ner/detect` returns 503 unless degraded mode is
+it (readiness then reports not-ready and `/ner` returns 503 unless degraded mode is
 requested).
 
 PRIVACY: nothing in here logs or stores `text`. Exceptions are logged by class name only because

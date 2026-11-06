@@ -7,9 +7,7 @@ text. Callers (transcription, ingestion, agent-runtime/rag) own redaction and to
 
 - `GET /healthz` - liveness, always 200.
 - `GET /readyz` - 200 only when the model is loaded (lazy load on first probe/request, retried every 30s); else 503.
-- `POST /ner/detect`
-
-Note: canon's catalog lists `POST /ner`; this implements `/ner/detect` per the build task. Align canon or add an alias.
+- `POST /ner` (matches the canon service catalog)
 
 ### Request
 ```json

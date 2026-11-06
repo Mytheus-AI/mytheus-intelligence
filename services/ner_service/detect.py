@@ -1,4 +1,4 @@
-"""`POST /ner/detect`, `/readyz`. See the service README for the full contract.
+"""`POST /ner`, `/readyz`. See the service README for the full contract.
 
 Design (ADR-0020): ner-service DETECTS, it never redacts, never stores, and returns offsets and
 types only, never the matched text. Logs carry org_id and counts/lengths, never text.
@@ -72,7 +72,7 @@ def create_ner_app(model: NerModel | None = None) -> FastAPI:
         if cl is not None and cl.isdigit() and int(cl) > max_chars() * _BODY_BYTES_PER_CHAR + 1024:
             raise HTTPException(status_code=413, detail="Request body too large")
 
-    @app.post("/ner/detect", response_model=DetectResponse)
+    @app.post("/ner", response_model=DetectResponse)
     async def detect(
         req: DetectRequest,
         org_id: UUID = Depends(verified_org_id),  # noqa: B008

@@ -96,7 +96,7 @@ async def test_detect_merges_model_and_regex_without_echoing_text(caplog):
     model = StubModel([Span("PERSON", 0, 10, 0.9, "model")])
     caplog.set_level(logging.INFO)
     async with _client(model) as c:
-        r = await c.post("/ner/detect", json={"text": text}, headers=H())
+        r = await c.post("/ner", json={"text": text}, headers=H())
     assert r.status_code == 200
     body = r.json()
     assert body["mode"] == "model" and body["partial"] is False
@@ -108,29 +108,23 @@ async def test_detect_merges_model_and_regex_without_echoing_text(caplog):
 
 async def test_requires_auth():
     async with _client(StubModel()) as c:
-        assert (await c.post("/ner/detect", json={"text": "x"})).status_code == 401
-        r = await c.post(
-            "/ner/detect", json={"text": "x"}, headers={"Authorization": "Bearer junk"}
-        )
+        assert (await c.post("/ner", json={"text": "x"})).status_code == 401
+        r = await c.post("/ner", json={"text": "x"}, headers={"Authorization": "Bearer junk"})
         assert r.status_code in (401, 503)  # junk token: 401 (503 only if JWKS unreachable)
 
 
 async def test_no_org_claim_is_401():
     async with _client(StubModel()) as c:
-        r = await c.post("/ner/detect", json={"text": "x"}, headers=auth_headers(None))
+        r = await c.post("/ner", json={"text": "x"}, headers=auth_headers(None))
     assert r.status_code == 401
 
 
 async def test_size_limit(monkeypatch):
     monkeypatch.setenv("NER_MAX_CHARS", "10")
     async with _client(StubModel()) as c:
-        assert (
-            await c.post("/ner/detect", json={"text": "a" * 11}, headers=H())
-        ).status_code == 413
-        assert (
-            await c.post("/ner/detect", json={"text": "a" * 10}, headers=H())
-        ).status_code == 200
-        big = await c.post("/ner/detect", json={"text": "a" * 5000}, headers=H())
+        assert (await c.post("/ner", json={"text": "a" * 11}, headers=H())).status_code == 413
+        assert (await c.post("/ner", json={"text": "a" * 10}, headers=H())).status_code == 200
+        big = await c.post("/ner", json={"text": "a" * 5000}, headers=H())
         assert big.status_code == 413
 
 
@@ -138,10 +132,10 @@ async def test_model_unavailable_is_503_and_fallback_is_opt_in():
     m = StubModel(fail_load=True)
     async with _client(m) as c:
         assert (await c.get("/readyz")).status_code == 503
-        r = await c.post("/ner/detect", json={"text": "mail a@b.co"}, headers=H())
+        r = await c.post("/ner", json={"text": "mail a@b.co"}, headers=H())
         assert r.status_code == 503
         r = await c.post(
-            "/ner/detect", json={"text": "mail a@b.co", "allow_regex_fallback": True}, headers=H()
+            "/ner", json={"text": "mail a@b.co", "allow_regex_fallback": True}, headers=H()
         )
         assert r.status_code == 200
         body = r.json()
@@ -153,7 +147,7 @@ async def test_model_unavailable_is_503_and_fallback_is_opt_in():
 async def test_readyz_ok_when_loaded_and_empty_text():
     async with _client(StubModel()) as c:
         assert (await c.get("/readyz")).status_code == 200
-        r = await c.post("/ner/detect", json={"text": ""}, headers=H())
+        r = await c.post("/ner", json={"text": ""}, headers=H())
         assert r.status_code == 200 and r.json()["spans"] == []
 
 
