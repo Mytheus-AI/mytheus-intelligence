@@ -31,7 +31,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -67,9 +67,36 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+VERSION_SCHEMA = "intelligence"
+
+
+def _prepare_version_table(connection: Connection) -> None:
+    """Keep this history's version table out of `public`.
+
+    It is created by the schema-owner role (`supabase_admin`), and a `public` table owned by that
+    role makes its image-installed default ACL live, which mytheus-backend's grant assertions
+    correctly reject. An existing `public` table is moved, not recreated, so history survives.
+    """
+    connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {VERSION_SCHEMA}"))
+    connection.execute(text(f"""
+            DO $$
+            BEGIN
+              IF to_regclass('public.{VERSION_TABLE}') IS NOT NULL
+                 AND to_regclass('{VERSION_SCHEMA}.{VERSION_TABLE}') IS NULL THEN
+                ALTER TABLE public.{VERSION_TABLE} SET SCHEMA {VERSION_SCHEMA};
+              END IF;
+            END $$;
+            """))
+    connection.commit()
+
+
 def do_run_migrations(connection: Connection) -> None:
+    _prepare_version_table(connection)
     context.configure(
-        connection=connection, target_metadata=target_metadata, version_table=VERSION_TABLE
+        connection=connection,
+        target_metadata=target_metadata,
+        version_table=VERSION_TABLE,
+        version_table_schema=VERSION_SCHEMA,
     )
     with context.begin_transaction():
         context.run_migrations()
