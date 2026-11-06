@@ -1,0 +1,23 @@
+# Ray Serve application config, CPU. `serve run services/reranker_service/serve_config.gpu.yaml`.
+# CPU/dev variant (RERANKER_GPU=0). GPU variant: serve_config.gpu.yaml.
+# UNVERIFIED on a GPU host; latency SLOs (warm p95 < 500ms, cold < 1.5s) are UNMEASURED.
+proxy_location: EveryNode
+http_options: {host: 0.0.0.0, port: 8000}
+applications:
+  - name: reranker
+    route_prefix: /rerank
+    import_path: services.reranker_service.serve:deployment
+    runtime_env:
+      env_vars:
+        RERANKER_GPU: "0"
+        RERANKER_MIN_REPLICAS: "1"   # warm floor; raise to 2 per active region in prod
+        RERANKER_MAX_REPLICAS: "4"
+    deployments:
+      - name: RerankerDeployment
+        ray_actor_options: {num_gpus: 0}
+        max_ongoing_requests: 16
+        autoscaling_config:
+          min_replicas: 1
+          max_replicas: 4
+          target_ongoing_requests: 8
+          downscale_delay_s: 600

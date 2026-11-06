@@ -3,7 +3,7 @@
 Scaffold only: boots and answers `/healthz`. The `BaseAgent` lifecycle, tiered routing, per-tenant
 budgets, and the `transcript-chunks -> agent-results/agent-stream` flow land in the agent band.
 
-Run: uvicorn services.agent_runtime_service.main:app --port 8100
+Run: uvicorn services.agent_runtime_service.main:app --port 8200
 """
 
 from __future__ import annotations

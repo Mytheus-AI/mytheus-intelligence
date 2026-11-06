@@ -1,0 +1,25 @@
+# Ray Serve application config, CPU. `serve run services/embedding_service/serve_config.gpu.yaml`.
+# CPU/dev variant (EMBEDDING_GPU=0). GPU variant: serve_config.gpu.yaml.
+# Two lanes (ingest batch-32 / query) as separate deployments, as in serve.py.
+# UNVERIFIED on a GPU host; the batch-of-32 < 100ms SLO is UNMEASURED.
+proxy_location: EveryNode
+http_options: {host: 0.0.0.0, port: 8000}
+applications:
+  - name: embedding-ingest
+    route_prefix: /embed-ingest
+    import_path: services.embedding_service.serve:ingest_deployment
+    runtime_env: {env_vars: {EMBEDDING_GPU: "0"}}
+    deployments:
+      - name: IngestEmbedder
+        num_replicas: 1
+        ray_actor_options: {num_gpus: 0}
+        max_ongoing_requests: 64
+  - name: embedding-query
+    route_prefix: /embed-query
+    import_path: services.embedding_service.serve:query_deployment
+    runtime_env: {env_vars: {EMBEDDING_GPU: "0"}}
+    deployments:
+      - name: QueryEmbedder
+        num_replicas: 1
+        ray_actor_options: {num_gpus: 0}
+        max_ongoing_requests: 16

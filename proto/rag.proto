@@ -3,13 +3,46 @@
 // rag-service fans out to embedding / reranker / knowledge-graph / search over this mesh; org_id
 // rides in gRPC metadata on every hop (never in the message body). The real service and message
 // definitions land in the RAG band; this file only reserves the package + path.
+//
+// FtsSearch is the first real RPC (search-service's internal FTS arm for rag-service).
+// Messages are mirrored at runtime by libs/shared/rag_proto.py (no protoc in dev/CI yet);
+// tests/test_search_grpc.py asserts that mirror matches this file field-for-field.
 
 syntax = "proto3";
 
 package mytheus.intelligence.rag.v1;
 
-// TODO(RAG band): define RagService (Query), plus Embed/Rerank/GraphTraverse/FtsSearch messages.
+// TODO(RAG band): define RagService (Query), plus Embed/Rerank/GraphTraverse messages.
 // org_id travels in gRPC metadata, not in these messages.
 message RagQueryPlaceholder {
   string query = 1;
+}
+
+// search-service: Postgres FTS over intelligence.transcript_chunk_search (transcript chunks only;
+// chat_messages is NOT covered, see README "chat_messages FTS design note").
+// Auth: `authorization: Bearer <Clerk JWT>` in gRPC metadata; org_id comes from the verified
+// token, never from the message.
+service FtsService {
+  rpc FtsSearch(FtsSearchRequest) returns (FtsSearchResponse);
+}
+
+message FtsSearchRequest {
+  string query = 1;
+  string meeting_id = 2; // optional; empty = all meetings
+  int32 limit = 3;       // 1..50, default 20 when 0
+}
+
+message FtsHit {
+  string passage = 1;
+  double rank = 2;
+  string chunk_id = 3;
+  string meeting_id = 4;
+  string speaker_id = 5;
+  int64 start_ms = 6;
+  int64 end_ms = 7;
+}
+
+message FtsSearchResponse {
+  string query = 1;
+  repeated FtsHit results = 2;
 }

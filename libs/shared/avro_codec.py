@@ -7,7 +7,7 @@ no Avro serialize/deserialize methods, and the root `mytheus-events/pyproject.to
 `[build-system]` table, so `pip install -e` against it does not currently work (a pre-existing
 packaging gap in that repo, out of scope for this worktree to fix unilaterally). Rather than
 block on that or hand-roll a second Avro encoder, this module talks directly to the REAL,
-already-registered Schema Registry (`http://localhost:8081`, all 21 `{topic}-value` subjects
+already-registered Schema Registry (`http://localhost:8085`, all 21 `{topic}-value` subjects
 registered under BACKWARD per this task's scope note) via `confluent_kafka.schema_registry`,
 which is the same underlying mechanism the generated client would use if it were installable.
 Every schema this module resolves is the actual registered one, not a local copy, so a

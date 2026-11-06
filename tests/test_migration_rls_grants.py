@@ -57,7 +57,9 @@ async def test_two_independent_alembic_version_tables(migrated_db):
     engine = await _engine(migrated_db)
     async with engine.begin() as conn:
         mine = (
-            await conn.execute(text("SELECT version_num FROM alembic_version_intelligence"))
+            await conn.execute(
+                text("SELECT version_num FROM intelligence.alembic_version_intelligence")
+            )
         ).scalar_one()
         backend_exists = (
             await conn.execute(text("SELECT to_regclass('public.alembic_version') IS NOT NULL"))

@@ -33,7 +33,7 @@ The plan also asks for FTS over `chat_messages`, owned by `core-api` in `mytheus
 `public` schema (confirmed live: FKs to `organizations`/`meetings`/`users`, same grant shape as
 `transcript_chunks`). Unlike transcript_chunks, there is no way to build an equivalent read model
 here: the full, live, registered topic catalog (21 subjects at
-`http://localhost:8081/subjects`, cross-checked against `mytheus-events/schemas/`) has NO
+`http://localhost:8085/subjects`, cross-checked against `mytheus-events/schemas/`) has NO
 `chat-messages` topic at all, and `chat_messages` rows are written directly by
 `core_api/main.py` with no outbox/event production path whatsoever. Closing this gap needs
 either (a) a new event topic — a canon change owned by `mytheus-events`/`mytheus-docs`, out of

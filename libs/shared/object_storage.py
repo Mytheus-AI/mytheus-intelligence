@@ -100,27 +100,50 @@ def attachment_key(org_id: UUID, meeting_id: UUID, document_id: UUID, ext: str) 
 
 
 def get_client() -> boto3.client:
-    """Real boto3 S3 client pointed at MinIO. Path-style addressing (`s3.addressing_style =
-    "path"`) because MinIO's default dev setup has no per-bucket DNS/virtual-hosted-style
-    routing configured."""
+    """Real boto3 S3 client. Production is Cloudflare R2 (ADR-0023): set `S3_ENDPOINT_URL` to
+    `https://<account-id>.r2.cloudflarestorage.com`, `S3_REGION=auto` and the R2 API token pair in
+    `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`. The `MINIO_*` names remain as the local-dev
+    fallback (MinIO on :9002). Path-style addressing is the default because it works on both;
+    set `S3_FORCE_PATH_STYLE=false` for virtual-hosted style.
+
+    Request checksums are sent only when an operation requires them: the SDK default of adding
+    a CRC trailer to every upload is not accepted by every S3-compatible store."""
     import os
 
+    env = os.environ
+    path_style = env.get("S3_FORCE_PATH_STYLE", "true").lower() != "false"
     return boto3.client(
         "s3",
-        endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://localhost:9002"),
-        aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY", "mytheus"),
-        aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY", "mytheus-dev-secret"),
-        region_name="us-east-1",
-        config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
+        endpoint_url=env.get("S3_ENDPOINT_URL")
+        or env.get("MINIO_ENDPOINT_URL", "http://localhost:9002"),
+        aws_access_key_id=env.get("S3_ACCESS_KEY_ID") or env.get("MINIO_ACCESS_KEY", "mytheus"),
+        aws_secret_access_key=env.get("S3_SECRET_ACCESS_KEY")
+        or env.get("MINIO_SECRET_KEY", "mytheus-dev-secret"),
+        region_name=env.get("S3_REGION", "us-east-1"),
+        config=BotoConfig(
+            signature_version="s3v4",
+            s3={"addressing_style": "path" if path_style else "virtual"},
+            request_checksum_calculation="when_required",
+            response_checksum_validation="when_required",
+        ),
     )
 
 
 def ensure_bucket(client: boto3.client, bucket: str) -> None:
-    """Idempotent create, mirroring `libs/shared/qdrant.py`'s `ensure_collection` — safe to call
-    on every write since we don't know in advance whether the bucket has been provisioned."""
+    """Idempotent create for local dev. Creates only when the bucket is genuinely absent (404):
+    a 403 means it exists but this credential cannot see it, which is the normal state with an
+    object-scoped R2 token, so it is re-raised rather than turned into a doomed create_bucket.
+    Set `S3_AUTO_CREATE_BUCKETS=0` in production, where buckets are provisioned out of band."""
+    import os
+
     try:
         client.head_bucket(Bucket=bucket)
-    except ClientError:
+    except ClientError as exc:
+        status = str(exc.response.get("Error", {}).get("Code", ""))
+        if status not in {"404", "NoSuchBucket", "NotFound"}:
+            raise
+        if os.environ.get("S3_AUTO_CREATE_BUCKETS", "1") == "0":
+            raise
         client.create_bucket(Bucket=bucket)
 
 

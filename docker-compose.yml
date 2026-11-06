@@ -1,4 +1,4 @@
-# Local Qdrant for mytheus-intelligence.
+# Local Qdrant, MinIO and Apache AGE Postgres for mytheus-intelligence.
 #
 # This repo had no compose file at all, which is the root of status-overview gap 19: the dev
 # Qdrant everyone used was started by hand with `docker run` and no API key, so the
@@ -6,17 +6,18 @@
 # skipped silently whenever nobody happened to have a container up.
 #
 # Postgres, Redis, Redpanda and the Schema Registry are NOT here on purpose. They are the
-# mytheus-backend stack (ports 5433 / 6380 / 9092 / 8081) and this tier shares them; declaring
+# mytheus-backend stack (ports 5443 / 6390 / 9092 / 8081) and this tier shares them; declaring
 # them again here would give the two repos two competing definitions of one dependency and,
 # worse, a second set of volumes that looks identical until the data diverges.
 #
-# Port 6333 is Qdrant's default and is deliberately kept, unlike the backend's 5433/6380 shift:
+# Port 6333 is Qdrant's default and is deliberately kept, unlike the backend's 5443/6390 shift:
 # nothing else in this program binds it.
 #
 #   docker compose up -d
 #
 services:
   qdrant:
+    network_mode: bridge  # default bridge: daemon is out of address pools for new project networks
     image: qdrant/qdrant:v1.12.4
     ports:
       - "6333:6333"
@@ -50,7 +51,8 @@ services:
   # Port 9002 (not MinIO's default 9000) matches what `.env.example` and `conftest.py` already
   # expect, and keeps this off anything else bound to 9000.
   minio:
-    image: minio/minio:RELEASE.2024-09-13T20-26-02Z
+    network_mode: bridge  # default bridge: daemon is out of address pools for new project networks
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e  # RELEASE.2025-09-07T16-13-09Z; RELEASE tags are no longer pullable from Docker Hub, so pin by digest
     command: server /data --console-address ":9003"
     ports:
       - "9002:9000"
@@ -66,6 +68,36 @@ services:
       timeout: 3s
       retries: 20
 
+  # Apache AGE Postgres for `knowledge-graph-service`'s `nexus_knowledge` graph (Plan 5-6 gap 16).
+  #
+  # Why a SEPARATE Postgres and not the backend's shared one on 5443: that one is
+  # `supabase/postgres:15.8.1.060`, and it does not ship the `age` extension (checked
+  # 2026-11-06 by listing every extension `.control` file in the image's layers: no
+  # `age.control`). That is risk R1 ("AGE on managed Supabase may be operationally awkward")
+  # materializing, and this is its pre-authorized fallback: self-host Postgres+AGE.
+  #
+  # Port 5434: clear of 5443 (backend Postgres), 6390, 6333, 9002. Only knowledge-graph-service
+  # holds AGE_DATABASE_URL. Credentials are dev dummies; a real deployment supplies them from the
+  # secrets manager.
+  age:
+    network_mode: bridge  # default bridge: daemon is out of address pools for new project networks
+    image: apache/age:release_PG16_1.6.0
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: ${AGE_POSTGRES_USER:-nexus_graph}
+      POSTGRES_PASSWORD: ${AGE_POSTGRES_PASSWORD:-nexus-graph-dev}
+      POSTGRES_DB: nexus_graph
+    volumes:
+      - agedata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d nexus_graph"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   qdrantdata:
   miniodata:
+  agedata:
+

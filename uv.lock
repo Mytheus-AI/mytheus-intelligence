@@ -2753,6 +2753,7 @@ dependencies = [
     { name = "litellm" },
     { name = "markdown" },
     { name = "pdfminer-six" },
+    { name = "prometheus-client" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pyjwt" },
@@ -2770,6 +2771,9 @@ dependencies = [
 [package.optional-dependencies]
 gpu = [
     { name = "ray", extra = ["serve"] },
+]
+ner = [
+    { name = "spacy" },
 ]
 
 [package.dev-dependencies]
@@ -2796,6 +2800,7 @@ requires-dist = [
     { name = "litellm", specifier = ">=1.40" },
     { name = "markdown", specifier = ">=3.6" },
     { name = "pdfminer-six", specifier = ">=20231228" },
+    { name = "prometheus-client", specifier = ">=0.20" },
     { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pyjwt", specifier = ">=2.8" },
@@ -2806,11 +2811,12 @@ requires-dist = [
     { name = "ray", extras = ["serve"], marker = "extra == 'gpu'", specifier = ">=2.20" },
     { name = "redis", extras = ["hiredis"], specifier = ">=5" },
     { name = "sentence-transformers", specifier = ">=3" },
+    { name = "spacy", marker = "extra == 'ner'", specifier = ">=3.7,<4" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
     { name = "unstructured", specifier = ">=0.25,<0.26" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
-provides-extras = ["gpu"]
+provides-extras = ["gpu", "ner"]
 
 [package.metadata.requires-dev]
 dev = [

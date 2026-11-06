@@ -23,16 +23,18 @@ same gap Plan 5-6 tasks 7/8 hit and resolved as "REST now, gRPC later" — see
 Given that, `pii_enabled` is built the same way task 7/8 built their REST-now contracts: a REAL,
 working mechanism against REAL infrastructure (Redis, not a fake), with the publish side
 explicitly flagged as not yet wired. It reads `nexus:{org_id}:tenant_settings:pii_redaction_enabled`
-from Redis — the SAME `nexus:{org_id}:...` namespace convention every other per-tenant Redis
-value in this program uses (CLAUDE.md's Redis prefix rule) — and defaults to `False` (redaction
-off) when the key is absent. That default is not a guess about any real tenant's setting: no
-producer in the program has ever written this key, so `False` is the true current state for
-every tenant, not a fabricated fallback. The moment a producer (an `identity-tenant-service`
-Redis mirror, or a gRPC `GetTenantSettings` call once the mesh exists) starts setting this key,
-`pii_enabled` picks it up with no code change here. This function's mechanism IS proven for real
-in `tests/test_pii.py` (setting/clearing the real Redis key toggles the return value); what is
-NOT proven, and cannot be without another repo's work, is that the key is ever populated by a
-real `tenant_settings` row today.
+from Redis (the `nexus:{org_id}:...` namespace every per-tenant Redis value uses).
+
+DEFAULT IS REDACT (fail-safe). The key being absent means "no mirror has told us otherwise", and
+the source of truth, `tenant_settings.pii_redaction_enabled`, defaults to TRUE in the DB/canon.
+An earlier version defaulted to False on the reasoning that no producer writes the key; that
+made every tenant un-redacted by default, the opposite of canon, and any outage or missing
+mirror silently leaked PII into `document-chunks`, Qdrant and the LLM context. Now only an
+explicit falsy value ("0"/"false") turns redaction off; absent or any unrecognised value
+redacts. When a producer (identity-tenant-service Redis mirror, or a gRPC `GetTenantSettings`)
+starts writing the key, `pii_enabled` picks it up with no code change here. Proven for real in
+`tests/test_pii.py`; what is NOT proven is that the key is ever populated from a real
+`tenant_settings` row today.
 """
 
 from __future__ import annotations
@@ -63,8 +65,11 @@ def _redis_key(org_id: UUID) -> str:
     return f"nexus:{org_id}:tenant_settings:pii_redaction_enabled"
 
 
+_EXPLICIT_OFF = (b"0", "0", b"false", "false", b"False", "False")
+
+
 async def pii_enabled(org_id: UUID, redis: Redis) -> bool:
-    """See the module docstring: real Redis read, honest `False` default, publish side not yet
-    wired anywhere in the program."""
+    """See the module docstring: real Redis read; absent/unrecognised => True (redact), matching
+    the DB/canon default. Only an explicit "0"/"false" disables redaction."""
     value = await redis.get(_redis_key(org_id))
-    return value in (b"1", "1", b"true", "true")
+    return value not in _EXPLICIT_OFF

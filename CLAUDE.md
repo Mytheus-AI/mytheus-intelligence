@@ -154,7 +154,7 @@ pip install -e "services/<name>[dev]"
 docker compose up -d
 
 # run a service
-uvicorn rag_service.app:app --reload --port 8081     # RAG orchestrator
+uv run uvicorn services.rag_service.main:app --reload --port 8201     # RAG orchestrator
 python -m agent_runtime_service.main                  # agent runtime (consumes transcript-chunks)
 
 # test, eval, lint
@@ -163,7 +163,7 @@ pytest -m eval
 ruff check . && black --check . && mypy .
 ```
 
-Environment variables: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY` (write; embedding-service only) / `QDRANT_READ_ONLY_API_KEY` (every other consumer), `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`. A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
+Environment variables: `ANTHROPIC_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY` (write; embedding-service only) / `QDRANT_READ_ONLY_API_KEY` (every other consumer), `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`. A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
 
 ## Pitfalls
 

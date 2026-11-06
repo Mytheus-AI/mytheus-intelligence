@@ -29,7 +29,7 @@ def main() -> None:
 
     database_url = os.environ.get(
         "DATABASE_URL",
-        "postgresql+asyncpg://mytheus_ai_app:mytheus_ai_app@localhost:5433/mytheus",
+        "postgresql+asyncpg://mytheus_ai_app:mytheus_ai_app@localhost:5443/mytheus",
     )
     engine = create_async_engine(database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -37,8 +37,8 @@ def main() -> None:
     consumer = IntegrationEventConsumer(
         s3_client=get_client(),
         session_factory=session_factory,
-        redis=Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6380")),
-        codec=AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8081")),
+        redis=Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6390")),
+        codec=AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085")),
         dlq_producer=Producer(
             {"bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092")}
         ),

@@ -48,6 +48,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from libs.shared.avro_codec import AvroCodec
 from libs.shared.events import EventEnvelope
 from libs.shared.inbox import already_recorded, is_duplicate, record_consumed
+from libs.shared.metrics import (
+    observe_consumer_lag,
+    record_dlq,
+    record_processed,
+    serve_metrics,
+    service_name,
+    set_service,
+)
 from libs.shared.outbox import enqueue as outbox_enqueue
 from libs.shared.tenancy import parse_org_id, set_rls
 
@@ -65,6 +73,11 @@ class ConsumedEvent:
     body: dict[str, Any]  # decoded Avro value with `header` removed
     partition: int
     offset: int
+
+
+def _timestamp_ms(msg: Any) -> int | None:
+    ts_type, ts = msg.timestamp()
+    return int(ts) if ts_type != 0 and ts and ts > 0 else None  # 0 == TIMESTAMP_NOT_AVAILABLE
 
 
 class BaseConsumer(ABC):
@@ -125,6 +138,29 @@ class BaseConsumer(ABC):
         await outbox_enqueue(session, envelope)
 
     async def process_raw(
+        self,
+        *,
+        topic: str,
+        raw_value: bytes,
+        partition: int,
+        offset: int,
+        timestamp_ms: int | None = None,
+    ) -> ProcessOutcome:
+        """Metrics wrapper around `_process_raw`: lag from the record timestamp, and one
+        `messages_processed_total` increment per message (outcome applied|duplicate|dlq|error).
+        Labels never include org_id."""
+        observe_consumer_lag(self.group, topic, timestamp_ms)
+        try:
+            outcome = await self._process_raw(
+                topic=topic, raw_value=raw_value, partition=partition, offset=offset
+            )
+        except Exception:
+            record_processed(self.group, topic, "error")
+            raise
+        record_processed(self.group, topic, outcome)
+        return outcome
+
+    async def _process_raw(
         self,
         *,
         topic: str,
@@ -243,6 +279,7 @@ class BaseConsumer(ABC):
             "first_seen_at": int(time.time() * 1_000_000),
             "raw_value_b64": base64.b64encode(raw_value).decode("ascii"),
         }
+        record_dlq(self.group, topic, failure_class)
         self._dlq_producer.produce(
             topic=self.dlq_topic_for(topic),
             key=org_id.encode() if org_id != "unknown" else None,
@@ -286,6 +323,9 @@ class BaseConsumer(ABC):
                 "auto.offset.reset": "earliest",
             }
         )
+        if service_name() == "unknown":
+            set_service(self.producer_name)
+        serve_metrics()  # no-op unless METRICS_PORT is set
         consumer.subscribe(self.topics)
         import asyncio
 
@@ -311,7 +351,11 @@ class BaseConsumer(ABC):
 
                 loop.run_until_complete(
                     self.process_raw(
-                        topic=topic, raw_value=raw_value, partition=partition, offset=offset
+                        topic=topic,
+                        raw_value=raw_value,
+                        partition=partition,
+                        offset=offset,
+                        timestamp_ms=_timestamp_ms(msg),
                     )
                 )
                 consumer.commit(message=msg, asynchronous=False)
