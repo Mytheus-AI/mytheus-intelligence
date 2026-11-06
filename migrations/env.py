@@ -4,7 +4,7 @@ This repo had NO outbox/inbox Alembic migrations at all before this task (routed
 task brief: "you are the first task to touch this repo, so this is yours to establish"). It is
 a SEPARATE Alembic history from `mytheus-backend/migrations/` — different repo, different
 `script_location`, no shared revision graph — that happens to point at the same physical
-Postgres database (`mytheus`, `localhost:5433` in dev).
+Postgres database (`mytheus`, `localhost:5443` in dev).
 
 Two collision risks that a second history against the same database creates, both handled:
 
@@ -50,7 +50,7 @@ def _database_url() -> str:
     url = (
         os.environ.get("BOOTSTRAP_DATABASE_URL")
         or os.environ.get("DATABASE_URL")
-        or "postgresql+asyncpg://postgres:postgres@localhost:5433/mytheus"
+        or "postgresql+asyncpg://postgres:postgres@localhost:5443/mytheus"
     )
     return url.replace("+asyncpg", "")
 

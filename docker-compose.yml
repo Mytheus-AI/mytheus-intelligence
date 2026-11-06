@@ -6,11 +6,11 @@
 # skipped silently whenever nobody happened to have a container up.
 #
 # Postgres, Redis, Redpanda and the Schema Registry are NOT here on purpose. They are the
-# mytheus-backend stack (ports 5433 / 6380 / 9092 / 8081) and this tier shares them; declaring
+# mytheus-backend stack (ports 5443 / 6390 / 9092 / 8081) and this tier shares them; declaring
 # them again here would give the two repos two competing definitions of one dependency and,
 # worse, a second set of volumes that looks identical until the data diverges.
 #
-# Port 6333 is Qdrant's default and is deliberately kept, unlike the backend's 5433/6380 shift:
+# Port 6333 is Qdrant's default and is deliberately kept, unlike the backend's 5443/6390 shift:
 # nothing else in this program binds it.
 #
 #   docker compose up -d
@@ -68,13 +68,13 @@ services:
 
   # Apache AGE Postgres for `knowledge-graph-service`'s `nexus_knowledge` graph (Plan 5-6 gap 16).
   #
-  # Why a SEPARATE Postgres and not the backend's shared one on 5433: that one is
+  # Why a SEPARATE Postgres and not the backend's shared one on 5443: that one is
   # `supabase/postgres:15.8.1.060`, and it does not ship the `age` extension (checked
   # 2026-11-06 by listing every extension `.control` file in the image's layers: no
   # `age.control`). That is risk R1 ("AGE on managed Supabase may be operationally awkward")
   # materializing, and this is its pre-authorized fallback: self-host Postgres+AGE.
   #
-  # Port 5434: clear of 5433 (backend Postgres), 6380, 6333, 9002. Only knowledge-graph-service
+  # Port 5434: clear of 5443 (backend Postgres), 6390, 6333, 9002. Only knowledge-graph-service
   # holds AGE_DATABASE_URL. Credentials are dev dummies; a real deployment supplies them from the
   # secrets manager.
   age:

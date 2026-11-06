@@ -4,7 +4,7 @@ builds `intelligence.transcript_chunk_search` (`consumer.py`/`worker.py`) runs a
 process, matching `embedding-service`'s and `ingestion-service`'s precedent (this synchronous
 process is the query-serving contract only).
 
-Run: uvicorn services.search_service.main:app --port 8103
+Run: uvicorn services.search_service.main:app --port 8203
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ app = create_app(SERVICE_NAME)
 
 _engine = create_async_engine(
     os.environ.get(
-        "DATABASE_URL", "postgresql+asyncpg://mytheus_ai_app:mytheus_ai_app@localhost:5433/mytheus"
+        "DATABASE_URL", "postgresql+asyncpg://mytheus_ai_app:mytheus_ai_app@localhost:5443/mytheus"
     ),
     pool_pre_ping=True,
 )

@@ -23,7 +23,7 @@ SERVICE_NAME = "embedding-service"
 
 app = create_app(SERVICE_NAME)
 
-_redis = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6380"))
+_redis = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6390"))
 app.mount("/internal", create_query_embed_app(_redis))
 
 

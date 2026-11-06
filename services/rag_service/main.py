@@ -3,7 +3,7 @@
 Scaffold only: boots and answers `/healthz`. RRF fusion across the Qdrant/AGE/FTS arms over the
 internal gRPC mesh (org_id in metadata) lands in the RAG band.
 
-Run: uvicorn services.rag_service.main:app --port 8101
+Run: uvicorn services.rag_service.main:app --port 8201
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 """Shared fixtures for this repo's tests.
 
 Tests run against the REAL local dev stack (task brief: "The infrastructure is real. Do not
-build fakes for it."): the shared Postgres (`localhost:5433`, db `mytheus` — the SAME physical
-database `mytheus-backend` uses), Redis (`localhost:6380`), Redpanda + Schema Registry
+build fakes for it."): the shared Postgres (`localhost:5443`, db `mytheus` — the SAME physical
+database `mytheus-backend` uses), Redis (`localhost:6390`), Redpanda + Schema Registry
 (`localhost:9092` / `:8081`, all 21 subjects registered under BACKWARD), and Qdrant
 (`localhost:6333`). Tests that need a service they cannot reach skip gracefully, EXCEPT when
 `MYTHEUS_REQUIRE_DB=1` (or the per-service equivalents below), matching `mytheus-backend`'s
@@ -33,11 +33,11 @@ import uuid
 import psycopg2
 import pytest
 
-_DEFAULT_BOOTSTRAP = "postgresql+asyncpg://supabase_admin:postgres@localhost:5433/mytheus"
+_DEFAULT_BOOTSTRAP = "postgresql+asyncpg://supabase_admin:postgres@localhost:5443/mytheus"
 
 os.environ.setdefault("REDPANDA_BROKERS", "localhost:9092")
-os.environ.setdefault("SCHEMA_REGISTRY_URL", "http://localhost:8081")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6380")
+os.environ.setdefault("SCHEMA_REGISTRY_URL", "http://localhost:8085")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6390")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 # Must match docker-compose.yml's defaults. Both keys are required and must differ: the
 # read-only key is what makes "embedding-service is the only writer" an infrastructure control

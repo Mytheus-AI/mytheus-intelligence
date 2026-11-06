@@ -19,7 +19,7 @@ async def serve() -> None:
     engine = create_async_engine(
         os.environ.get(
             "DATABASE_URL",
-            "postgresql+asyncpg://mytheus_ai_app:mytheus_ai_app@localhost:5433/mytheus",
+            "postgresql+asyncpg://mytheus_ai_app:mytheus_ai_app@localhost:5443/mytheus",
         ),
         pool_pre_ping=True,
     )

@@ -1,7 +1,7 @@
 # GPU image for embedding_service (Ray Serve). Build from the REPO ROOT:
 #   docker build -f services/embedding_service/Dockerfile.gpu -t mytheus/embedding_service:gpu .
 # Run (needs the NVIDIA container toolkit):
-#   docker run --gpus all -p 8102:8000 mytheus/embedding_service:gpu
+#   docker run --gpus all -p 8202:8000 mytheus/embedding_service:gpu
 #
 # UNVERIFIED: not built or run in the authoring environment (no CUDA device; image build not
 # attempted). GPU latency/throughput SLOs are UNMEASURED. Before prod, pin the base image by

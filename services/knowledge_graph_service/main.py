@@ -6,7 +6,7 @@ goes through `libs/shared/age.py` (`$org_id`-bound, parameterized, frozen labels
 still only answers `/healthz`; the read templates (`POST /graph/query/{template}`) land with the
 RAG graph arm.
 
-Run: uvicorn services.knowledge_graph_service.main:app --port 8102
+Run: uvicorn services.knowledge_graph_service.main:app --port 8202
 """
 
 from __future__ import annotations

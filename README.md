@@ -92,8 +92,8 @@ cp .env.example .env
 
 | Dependency | Port | Provided by |
 |---|---|---|
-| Postgres (schema `intelligence`; `mytheus_ai_app` / `mytheus_ai_relay` roles) | 5433 | `mytheus-backend` compose |
-| Redis | 6380 | `mytheus-backend` compose |
+| Postgres (schema `intelligence`; `mytheus_ai_app` / `mytheus_ai_relay` roles) | 5443 | `mytheus-backend` compose |
+| Redis | 6390 | `mytheus-backend` compose |
 | Redpanda (Kafka API) | 9092 | `mytheus-backend` compose |
 | Schema Registry | 8081 | `mytheus-backend` compose |
 | Qdrant | 6333 | this repo (`docker compose up -d`) |
@@ -110,7 +110,7 @@ uv run alembic upgrade head             # intelligence schema (needs BOOTSTRAP_D
 ```bash
 uv run uvicorn services.<svc>.main:app --reload --port <port>
 # e.g. the search service REST API:
-uv run uvicorn services.search_service.main:app --reload --port 8103
+uv run uvicorn services.search_service.main:app --reload --port 8203
 
 # event consumers / relay / gRPC are separate processes (see each module's docstring):
 uv run python -m services.embedding_service.worker       # embed-on-ingest consumer
@@ -120,17 +120,17 @@ uv run python -m services.search_service.grpc_main       # internal gRPC FTS arm
 uv run python -m services.ingestion_service.worker       # integration-events consumer
 ```
 
-**Dev ports** (8100+; 8081 is the Schema Registry and must not be used by a service)
+**Dev ports** (8200+; 8081 is Redpanda's in-network Schema Registry port; its host port is 8085)
 
 | Service | Module | HTTP dev port |
 |---|---|---|
-| `agent-runtime-service` | `services.agent_runtime_service.main:app` | 8100 |
-| `rag-service` | `services.rag_service.main:app` | 8101 |
-| `embedding-service` | `services.embedding_service.main:app` | 8102 |
-| `search-service` | `services.search_service.main:app` | 8103 (gRPC FTS: 50103) |
-| `reranker-service` | `services.reranker_service.main:app` | 8104 |
-| `ingestion-service` | `services.ingestion_service.main:app` | 8105 |
-| `knowledge-graph-service` | `services.knowledge_graph_service.main:app` | 8106 |
+| `agent-runtime-service` | `services.agent_runtime_service.main:app` | 8200 |
+| `rag-service` | `services.rag_service.main:app` | 8201 |
+| `embedding-service` | `services.embedding_service.main:app` | 8202 |
+| `search-service` | `services.search_service.main:app` | 8203 (gRPC FTS: 50103) |
+| `reranker-service` | `services.reranker_service.main:app` | 8204 |
+| `ingestion-service` | `services.ingestion_service.main:app` | 8205 |
+| `knowledge-graph-service` | `services.knowledge_graph_service.main:app` | 8206 |
 
 Ray Serve (GPU/CPU model servers) listens on 8000 inside its container; see "GPU serving".
 
@@ -175,7 +175,7 @@ Both are Ray Serve apps (`serve.py`). `EMBEDDING_GPU=1` / `RERANKER_GPU=1` reque
 | `QDRANT_URL` / `QDRANT_API_KEY` | Qdrant endpoint (per-tenant collections) |
 | `DATABASE_URL` / `RELAY_DATABASE_URL` / `BOOTSTRAP_DATABASE_URL` | Postgres (schema `intelligence`) as `mytheus_ai_app` / `mytheus_ai_relay` / the migration owner. The AGE graph connection is `knowledge-graph-service`'s own setting |
 | `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL` | Event backbone (Kafka API) + Avro Schema Registry |
-| `REDIS_URL` | (dev default `redis://localhost:6380/0`) Answer cache, query-embed cache, per-tenant budget mirror, dedupe inbox (keys prefixed `nexus:{org_id}:`) |
+| `REDIS_URL` | (dev default `redis://localhost:6390/0`) Answer cache, query-embed cache, per-tenant budget mirror, dedupe inbox (keys prefixed `nexus:{org_id}:`) |
 | `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU` | Ray Serve cluster + GPU placement for the model servers |
 | `RERANKER_MIN_REPLICAS` / `RERANKER_MAX_REPLICAS` / `RERANKER_PRELOAD` / `EMBEDDING_PRELOAD` | Reranker warm floor and startup model preload |
 | `GRPC_PORT` | search-service gRPC FTS port (default 50103) |

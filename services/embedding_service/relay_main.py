@@ -50,10 +50,10 @@ class _KafkaAvroProducer:
 async def run_forever() -> None:
     relay_url = os.environ.get(
         "RELAY_DATABASE_URL",
-        "postgresql+asyncpg://mytheus_ai_relay:mytheus_ai_relay@localhost:5433/mytheus",
+        "postgresql+asyncpg://mytheus_ai_relay:mytheus_ai_relay@localhost:5443/mytheus",
     )
     brokers = os.environ.get("REDPANDA_BROKERS", "localhost:9092")
-    registry_url = os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8081")
+    registry_url = os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085")
 
     engine = create_async_engine(relay_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
