@@ -52,7 +52,7 @@ services:
   # expect, and keeps this off anything else bound to 9000.
   minio:
     network_mode: bridge  # default bridge: daemon is out of address pools for new project networks
-    image: minio/minio:latest  # pinned RELEASE tags are not pullable from Docker Hub (verified 2026-11-06); verified build RELEASE.2025-09-07T16-13-09Z
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e  # RELEASE.2025-09-07T16-13-09Z; RELEASE tags are no longer pullable from Docker Hub, so pin by digest
     command: server /data --console-address ":9003"
     ports:
       - "9002:9000"
