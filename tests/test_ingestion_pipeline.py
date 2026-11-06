@@ -187,7 +187,7 @@ async def test_pii_redaction_applies_before_the_chunk_is_written_or_emitted(
     key = f"nexus:{org_id}:tenant_settings:pii_redaction_enabled"
     content = b"# Contact\n\nReach the on-call engineer at oncall@example.com or 555-123-4567.\n"
 
-    await redis_client.set(key, "1")
+    await redis_client.set(key, "1")  # explicit on (also the default when the key is absent)
     try:
         emitter = _RecordingEmitter()
         async with session_factory() as session, session.begin():
@@ -233,8 +233,10 @@ async def test_pii_redaction_applies_before_the_chunk_is_written_or_emitted(
     assert "555-123-4567" not in joined_stored
 
 
-async def test_pii_redaction_off_by_default_leaves_text_intact(session_factory, redis_client):
+async def test_pii_redaction_explicitly_off_leaves_text_intact(session_factory, redis_client):
     org_id, document_id = uuid.uuid4(), uuid.uuid4()
+    key = f"nexus:{org_id}:tenant_settings:pii_redaction_enabled"
+    await redis_client.set(key, "0")
     content = b"# Contact\n\nReach the on-call engineer at oncall@example.com.\n"
 
     emitter = _RecordingEmitter()
@@ -254,3 +256,29 @@ async def test_pii_redaction_off_by_default_leaves_text_intact(session_factory, 
 
     joined = " ".join(p["text"] for _, _, p in emitter.calls)
     assert "oncall@example.com" in joined
+    await redis_client.delete(key)
+
+
+async def test_pii_redaction_on_by_default_when_no_setting_published(session_factory, redis_client):
+    """Fail-safe default: no `tenant_settings` mirror key => redact (DB/canon default is true)."""
+    org_id, document_id = uuid.uuid4(), uuid.uuid4()
+    content = b"# Contact\n\nReach the on-call engineer at oncall@example.com.\n"
+
+    emitter = _RecordingEmitter()
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            text("SELECT set_config('app.current_org', :o, true)"), {"o": str(org_id)}
+        )
+        await ingest_document(
+            session=session,
+            org_id=org_id,
+            document_id=document_id,
+            filename="contact.md",
+            content=content,
+            emit=emitter,
+            redis=redis_client,
+        )
+
+    joined = " ".join(p["text"] for _, _, p in emitter.calls)
+    assert "oncall@example.com" not in joined
+    assert "[REDACTED_EMAIL]" in joined

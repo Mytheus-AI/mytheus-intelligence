@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+
 from services.ingestion_service.pii import pii_enabled, redact_pii
 
 # Mixed sync (redact_pii, no infra) and async (real Redis) tests — no module-level pytestmark;
@@ -51,25 +53,50 @@ def test_redact_pii_handles_multiple_pii_types_in_one_string():
     assert out.count("[REDACTED_") == 3
 
 
-async def test_pii_enabled_defaults_false_when_key_absent(redis_client):
+class _FakeRedis:
+    """Minimal in-memory stand-in so the default-policy tests need no infra."""
+
+    def __init__(self, value=None):
+        self._value = value
+
+    async def get(self, _key):
+        return self._value
+
+
+async def test_pii_enabled_defaults_true_when_key_absent_no_infra():
+    # Fail-safe: matches tenant_settings.pii_redaction_enabled DEFAULT true.
+    assert await pii_enabled(uuid.uuid4(), _FakeRedis(None)) is True
+
+
+@pytest.mark.parametrize("value", [b"0", "0", b"false", "false"])
+async def test_pii_enabled_false_only_on_explicit_off_no_infra(value):
+    assert await pii_enabled(uuid.uuid4(), _FakeRedis(value)) is False
+
+
+@pytest.mark.parametrize("value", [b"1", "true", b"garbage", b""])
+async def test_pii_enabled_true_on_on_or_unrecognised_no_infra(value):
+    assert await pii_enabled(uuid.uuid4(), _FakeRedis(value)) is True
+
+
+async def test_pii_enabled_defaults_true_when_key_absent(redis_client):
     org_id = uuid.uuid4()  # freshly random org: guaranteed no key was ever set for it
-    assert await pii_enabled(org_id, redis_client) is False
+    assert await pii_enabled(org_id, redis_client) is True
 
 
-async def test_pii_enabled_true_when_real_redis_key_set(redis_client):
+async def test_pii_enabled_false_when_real_redis_key_explicitly_off(redis_client):
     org_id = uuid.uuid4()
     key = f"nexus:{org_id}:tenant_settings:pii_redaction_enabled"
-    await redis_client.set(key, "1")
+    await redis_client.set(key, "0")
     try:
-        assert await pii_enabled(org_id, redis_client) is True
+        assert await pii_enabled(org_id, redis_client) is False
     finally:
         await redis_client.delete(key)
 
 
-async def test_pii_enabled_reverts_to_false_after_key_cleared(redis_client):
+async def test_pii_enabled_reverts_to_default_true_after_key_cleared(redis_client):
     org_id = uuid.uuid4()
     key = f"nexus:{org_id}:tenant_settings:pii_redaction_enabled"
-    await redis_client.set(key, "1")
-    assert await pii_enabled(org_id, redis_client) is True
-    await redis_client.delete(key)
+    await redis_client.set(key, "0")
     assert await pii_enabled(org_id, redis_client) is False
+    await redis_client.delete(key)
+    assert await pii_enabled(org_id, redis_client) is True
