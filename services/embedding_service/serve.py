@@ -27,9 +27,10 @@ other service stub in this repo, so `pytest` collection never requires a Ray clu
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from services.embedding_service.model import embed_batch, gpu_requested
+from services.embedding_service.model import embed_batch, gpu_requested, warmup
 
 # Typed as Any (not inferred as the `ray`/`ray.serve` Module type from the successful-import
 # branch) so the except branch's `= None` is a valid assignment under mypy strict mode — the
@@ -72,6 +73,9 @@ if serve is not None:
         """The embed-on-ingest lane: dynamic micro-batching, batch 32, sub-100ms wait window
         (the SLO itself is GPU-only and BLOCKED here; the batching mechanism is real)."""
 
+        def __init__(self) -> None:
+            logging.getLogger(__name__).info("ingest embedder warmed in %.2fs", warmup())
+
         # `serve` is typed Any (see the module-level note above), so mypy strict treats the
         # decorator itself as untyped; the method body is still fully checked.
         @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.05)  # type: ignore[untyped-decorator]
@@ -94,6 +98,10 @@ if serve is not None:
         A SEPARATE deployment from `IngestEmbedder` (plan 3.7 step 2) so a burst of live-query
         embeds never queues behind the ingest consumer's batch-32 backlog, even though both
         load the same model weights."""
+
+        def __init__(self) -> None:
+            # Warm before the replica is routable, so a live query never pays model load.
+            logging.getLogger(__name__).info("query embedder warmed in %.2fs", warmup())
 
         @serve.batch(max_batch_size=3, batch_wait_timeout_s=0.01)  # type: ignore[untyped-decorator]
         async def embed(self, texts: list[str]) -> list[list[float]]:

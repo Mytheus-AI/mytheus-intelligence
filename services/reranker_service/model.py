@@ -81,3 +81,13 @@ def rerank_batch(
     )
     k = max(1, min(top_k, len(ranked)))
     return ranked[:k], elapsed
+
+
+def warmup() -> float:
+    """Load the model (if not already) and run one real forward pass, so the first user request
+    does not pay weight load, CUDA context creation, kernel autotune or tokenizer init. Returns
+    the wall-clock seconds spent. Called at replica start (`serve.py`) and process start
+    (`main.py`); safe to call repeatedly."""
+    t0 = time.perf_counter()
+    rerank_batch("warmup query", ["warmup passage one", "warmup passage two"], top_k=2)
+    return time.perf_counter() - t0

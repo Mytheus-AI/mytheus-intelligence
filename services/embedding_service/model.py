@@ -48,3 +48,11 @@ def embed_batch(texts: list[str]) -> tuple[list[list[float]], float]:
     vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
     elapsed = time.perf_counter() - t0
     return vectors.tolist(), elapsed
+
+
+def warmup() -> float:
+    """Load the model (if not already) and run one real encode, so the first request does not pay
+    weight load / CUDA context / kernel autotune. Returns wall-clock seconds."""
+    t0 = time.perf_counter()
+    embed_batch(["warmup"])
+    return time.perf_counter() - t0

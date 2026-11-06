@@ -34,9 +34,11 @@ service stub in this repo, so `pytest` collection never requires a Ray cluster.
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any
 
-from services.reranker_service.model import gpu_requested, rerank_batch
+from services.reranker_service.model import gpu_requested, rerank_batch, warmup
 
 # Typed as Any (not inferred as the `ray`/`ray.serve` Module type from the successful-import
 # branch) so the except branch's `= None` is a valid assignment under mypy strict mode — same
@@ -51,6 +53,17 @@ try:
     serve = _serve
 except ModuleNotFoundError:  # Ray only present with the `gpu` extra
     pass
+
+
+def min_replicas() -> int:
+    """Warm-replica floor. Default 1 (never scale to zero); RERANKER_MIN_REPLICAS raises it
+    (e.g. 2 per active region in prod). Clamped to >= 1: a floor of 0 would reintroduce the
+    cold start this module exists to prevent."""
+    return max(1, int(os.environ.get("RERANKER_MIN_REPLICAS", "1")))
+
+
+def max_replicas() -> int:
+    return max(min_replicas(), int(os.environ.get("RERANKER_MAX_REPLICAS", "4")))
 
 
 async def _extract_request(request: Any) -> dict[str, Any]:
@@ -75,13 +88,25 @@ if serve is not None:
         # autoscaling_config set => num_replicas must be left unset ("auto"), per Ray Serve's
         # own contract (passing both raises); min_replicas=1 IS the warm floor.
         autoscaling_config={
-            "min_replicas": 1,
-            "max_replicas": 4,
+            "min_replicas": min_replicas(),
+            "max_replicas": max_replicas(),
             "target_ongoing_requests": 8,
+            # Keep-warm: scale-down is slow (10 min of low load) and never below the floor, so a
+            # lull does not evict a replica whose next request would be cold.
+            "downscale_delay_s": 600,
+            "upscale_delay_s": 10,
         },
     )
     class RerankerDeployment:
         """One call in, one call out — no cross-request batching. See module docstring."""
+
+        def __init__(self) -> None:
+            # Ray Serve does not route to a replica until __init__ returns, so loading the model
+            # and running one real forward pass here means a replica is only "ready" once warm
+            # (first request is not cold). On GPU this also absorbs CUDA context creation and
+            # kernel autotune. GPU timings are UNMEASURED in this environment (no CUDA device).
+            seconds = warmup()
+            logging.getLogger(__name__).info("reranker replica warmed in %.2fs", seconds)
 
         async def __call__(self, request: Any) -> dict[str, Any]:
             body = await _extract_request(request)

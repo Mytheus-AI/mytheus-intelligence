@@ -1,0 +1,52 @@
+# GPU image for embedding_service (Ray Serve). Build from the REPO ROOT:
+#   docker build -f services/embedding_service/Dockerfile.gpu -t mytheus/embedding_service:gpu .
+# Run (needs the NVIDIA container toolkit):
+#   docker run --gpus all -p 8102:8000 mytheus/embedding_service:gpu
+#
+# UNVERIFIED: not built or run in the authoring environment (no CUDA device; image build not
+# attempted). GPU latency/throughput SLOs are UNMEASURED. Before prod, pin the base image by
+# digest (the tag below is pinned but a tag can be re-pushed) and run the GPU acceptance checks
+# in README "GPU serving".
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONPATH=/app \
+    HF_HOME=/models \
+    EMBEDDING_GPU=1
+
+# Pinned uv; Ubuntu 22.04 ships Python 3.10, the repo needs >=3.11 (.python-version = 3.12).
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root runtime user, fixed uid so volume ownership is predictable.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin app \
+    && mkdir -p /app /models && chown -R app:app /app /models
+WORKDIR /app
+
+# Dependencies first (cache layer): locked, no dev group, with the ray[serve] extra.
+COPY pyproject.toml uv.lock .python-version ./
+RUN uv sync --frozen --no-dev --extra gpu --no-install-project
+
+COPY libs ./libs
+COPY services/__init__.py ./services/__init__.py
+COPY services/embedding_service ./services/embedding_service
+RUN chown -R app:app /app /opt/python
+
+USER app
+ENV PATH="/app/.venv/bin:${PATH}"
+
+# Bake the weights into the image so pod start is a LOAD, not a download (plan 3.7/3.8).
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5', device='cpu')"
+
+# Ray Serve app config. EMBEDDING_GPU=1 above makes serve.py request num_gpus=1 (and it falls back
+# to CPU only if Ray sees no GPU); the config file also pins the GPU resources explicitly.
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/-/healthz', timeout=3).status == 200 else 1)"
+CMD ["serve", "run", "services/embedding_service/serve_config.gpu.yaml"]
