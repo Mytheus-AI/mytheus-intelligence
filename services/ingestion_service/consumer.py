@@ -19,7 +19,7 @@ NOT the same as widening what this consumer ACTS on.
 --- The object-key trust boundary (read before touching `_resolve_key`) ---
 
 Per `21-integration-architecture.md`: `integration-service` downloads the calendar attachment
-bytes and writes them to `nexus-attachments` BEFORE emitting `integration-events`. This consumer
+bytes and writes them to `mytheus-attachments` BEFORE emitting `integration-events`. This consumer
 therefore READS an object another service already wrote; it does not upload one itself (contrast
 `routes.py`, which always uploads a fresh object under a server-generated key it fully
 controls). `integration-service` does not exist yet in this program (P12, a later plan band) —
@@ -32,7 +32,7 @@ schema-valid `IntegrationEvent` messages the same way task 7's tests constructed
 Trusting an `object_key` supplied inside another service's event body is a genuine tenant-
 isolation risk if left unchecked: a compromised or buggy `integration-service` (or a forged
 message, if the bus were ever reachable by an untrusted producer) could set `object_key` to any
-string, including one under ANOTHER org's prefix in the shared `nexus-attachments` bucket. This
+string, including one under ANOTHER org's prefix in the shared `mytheus-attachments` bucket. This
 consumer is a GET, not a PUT, so the blast radius of an unchecked key is a cross-tenant READ —
 still a real leak. `_resolve_key` closes this: the key is used ONLY if it starts with
 `f"{org_id}/"` using the SAME verified `org_id` `BaseConsumer.process_raw` already re-asserted

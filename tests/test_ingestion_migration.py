@@ -75,7 +75,7 @@ async def test_mytheus_ai_app_inherited_grants_with_no_new_grant_statement(migra
         await conn.execute(
             text(
                 "INSERT INTO intelligence.ingestion_jobs (id, org_id, source, bucket, object_key) "
-                "VALUES (:document_id, :org_id, 'upload', 'nexus-documents', 'k')"
+                "VALUES (:document_id, :org_id, 'upload', 'mytheus-documents', 'k')"
             ),
             {"org_id": str(org_id), "document_id": str(document_id)},
         )
@@ -103,7 +103,7 @@ async def test_rls_fails_closed_on_all_three_tables_without_app_current_org(migr
         ),
         "ingestion_jobs": text(
             "INSERT INTO intelligence.ingestion_jobs (id, org_id, source, bucket, object_key) "
-            "VALUES (:d, :o, 'upload', 'nexus-documents', 'k')"
+            "VALUES (:d, :o, 'upload', 'mytheus-documents', 'k')"
         ),
     }
     for stmt in stmts.values():

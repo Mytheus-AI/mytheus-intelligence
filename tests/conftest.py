@@ -46,9 +46,21 @@ os.environ.setdefault("QDRANT_API_KEY", "dev-qdrant-write")
 os.environ.setdefault("QDRANT_READ_ONLY_API_KEY", "dev-qdrant-read")
 # Plan 5-6 task 9 (ingestion-service): real MinIO, S3-API compatible — see
 # libs/shared/object_storage.py. Same dev credentials the task brief specified.
-os.environ.setdefault("MINIO_ENDPOINT_URL", "http://localhost:9002")
-os.environ.setdefault("MINIO_ACCESS_KEY", "mytheus")
-os.environ.setdefault("MINIO_SECRET_KEY", "mytheus-dev-secret")
+# Tests must NEVER reach a real object store. A developer .env may hold Cloudflare R2
+# credentials in S3_* (production names), and the client prefers those, so drop them and pin
+# the local MinIO unconditionally rather than with setdefault.
+for _name in (
+    "S3_ENDPOINT_URL",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "S3_REGION",
+    "S3_FORCE_PATH_STYLE",
+    "S3_AUTO_CREATE_BUCKETS",
+):
+    os.environ.pop(_name, None)
+os.environ["MINIO_ENDPOINT_URL"] = "http://localhost:9002"
+os.environ["MINIO_ACCESS_KEY"] = "mytheus"
+os.environ["MINIO_SECRET_KEY"] = "mytheus-dev-secret"
 
 BOOTSTRAP_URL = os.environ.get("BOOTSTRAP_DATABASE_URL") or _DEFAULT_BOOTSTRAP
 os.environ.setdefault("DATABASE_URL", BOOTSTRAP_URL)
