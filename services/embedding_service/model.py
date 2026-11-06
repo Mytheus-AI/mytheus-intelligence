@@ -19,6 +19,8 @@ from functools import lru_cache
 
 from sentence_transformers import SentenceTransformer
 
+from libs.shared.model_loading import load_local_first
+
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIM = 384
 
@@ -34,7 +36,7 @@ def _model() -> SentenceTransformer:
     # Pod start is a LOAD of baked-in weights on the real GPU deployment; here it is a real
     # (slower) download+load from the Hugging Face cache, done once per process via lru_cache.
     device = "cuda" if gpu_requested() else "cpu"
-    model: SentenceTransformer = SentenceTransformer(MODEL_NAME, device=device)
+    model: SentenceTransformer = load_local_first(SentenceTransformer, MODEL_NAME, device=device)
     return model
 
 

@@ -37,6 +37,8 @@ from functools import lru_cache
 
 from sentence_transformers import CrossEncoder
 
+from libs.shared.model_loading import load_local_first
+
 MODEL_NAME = "BAAI/bge-reranker-base"
 
 
@@ -49,7 +51,7 @@ def _model() -> CrossEncoder:
     # CPU fallback for dev (task brief): RERANKER_GPU=0 (or unset) always loads on CPU here,
     # since no CUDA device is available in this environment even if RERANKER_GPU=1 is set.
     device = "cuda" if gpu_requested() else "cpu"
-    model: CrossEncoder = CrossEncoder(MODEL_NAME, device=device)
+    model: CrossEncoder = load_local_first(CrossEncoder, MODEL_NAME, device=device)
     return model
 
 

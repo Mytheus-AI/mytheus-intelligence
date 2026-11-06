@@ -43,6 +43,7 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 # Bake the weights into the image so pod start is a LOAD, not a download (plan 3.7/3.8).
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5', device='cpu')"
+ENV HF_HUB_OFFLINE=1
 
 # Ray Serve app config. EMBEDDING_GPU=1 above makes serve.py request num_gpus=1 (and it falls back
 # to CPU only if Ray sees no GPU); the config file also pins the GPU resources explicitly.
