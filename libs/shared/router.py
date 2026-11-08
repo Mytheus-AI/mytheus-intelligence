@@ -8,6 +8,10 @@ Tiers (mytheus-docs ADR-0027 D2, ADR-0029 D2). Agents name a tier, never a model
     high_stakes -> unmapped until Plan 10; asking for it raises (no silent Opus)
 
 Every call, in order:
+0. The user message is passed through the egress redactor (`libs/shared/pii.py`): emails,
+   phone numbers, SSN- and card-shaped numbers are replaced before anything leaves for
+   Anthropic, unless the tenant turned `pii_redaction_enabled` off. The system prompt is a
+   reviewed template and carries no meeting text, so it is not redacted (and stays cacheable).
 1. `BudgetGate.check(org_id, est_tokens)`. `block` raises `BudgetBlocked` and no model is
    called; `throttle` downgrades the call to `triage`.
 2. The system prompt is sent as a content block with `cache_control: ephemeral`, so
@@ -33,6 +37,7 @@ from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from libs.shared.budget import BudgetGate
+from libs.shared.pii import redact_always
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +74,7 @@ class Completion:
 
 
 OnDelta = Callable[[int, str], Awaitable[None]]
+Redactor = Callable[[UUID, str], Awaitable[str]]
 CompletionFn = Callable[..., Awaitable[Any]]
 
 
@@ -99,8 +105,10 @@ class LiteLLMRouter:
         sink: UsageSink,
         completion_fn: CompletionFn | None = None,
         models: dict[str, str] | None = None,
+        redactor: Redactor | None = None,
     ) -> None:
         self._budget = budget
+        self._redact = redactor or redact_always
         self._sink = sink
         self._complete = completion_fn or _default_completion()
         self._models = models or TIER_MODELS
@@ -123,6 +131,7 @@ class LiteLLMRouter:
     ) -> Completion:
         if tier not in self._models:
             raise ValueError(f"tier {tier!r} has no model mapped (ADR-0029 D2)")
+        user = await self._redact(org_id, user)
         estimate = est_tokens if est_tokens is not None else max_tokens + len(user) // 3
         decision = await self._budget.check(org_id, estimate)
         if decision == "block":

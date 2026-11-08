@@ -31,6 +31,7 @@ from langgraph.graph import END, StateGraph
 from libs.shared import user_context
 from libs.shared.base_agent import BaseAgent
 from libs.shared.budget import BudgetGate, BudgetView, mirror_key
+from libs.shared.pii import EgressRedactor
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import BudgetBlocked, LiteLLMRouter
 from libs.shared.state import AgentResult, AgentState
@@ -361,6 +362,41 @@ async def test_streaming_hands_each_delta_on_and_meters_once():
     )
     assert out.text == "Ship it." and deltas == [(0, "Ship "), (1, "it.")]
     assert len(sink.usage_calls) == 1 and sink.usage_calls[0]["tokens"] == 55
+
+
+async def test_pii_is_redacted_before_egress_unless_the_tenant_turned_it_off():
+    """Plan 7-9 section 3.3 acceptance: a window containing `jane@acme.com` is redacted before
+    egress when `pii_redaction_enabled=true` (the canon default, and the answer when the
+    setting is absent or Redis is down)."""
+    window = "Jane: mail me at jane@acme.com or call 415-555-0134"
+    redis = fakeredis.aioredis.FakeRedis()
+    llm = FakeLLM()
+    router = LiteLLMRouter(budget_gate(redis), Sink(), llm, redactor=EgressRedactor(redis))
+
+    async def sent() -> str:
+        await router.complete(
+            tier="triage", system="s", user=window, org_id=ORG, user_id=None, max_tokens=5
+        )
+        return str(llm.calls[-1]["messages"][1]["content"])
+
+    absent = await sent()
+    assert "jane@acme.com" not in absent and "[REDACTED_EMAIL]" in absent
+    assert "415-555-0134" not in absent
+
+    await redis.set(f"nexus:{ORG}:tenant_settings:pii_redaction_enabled", "false")
+    assert "jane@acme.com" in await sent()
+
+    class DownRedis:
+        async def get(self, _key: str) -> None:
+            raise ConnectionError("redis down")
+
+    assert "jane@acme.com" not in await EgressRedactor(DownRedis())(ORG, window)  # type: ignore[arg-type]
+
+    default = LiteLLMRouter(budget_gate(fakeredis.aioredis.FakeRedis()), Sink(), llm)
+    await default.complete(
+        tier="triage", system="s", user=window, org_id=ORG, user_id=None, max_tokens=5
+    )
+    assert "jane@acme.com" not in str(llm.calls[-1]["messages"][1]["content"])
 
 
 # --- 4. BaseAgent + prompts ----------------------------------------------------------------
