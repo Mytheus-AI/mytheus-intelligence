@@ -696,6 +696,8 @@ def test_the_runtime_imports_no_database_driver():
             "router.py",
             "base_agent.py",
             "user_context.py",
+            "pii.py",
+            "llm_cache.py",
         )
     ]
     for f in files:

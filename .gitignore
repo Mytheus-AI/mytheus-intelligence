@@ -104,3 +104,4 @@ logs/
 
 # Local git worktrees (scratch; never committed)
 .worktrees/
+tests/eval/personal_listener_last_run.json

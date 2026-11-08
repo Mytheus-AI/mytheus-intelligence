@@ -28,7 +28,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from libs.shared.base_agent import BaseAgent
-from libs.shared.state import AgentResult, AgentState, TranscriptWindow
+from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,10 @@ class Sink(Protocol):
 
     async def notification(
         self, *, org_id: UUID, user_id: UUID, source_event_id: str, title: str, body: str
+    ) -> None: ...
+
+    async def delta(
+        self, *, window: TranscriptWindow, user_id: UUID, seq: int, text: str, done: bool = False
     ) -> None: ...
 
 
@@ -112,6 +116,12 @@ class AgentRuntime:
             m.agents[key] = probe
         return m.agents[key]
 
+    def _stream_for(self, window: TranscriptWindow, user_id: UUID) -> StreamFn:
+        async def stream(seq: int, text: str, done: bool) -> None:
+            await self._sink.delta(window=window, user_id=user_id, seq=seq, text=text, done=done)
+
+        return stream
+
     async def process_window(self, window: TranscriptWindow) -> int:
         """Run every agent on one closed window. Returns the number of results emitted."""
         m = self._meeting(window.org_id, window.meeting_id)
@@ -136,6 +146,7 @@ class AgentRuntime:
                 chunk=window,
                 context=context,
                 org_id=window.org_id,
+                stream=self._stream_for(window, user_id),
             )
             async with self._sem:
                 result = await agent.process(state)

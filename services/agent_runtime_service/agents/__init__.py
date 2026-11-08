@@ -12,7 +12,8 @@ from collections.abc import Callable
 from libs.shared.base_agent import BaseAgent
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import LiteLLMRouter
+from services.agent_runtime_service.agents.personal_listener_agent import PersonalListenerAgent
 
 
 def registered_agents(loader: PromptLoader, router: LiteLLMRouter) -> list[Callable[[], BaseAgent]]:
-    return []
+    return [lambda: PersonalListenerAgent(loader, router)]

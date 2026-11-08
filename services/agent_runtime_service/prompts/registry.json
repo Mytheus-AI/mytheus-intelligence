@@ -1,4 +1,7 @@
 {
-  "defaults": {},
+  "defaults": {
+    "personal_listener": "v1",
+    "personal_listener_gate": "v1"
+  },
   "pins": {}
 }

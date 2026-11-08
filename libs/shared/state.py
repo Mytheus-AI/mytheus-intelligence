@@ -11,6 +11,7 @@ so the output has to live on the state rather than being "returned" by a node.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -50,6 +51,10 @@ class TranscriptWindow:
         return "\n".join(f"{names.get(t.speaker_id, t.speaker_id)}: {t.text}" for t in self.turns)
 
 
+# (seq, text, done) -> an `agent-stream` delta for this window and participant
+StreamFn = Callable[[int, str, bool], Awaitable[None]]
+
+
 @dataclass
 class AgentResult:
     kind: str  # AgentResultKind: note | decision_candidate | action_candidate | suggestion | alert
@@ -75,3 +80,4 @@ class AgentState:
     token_budget_remaining: int = 0
     correlation_id: str | None = None
     result: AgentResult | None = None
+    stream: StreamFn | None = field(default=None, repr=False)  # live deltas; None = no streaming

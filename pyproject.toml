@@ -92,4 +92,5 @@ exclude = ["tests/"]
 asyncio_mode = "auto"
 markers = [
     "slow: real-model, real-broker load tests; skipped by `make test-fast`",
+    "eval: golden-set prompt evals; the live ones also need EVAL_LIVE=1",
 ]

@@ -1,0 +1,33 @@
+{
+  "about": "Golden set for the PersonalListenerAgent relevance pre-gate. Each case is one 30 s window, the participant's profile, and a human label: would this participant want a note from it? 'You' is the participant. Labels are the maintainer's judgement, written before any model was run against them.",
+  "cases": [
+    {"id": "be-commit", "role": "Backend engineer", "skills": ["python", "postgres"], "relevant": true,
+     "window": "Participant 1: The billing migration has to land before Friday's release.\nYou: I'll take the migration, I know that schema.\nParticipant 1: Great, so you own it, Friday."},
+    {"id": "be-index", "role": "Backend engineer", "skills": ["python", "postgres"], "relevant": true,
+     "window": "Participant 1: The usage query is doing a sequential scan on every request.\nParticipant 2: We need an index on org_id and occurred_at, can backend look at it this sprint?"},
+    {"id": "be-smalltalk", "role": "Backend engineer", "skills": ["python", "postgres"], "relevant": false,
+     "window": "Participant 1: Can everyone hear me? I think my mic was off.\nParticipant 2: Yes, you're fine. How was the long weekend?\nParticipant 1: Good, we went hiking."},
+    {"id": "be-marketing", "role": "Backend engineer", "skills": ["python", "postgres"], "relevant": false,
+     "window": "Participant 1: For the launch post we should lead with the customer quote.\nParticipant 2: And move the pricing image below the fold. I'll redo the hero copy tonight."},
+    {"id": "design-review", "role": "Product designer", "skills": ["figma", "user research"], "relevant": true,
+     "window": "Participant 1: Users in the study kept missing the upgrade button on the usage page.\nParticipant 2: Design should take another pass at that screen before we ship."},
+    {"id": "design-db", "role": "Product designer", "skills": ["figma", "user research"], "relevant": false,
+     "window": "Participant 1: The partition maintenance job failed again last night.\nParticipant 2: It's the default partition, I'll detach it and rerun ensure_partitions."},
+    {"id": "pm-deadline", "role": "Product manager", "skills": ["roadmap", "pricing"], "relevant": true,
+     "window": "Participant 1: Legal says the pricing page change needs sign-off by the 20th.\nYou: Then I'll get the pricing copy to them by the 15th."},
+    {"id": "pm-audio", "role": "Product manager", "skills": ["roadmap", "pricing"], "relevant": false,
+     "window": "Participant 1: Sorry, I'm getting echo.\nParticipant 2: Try switching to headphones.\nParticipant 1: Is that better?"},
+    {"id": "sales-question", "role": "Account executive", "skills": ["enterprise sales"], "relevant": true,
+     "window": "Participant 1: Acme asked whether we support SSO on the Pro plan.\nParticipant 2: Not yet, it's Enterprise only. Someone needs to tell them before their renewal call."},
+    {"id": "sales-css", "role": "Account executive", "skills": ["enterprise sales"], "relevant": false,
+     "window": "Participant 1: The sidebar animation stutters on Safari.\nParticipant 2: It's the transform on the parent, I'll swap it for opacity."},
+    {"id": "be-incident", "role": "Backend engineer", "skills": ["python", "redis"], "relevant": true,
+     "window": "Participant 1: Redis hit its memory limit at two this morning and the budget mirror went stale.\nParticipant 2: We should alert on eviction count. Can you add that to the billing service?"},
+    {"id": "design-standup-other", "role": "Product designer", "skills": ["figma"], "relevant": false,
+     "window": "Participant 1: Yesterday I finished the invoice export. Today the dunning emails.\nParticipant 2: Nice. I'm still on the Stripe webhook retries."},
+    {"id": "pm-priorities", "role": "Product manager", "skills": ["roadmap"], "relevant": true,
+     "window": "Participant 1: We can do either team management or the usage console this sprint, not both.\nParticipant 2: That's a product call. We need a decision from whoever owns the roadmap."},
+    {"id": "be-vague", "role": "Backend engineer", "skills": ["python"], "relevant": false,
+     "window": "Participant 1: Yeah.\nParticipant 2: Mm-hm.\nParticipant 1: Okay, let's see where we are next week."}
+  ]
+}
