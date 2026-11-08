@@ -318,6 +318,22 @@ async def test_throttle_forces_haiku_and_ok_routes_extract_to_sonnet():
     assert system["cache_control"] == {"type": "ephemeral"}
 
 
+async def test_a_workspace_id_is_sent_as_the_anthropic_header(monkeypatch):
+    llm = FakeLLM()
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_test")
+    router = LiteLLMRouter(budget_gate(fakeredis.aioredis.FakeRedis()), Sink(), llm)
+    await router.complete(
+        tier="triage", system="s", user="u", org_id=ORG, user_id=None, max_tokens=5
+    )
+    assert llm.calls[-1]["extra_headers"] == {"anthropic-workspace-id": "wrkspc_test"}
+    monkeypatch.delenv("ANTHROPIC_WORKSPACE_ID")
+    plain = LiteLLMRouter(budget_gate(fakeredis.aioredis.FakeRedis()), Sink(), llm)
+    await plain.complete(
+        tier="triage", system="s", user="u", org_id=ORG, user_id=None, max_tokens=5
+    )
+    assert "extra_headers" not in llm.calls[-1]
+
+
 async def test_high_stakes_is_refused_while_unmapped():
     router = LiteLLMRouter(budget_gate(fakeredis.aioredis.FakeRedis()), Sink(), FakeLLM())
     with pytest.raises(ValueError):

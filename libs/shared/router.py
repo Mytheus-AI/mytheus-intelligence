@@ -14,6 +14,9 @@ Every call, in order:
    Anthropic caches the stable prefix (template, taxonomy) across windows and participants.
 3. Optional streaming: each text delta is handed to `on_delta(seq, text)` (the runtime puts
    them on `agent-stream`).
+Anthropic API keys that are not scoped to a workspace must name one on every request
+(`anthropic-workspace-id`); set `ANTHROPIC_WORKSPACE_ID` and it is sent as that header.
+
 4. Exactly one `usage-events` `agent_token` record per call, with the tier name, keyed
    `usage:{org_id}:agent_token:{occurred_at}:{call_id}`. It is emitted as soon as the
    provider answers, before the caller parses anything, so a parse failure is still metered.
@@ -22,6 +25,7 @@ Every call, in order:
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -100,6 +104,10 @@ class LiteLLMRouter:
         self._sink = sink
         self._complete = completion_fn or _default_completion()
         self._models = models or TIER_MODELS
+        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        self._extra: dict[str, Any] = (
+            {"extra_headers": {"anthropic-workspace-id": workspace}} if workspace else {}
+        )
 
     async def complete(
         self,
@@ -133,7 +141,9 @@ class LiteLLMRouter:
         ]
         call_id = str(uuid.uuid4())
         if on_delta is None:
-            resp = await self._complete(model=model, messages=messages, max_tokens=max_tokens)
+            resp = await self._complete(
+                model=model, messages=messages, max_tokens=max_tokens, **self._extra
+            )
             usage = resp.get("usage") if isinstance(resp, dict) else getattr(resp, "usage", None)
             in_tok, out_tok = _usage_tokens(usage)
             await self._meter(org_id, user_id, in_tok + out_tok, tier, call_id)
@@ -165,6 +175,7 @@ class LiteLLMRouter:
             max_tokens=max_tokens,
             stream=True,
             stream_options={"include_usage": True},
+            **self._extra,
         )
         parts: list[str] = []
         in_tok = out_tok = 0
