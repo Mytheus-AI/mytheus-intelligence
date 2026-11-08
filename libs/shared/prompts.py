@@ -64,7 +64,9 @@ class PromptLoader:
 
 @cache
 def _read(prompts_dir: Path, key: str, version: str) -> Prompt:
+    # CRLF -> LF: a Windows checkout (core.autocrlf) must not hide the `---user---` line
     raw = (prompts_dir / f"{key}@{version}.md").read_text(encoding="utf-8")
+    raw = raw.replace("\r\n", "\n")
     system, sep, user = raw.partition(f"\n{USER_MARKER}\n")
     if not sep:
         raise ValueError(f"{key}@{version} has no '{USER_MARKER}' line")

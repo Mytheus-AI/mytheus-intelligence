@@ -279,3 +279,10 @@ def test_the_shipped_prompts_are_registered_and_render():
         "personal_listener": "v1",
         "personal_listener_gate": "v1",
     }
+
+
+def test_a_crlf_checkout_still_splits_system_from_user(tmp_path: Path):
+    (tmp_path / "registry.json").write_text('{"defaults": {"k": "v1"}}')
+    (tmp_path / "k@v1.md").write_bytes(b"System line.\r\n---user---\r\nWindow: {window}\r\n")
+    prompt = PromptLoader(tmp_path).load("k", "v1")
+    assert prompt.system == "System line." and prompt.render_user(window="x") == "Window: x"
