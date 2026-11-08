@@ -14,6 +14,9 @@ Every call, in order:
    reviewed template and carries no meeting text, so it is not redacted (and stays cacheable).
 1. `BudgetGate.check(org_id, est_tokens)`. `block` raises `BudgetBlocked` and no model is
    called; `throttle` downgrades the call to `triage`.
+1b. When the caller names its `prompt_ref` and a `ResponseCache` is wired, an exact match on
+   (tier, model, system, normalized user) is answered from Redis (ADR-0030 D1): no model call,
+   no metering, no deltas. A miss is stored after the call.
 2. The system prompt is sent as a content block with `cache_control: ephemeral`, so
    Anthropic caches the stable prefix (template, taxonomy) across windows and participants.
 3. Optional streaming: each text delta is handed to `on_delta(seq, text)` (the runtime puts
@@ -37,6 +40,7 @@ from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from libs.shared.budget import BudgetGate
+from libs.shared.llm_cache import CachedCompletion, ResponseCache, cache_key
 from libs.shared.pii import redact_always
 
 logger = logging.getLogger(__name__)
@@ -67,6 +71,7 @@ class Completion:
     model: str
     input_tokens: int
     output_tokens: int
+    cached: bool = False
 
     @property
     def total_tokens(self) -> int:
@@ -106,7 +111,9 @@ class LiteLLMRouter:
         completion_fn: CompletionFn | None = None,
         models: dict[str, str] | None = None,
         redactor: Redactor | None = None,
+        cache: ResponseCache | None = None,
     ) -> None:
+        self._cache = cache
         self._budget = budget
         self._redact = redactor or redact_always
         self._sink = sink
@@ -128,6 +135,7 @@ class LiteLLMRouter:
         max_tokens: int,
         est_tokens: int | None = None,
         on_delta: OnDelta | None = None,
+        prompt_ref: str | None = None,
     ) -> Completion:
         if tier not in self._models:
             raise ValueError(f"tier {tier!r} has no model mapped (ADR-0029 D2)")
@@ -139,6 +147,19 @@ class LiteLLMRouter:
         if decision == "throttle":
             tier = "triage"
         model = self._models[tier]
+        key = None
+        if self._cache is not None and prompt_ref:
+            key = cache_key(org_id, prompt_ref, tier=tier, model=model, system=system, user=user)
+            hit = await self._cache.get(key)
+            if hit is not None:
+                return Completion(
+                    text=hit.text,
+                    tier=tier,
+                    model=model,
+                    input_tokens=hit.input_tokens,
+                    output_tokens=hit.output_tokens,
+                    cached=True,
+                )
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
@@ -160,6 +181,8 @@ class LiteLLMRouter:
         else:
             text, in_tok, out_tok = await self._stream(model, messages, max_tokens, on_delta)
             await self._meter(org_id, user_id, in_tok + out_tok, tier, call_id)
+        if key is not None and self._cache is not None and text:
+            await self._cache.set(key, CachedCompletion(text, in_tok, out_tok))
         return Completion(
             text=text, tier=tier, model=model, input_tokens=in_tok, output_tokens=out_tok
         )

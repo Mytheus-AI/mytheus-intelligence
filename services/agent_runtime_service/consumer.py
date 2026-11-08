@@ -146,6 +146,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
 
     from libs.shared.avro_codec import AvroCodec
     from libs.shared.budget import BillingRefresher, BudgetGate
+    from libs.shared.llm_cache import ResponseCache
     from libs.shared.metrics import serve_metrics, set_service
     from libs.shared.pii import EgressRedactor
     from libs.shared.prompts import PromptLoader
@@ -165,7 +166,10 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     emitter = Emitter(producer, codec)
     redis = from_url(os.environ.get("REDIS_URL", "redis://localhost:6390"))
     router = LiteLLMRouter(
-        BudgetGate(redis, BillingRefresher()), emitter, redactor=EgressRedactor(redis)
+        BudgetGate(redis, BillingRefresher()),
+        emitter,
+        redactor=EgressRedactor(redis),
+        cache=ResponseCache(redis),
     )
     loader = PromptLoader(PROMPTS_DIR)
     contexts = UserContextClient()

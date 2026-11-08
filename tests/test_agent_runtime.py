@@ -31,6 +31,7 @@ from langgraph.graph import END, StateGraph
 from libs.shared import user_context
 from libs.shared.base_agent import BaseAgent
 from libs.shared.budget import BudgetGate, BudgetView, mirror_key
+from libs.shared.llm_cache import ResponseCache
 from libs.shared.pii import EgressRedactor
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import BudgetBlocked, LiteLLMRouter
@@ -397,6 +398,68 @@ async def test_pii_is_redacted_before_egress_unless_the_tenant_turned_it_off():
         tier="triage", system="s", user=window, org_id=ORG, user_id=None, max_tokens=5
     )
     assert "jane@acme.com" not in str(llm.calls[-1]["messages"][1]["content"])
+
+
+async def test_an_identical_call_is_answered_from_the_cache_and_meters_nothing():
+    """ADR-0030 D1: same tier, model, prompt and normalized input -> no second model call and
+    no second usage record. A blocked tenant still gets nothing; a Redis failure is a miss."""
+    redis = fakeredis.aioredis.FakeRedis()
+    llm, sink = FakeLLM(text="note"), Sink()
+    router = LiteLLMRouter(budget_gate(redis), sink, llm, cache=ResponseCache(redis))
+
+    async def call(user: str, ref: str = "p@v1") -> Any:
+        return await router.complete(
+            tier="extract",
+            system="sys",
+            user=user,
+            org_id=ORG,
+            user_id=None,
+            max_tokens=5,
+            prompt_ref=ref,
+        )
+
+    first = await call("Alice:  we ship Friday")
+    second = await call("alice: we ship   friday")
+    assert not first.cached and second.cached and second.text == "note"
+    assert len(llm.calls) == 1 and len(sink.usage_calls) == 1
+    keys = [k.decode() async for k in redis.scan_iter("nexus:*:llmcache:*")]
+    assert len(keys) == 1 and keys[0].startswith(f"nexus:{ORG}:llmcache:p@v1:")
+
+    await call("alice: we ship friday", ref="p@v2")  # a new prompt version is a miss
+    assert len(llm.calls) == 2
+
+    blocked = LiteLLMRouter(
+        budget_gate(redis, consumed=2000), sink, llm, cache=ResponseCache(redis)
+    )
+    with pytest.raises(BudgetBlocked):
+        await blocked.complete(
+            tier="extract",
+            system="sys",
+            user="alice: we ship friday",
+            org_id=ORG,
+            user_id=None,
+            max_tokens=5,
+            prompt_ref="p@v1",
+        )
+
+    class DownRedis:
+        async def get(self, _key: str) -> None:
+            raise ConnectionError("down")
+
+        async def set(self, *_a: Any, **_k: Any) -> None:
+            raise ConnectionError("down")
+
+    flaky = LiteLLMRouter(budget_gate(redis), sink, llm, cache=ResponseCache(DownRedis()))
+    out = await flaky.complete(
+        tier="extract",
+        system="sys",
+        user="x",
+        org_id=ORG,
+        user_id=None,
+        max_tokens=5,
+        prompt_ref="p@v1",
+    )
+    assert out.text == "note" and not out.cached
 
 
 # --- 4. BaseAgent + prompts ----------------------------------------------------------------
