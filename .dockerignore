@@ -1,0 +1,30 @@
+# Allowlist: the build context is ONLY what the images need. Anything not re-included below
+# (the .env file, the nested .worktrees checkout, tests, docs, caches) never reaches the daemon,
+# so it cannot be baked into a layer by a careless COPY.
+*
+
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!libs/
+!services/
+!migrations/
+!proto/
+
+# Belt and braces inside the allowed trees. These must come AFTER the re-includes above.
+**/.env
+**/.env.*
+**/*.env
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/node_modules/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.cache/
+**/.uv-cache/
+**/.git/
+**/.worktrees/
+**/tests/
+.python-version

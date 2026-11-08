@@ -6,13 +6,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 # Only what this service imports; deliberately NOT the repo's full dependency set.
 RUN pip install "fastapi>=0.115" "uvicorn[standard]>=0.30" "pydantic>=2" \
-        "PyJWT>=2.8" "cryptography>=42" "spacy>=3.7,<4" \
+        "PyJWT>=2.8" "cryptography>=42" "spacy>=3.7,<4" "prometheus-client>=0.20" \
     && python -m spacy download en_core_web_sm
 
 RUN useradd --system --uid 10001 --no-create-home ner
 WORKDIR /app
 COPY libs/__init__.py libs/__init__.py
-COPY libs/shared/__init__.py libs/shared/app.py libs/shared/auth.py libs/shared/
+# metrics.py: app.py's create_app installs /metrics (without it the service dies on import).
+COPY libs/shared/__init__.py libs/shared/app.py libs/shared/auth.py libs/shared/metrics.py libs/shared/
 COPY services/__init__.py services/__init__.py
 COPY services/ner_service services/ner_service
 USER 10001
