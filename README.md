@@ -166,6 +166,25 @@ Both are Ray Serve apps (`serve.py`). `EMBEDDING_GPU=1` / `RERANKER_GPU=1` reque
 
 **UNMEASURED / UNVERIFIED.** There is no CUDA device in the authoring environment: the Dockerfiles were not built, the GPU Serve configs were not run, and none of the GPU SLOs have a measurement - embedding batch-of-32 < 100ms warm, reranker warm p95 < 500ms and cold < 1.5s. Pin the base image by digest and measure on a GPU host before treating any of these as met.
 
+## Container images
+
+`.github/workflows/images.yml` builds two images on every PR and pushes them to GHCR on `main`, tagged `main` (moving pointer the VPS deploys) and the git SHA (immutable, for pinning and rollback). Both build from the repo root.
+
+| Image | Dockerfile | Runs |
+| --- | --- | --- |
+| `ghcr.io/mytheus-ai/mytheus-intelligence` | `Dockerfile` | every intelligence process; `command:` picks one (`uvicorn services.<svc>.main:app ...`, `python -m services.<svc>.worker`, `python -m services.embedding_service.relay_main`, `alembic upgrade head`). Default CMD is embedding-service on 8101. |
+| `ghcr.io/mytheus-ai/mytheus-ner` | `services/ner_service/Dockerfile` | ner-service only (spaCy, no DB, no Qdrant) |
+
+- **CPU only.** `uv.lock` resolves torch from PyPI, whose Linux wheel drags ~3 GB of CUDA libraries. The build runs the locked `uv sync --frozen --no-dev` with torch and its CUDA closure (`nvidia-*`, `cuda-*`, `triton`) skipped, then installs torch at the locked version from `https://download.pytorch.org/whl/cpu` (the `+cpu` build), and fails if any CUDA package is present or `torch.cuda.is_available()` is true. Everything else is exactly what the lock pins. GPU serving uses the separate `services/{embedding,reranker}_service/Dockerfile.gpu` images.
+- **Weights baked in.** Build arg `BAKE_MODELS=1` (default) downloads `BAAI/bge-small-en-v1.5` and `BAAI/bge-reranker-base` into `HF_HOME=/opt/hf` at build time; the image sets `HF_HUB_OFFLINE=1`, so a container never touches the network at start (`libs/shared/model_loading.py` loads local-first). `BAKE_MODELS=0` builds without weights: mount a populated HF cache at `/opt/hf` and set `HF_HUB_OFFLINE=0`. unstructured's spaCy model (`en_core_web_sm`) is always baked, because unstructured otherwise pip-installs it on first use.
+- **Other build args:** `PYTHON_IMAGE` (default `python:3.12-slim`), `TORCH_INDEX_URL` (default the PyTorch CPU index).
+- Non-root (uid 10001), `tini` as PID 1, code and weights root-owned and read-only to the runtime user. `.dockerignore` is an allowlist, so `.env`, tests, `.venv` and caches never reach the build context.
+
+```bash
+docker build -t mytheus-intelligence .
+docker build -f services/ner_service/Dockerfile -t mytheus-ner .
+```
+
 ## Environment variables
 
 | Variable | Purpose |
