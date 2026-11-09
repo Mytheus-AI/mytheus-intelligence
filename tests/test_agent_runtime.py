@@ -722,3 +722,33 @@ def test_identity_mirror_matches_the_proto():
             for m in re.finditer(r"(repeated\s+)?\w+\s+(\w+)\s*=\s*(\d+);", body.group(1))
         }
         assert declared == {(n, num, rep) for n, num, _t, rep in fields}, message
+
+
+async def test_a_provider_error_costs_the_note_not_the_process(prompts):
+    """Production ran into this: an invalid Anthropic key made every call raise, the exception
+    escaped process_window, the consumer died before committing its offset, and on restart it
+    replayed the same window and died again (3,149 restarts). A failing agent call now skips
+    that agent for that window; the window completes so its offset can commit."""
+
+    class FailingLLM(FakeLLM):
+        async def __call__(self, **kw: Any) -> Any:
+            self.calls.append(kw)
+            raise RuntimeError("AuthenticationError: invalid x-api-key")
+
+    sink, llm = Sink(), FailingLLM()
+    router = LiteLLMRouter(budget_gate(fakeredis.aioredis.FakeRedis()), sink, llm)
+
+    async def ctx(_o: uuid.UUID, _u: uuid.UUID) -> dict[str, Any]:
+        return {"role": "Engineer"}
+
+    rt = AgentRuntime(sink=sink, user_context=ctx, agents=[lambda: TwoStepAgent(prompts, router)])
+    users = [uuid.uuid4(), uuid.uuid4()]
+    for u in users:
+        await rt.on_room_event(ORG, MEETING, "joined", str(u))
+    w = Windower()
+    w.add(chunk(0, str(users[0])))
+    (cw,) = w.close_meeting(ORG, MEETING)
+
+    assert await rt.process_window(cw.window) == 0
+    assert sink.results == []
+    assert len(llm.calls) == 2, "every participant's agent was still tried"

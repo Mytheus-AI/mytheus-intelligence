@@ -149,7 +149,22 @@ class AgentRuntime:
                 stream=self._stream_for(window, user_id),
             )
             async with self._sem:
-                result = await agent.process(state)
+                try:
+                    result = await agent.process(state)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 - one failed call must not stop the runtime
+                    # A provider error (bad key, rate limit, outage) used to escape the window,
+                    # kill the consumer before it committed, and replay the same window on every
+                    # restart (a crash loop that also blocks the partition, and with a working
+                    # key would re-bill). The note for this window is lost; the window completes.
+                    logger.exception(
+                        "agent %s failed on window %s for user %s; skipped",
+                        agent.name,
+                        window.window_id,
+                        user_id,
+                    )
+                    result = None
             if agent.blocked and user_id not in m.blocked_notified:
                 m.blocked_notified.add(user_id)
                 await self._sink.notification(
