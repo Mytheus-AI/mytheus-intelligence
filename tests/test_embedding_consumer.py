@@ -25,6 +25,7 @@ from confluent_kafka import Consumer, Producer
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from libs.shared.inbox import dedupe_key
 from libs.shared.qdrant import LOGICAL_TRANSCRIPT_CHUNKS, physical_collection
 from services.embedding_service.consumer import EmbeddingConsumer
 from tests.conftest import APP_URL
@@ -112,7 +113,11 @@ async def test_transcript_chunk_end_to_end_real_embedding_real_qdrant_real_outbo
         assert (await qdrant_client.count(name, exact=True)).count == count  # no growth
 
         # --- Redelivery path 2: Redis cache evicted, durable inbox is the authority ---
-        await redis_client.delete(f"nexus:{org_id}:dedupe:transcript-chunks:chunk:{chunk_id}")
+        await redis_client.delete(
+            dedupe_key(
+                str(org_id), "transcript-chunks", EmbeddingConsumer.group, f"chunk:{chunk_id}"
+            )
+        )
         outcome3 = await consumer.process_raw(
             topic="transcript-chunks", raw_value=raw, partition=0, offset=3
         )

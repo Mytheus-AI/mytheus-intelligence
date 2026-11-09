@@ -3,7 +3,11 @@
 Direct port of `mytheus-backend`'s `libs/shared/inbox.py` pattern against this repo's own
 `intelligence.inbox` table. Pattern (identical to the backend's):
 
-  1. Check Redis dedupe key `nexus:{org_id}:dedupe:{topic}:{idempotency_key}` (24h TTL).
+  1. Check Redis dedupe key `nexus:{org_id}:dedupe:{topic}:{consumer_group}:{idempotency_key}`
+     (24h TTL). The key carries the consumer group for the same reason the inbox PK does: two
+     groups consume the same topic (`transcript-chunks`: embedding + search; `decisions`:
+     knowledge-graph + embedding), and a group-less key let whichever group came second treat
+     the other group's fact as its own duplicate and skip its effect (mytheus-docs ADR-0031 D6).
   2. If seen -> drop (return True from is_duplicate).
   3. If new -> run the handler + record_consumed (inbox insert) in the SAME transaction as
      any effect that must be atomic with "this fact was applied" (here: the outbox enqueue
@@ -26,13 +30,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 _DEDUPE_TTL = 86_400  # 24 h
 
 
+def dedupe_key(org_id: str, topic: str, consumer_group: str, idempotency_key: str) -> str:
+    return f"nexus:{org_id}:dedupe:{topic}:{consumer_group}:{idempotency_key}"
+
+
 async def is_duplicate(
     redis: Redis,  # see libs/shared/consumer.py's note on this installed redis-py version's stubs
     org_id: str,
     topic: str,
     idempotency_key: str,
+    *,
+    consumer_group: str,
 ) -> bool:
-    key = f"nexus:{org_id}:dedupe:{topic}:{idempotency_key}"
+    key = dedupe_key(org_id, topic, consumer_group, idempotency_key)
     result = await redis.set(key, "1", ex=_DEDUPE_TTL, nx=True)
     return result is None  # None -> key already existed -> duplicate
 

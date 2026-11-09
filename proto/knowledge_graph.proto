@@ -1,0 +1,42 @@
+// knowledge-graph-service's internal read surface: the four named nexus_knowledge templates.
+//
+// Callers: rag-service (graph arm, P9), agent-runtime-service (ProactiveAgent). The tenant rides
+// in gRPC metadata, never in a message: x-mytheus-org, with the caller authenticated by
+// x-mytheus-service + x-mytheus-service-token (MYTHEUS_KG_CALLER_TOKENS). Every template binds
+// $org_id on every node and edge pattern and is depth- and size-bounded.
+//
+// Messages are mirrored at runtime by libs/shared/kg_proto.py (no protoc in dev/CI yet);
+// tests/test_knowledge_graph_grpc.py asserts that mirror matches this file field-for-field.
+
+syntax = "proto3";
+
+package mytheus.intelligence.knowledge_graph.v1;
+
+service KnowledgeGraphService {
+  // template: decision_lineage | decisions_by_person | actions_blocked_on_decision |
+  // related_decisions_for_topic.
+  rpc QueryTemplate(QueryTemplateRequest) returns (QueryTemplateResponse);
+}
+
+message TemplateParam {
+  string name = 1;
+  string value = 2;
+}
+
+message QueryTemplateRequest {
+  string template = 1;
+  repeated TemplateParam params = 2;
+}
+
+message GraphNode {
+  string label = 1;
+  string id = 2;
+  string role = 3;
+  int32 depth = 4;
+  string properties_json = 5;
+}
+
+message QueryTemplateResponse {
+  string template = 1;
+  repeated GraphNode nodes = 2;
+}
