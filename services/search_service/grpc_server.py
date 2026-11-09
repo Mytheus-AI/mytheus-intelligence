@@ -145,6 +145,7 @@ class FtsServicer:
             limit=limit,
             meeting_ids=allow,
             speaker_ids=list(request.speaker_ids) or None,
+            match_any=request.match_any,
         )
         return rag_proto.FtsSearchResponse(
             query=request.query,

@@ -405,18 +405,26 @@ async def test_corrective_retry_drops_date_and_person_filters():
     reply = '{"variants": [], "person": "Sam", "date_from": "2026-11-02"}'
     svc, parts = build(
         llm_replies=[reply, "Options were discussed [1]."],
-        scores={C_OLD.text: 0.8},
         vector_hits=(C_OLD,),
         lexical_hits=(),
     )
-    svc = svc.with_config(RagConfig(abstain_below=0.3))
     res = await svc.query(CALLER, q("what did Sam say about pricing last week", generate=True))
-    # C_OLD is from October: the filtered run finds nothing, the relaxed retry finds it.
+    # C_OLD is from October: the filtered run finds nothing, so it abstains without a model
+    # call; the relaxed retry (no date, no person) finds it and the answer cites it.
     assert res.answer and not res.answer.abstained
+    assert [p.text for p in res.answer_passages] == [C_OLD.text]
     assert any(
         c["speaker_ids"] == [] and set(c["meeting_ids"]) == {M_OLD, M_NEW}
         for c in parts["vector"].calls
     )
+    assert [c["tier"] for c in parts["llm"].calls] == ["triage", "extract"]
+
+
+async def test_no_retry_without_narrowing_filters():
+    svc, parts = build(llm_replies=["{}", "NOT_FOUND"])
+    res = await svc.query(CALLER, q("what did we decide about the pro seat price", generate=True))
+    assert res.answer and res.answer.abstained
+    assert [c["tier"] for c in parts["llm"].calls] == ["triage", "extract"]
 
 
 def test_validate_moves_trailing_markers_and_rejects_out_of_range():

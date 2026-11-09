@@ -342,6 +342,7 @@ class GrpcLexicalSearch:
                     scoped=True,
                     meeting_ids=[str(m) for m in meeting_ids],
                     speaker_ids=list(speaker_ids),
+                    match_any=True,
                 ),
                 metadata=self._md(org_id),
                 timeout=self._timeout,

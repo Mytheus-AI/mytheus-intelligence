@@ -1,0 +1,77 @@
+[
+  {
+    "row": "vector only",
+    "recall_at_10": 0.729,
+    "mrr": 0.775,
+    "ndcg_at_10": 0.733,
+    "trap_leaks": 0,
+    "p95_s": 0.023
+  },
+  {
+    "row": "+ FTS and RRF",
+    "recall_at_10": 0.729,
+    "mrr": 0.775,
+    "ndcg_at_10": 0.733,
+    "trap_leaks": 0,
+    "p95_s": 0.029
+  },
+  {
+    "row": "+ rerank (plain)",
+    "recall_at_10": 0.779,
+    "mrr": 0.696,
+    "ndcg_at_10": 0.693,
+    "trap_leaks": 0,
+    "p95_s": 0.476
+  },
+  {
+    "row": "+ rerank with context",
+    "recall_at_10": 0.842,
+    "mrr": 0.6,
+    "ndcg_at_10": 0.622,
+    "trap_leaks": 0,
+    "p95_s": 0.987
+  },
+  {
+    "row": "+ skip headings",
+    "recall_at_10": 0.842,
+    "mrr": 0.608,
+    "ndcg_at_10": 0.628,
+    "trap_leaks": 0,
+    "p95_s": 0.873
+  },
+  {
+    "row": "+ fuse rerank with first stage",
+    "recall_at_10": 0.842,
+    "mrr": 0.778,
+    "ndcg_at_10": 0.758,
+    "trap_leaks": 0,
+    "p95_s": 0.877
+  },
+  {
+    "row": "+ decisions source",
+    "recall_at_10": 0.896,
+    "mrr": 0.794,
+    "ndcg_at_10": 0.797,
+    "trap_leaks": 0,
+    "p95_s": 0.898
+  },
+  {
+    "row": "+ small-to-big",
+    "recall_at_10": 0.896,
+    "mrr": 0.794,
+    "ndcg_at_10": 0.797,
+    "trap_leaks": 0,
+    "p95_s": 0.864
+  },
+  {
+    "row": "+ expansion, filters, graph",
+    "recall_at_10": 0.929,
+    "mrr": 0.846,
+    "ndcg_at_10": 0.845,
+    "trap_leaks": 0,
+    "p95_s": 4.934,
+    "answer_rate": 0.95,
+    "abstain_rate_no_answer": 1.0,
+    "citation_hit": 1.0
+  }
+]

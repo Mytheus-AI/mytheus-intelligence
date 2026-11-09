@@ -84,7 +84,7 @@ class AnswerWriter:
             user=prompt.render_user(query=query, passages=render_passages(passages)),
             org_id=org_id,
             user_id=user_id,
-            max_tokens=400,
+            max_tokens=1500,
             prompt_ref=prompt.ref,
         )
         return validate(completion.text, len(passages))

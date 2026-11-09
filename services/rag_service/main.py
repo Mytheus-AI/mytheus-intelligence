@@ -12,6 +12,11 @@ Two callers:
 Downstream, rag-service calls core-api, search-service, embedding-service, reranker-service and
 knowledge-graph-service as itself (`RAG_SERVICE_TOKEN`), and reads Qdrant with the read-only key.
 
+Env: RAG_SERVICE_TOKEN, MYTHEUS_RAG_CALLER_TOKENS, CORE_API_URL, EMBEDDING_URL and RERANKER_URL (the
+service base including its `/internal` mount), SEARCH_GRPC_URL, KNOWLEDGE_GRAPH_URL (optional),
+BILLING_URL, REDIS_URL, REDPANDA_BROKERS, SCHEMA_REGISTRY_URL, QDRANT_URL,
+QDRANT_READ_ONLY_API_KEY, ANTHROPIC_API_KEY.
+
 Run: uvicorn services.rag_service.main:app --port 8201
 """
 
@@ -140,11 +145,15 @@ def _wire_from_env() -> tuple[RAGService, list[Any]]:  # pragma: no cover - prod
     prompts = PromptLoader(PROMPTS_DIR)
     service = RAGService(
         scope=CoreScopeClient(os.environ.get("CORE_API_URL", "http://core-api:8000"), token),
-        embedder=HttpEmbedder(os.environ.get("EMBEDDING_URL", "http://localhost:8101"), token),
+        embedder=HttpEmbedder(
+            os.environ.get("EMBEDDING_URL", "http://localhost:8101/internal"), token
+        ),
         vector=QdrantVectorSearch(read_client()),
         lexical=GrpcLexicalSearch(os.environ.get("SEARCH_GRPC_URL", "localhost:50103"), token),
         graph=HttpGraphSearch(os.environ.get("KNOWLEDGE_GRAPH_URL"), token),
-        reranker=HttpReranker(os.environ.get("RERANKER_URL", "http://localhost:8102"), token),
+        reranker=HttpReranker(
+            os.environ.get("RERANKER_URL", "http://localhost:8102/internal"), token
+        ),
         expander=Expander(router, prompts, distinct_topics()),
         answerer=AnswerWriter(router, prompts),
         budget=GateProbe(gate),

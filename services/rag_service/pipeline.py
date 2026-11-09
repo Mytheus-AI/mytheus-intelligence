@@ -38,6 +38,7 @@ from uuid import UUID
 from libs.shared.router import BudgetBlocked
 from services.rag_service.answer import AnswerWriter, abstain
 from services.rag_service.contracts import (
+    Answer,
     AnswerPassage,
     AppliedFilters,
     Citation,
@@ -82,19 +83,31 @@ class AnswerCache(Protocol):
 
 @dataclass(frozen=True)
 class RagConfig:
+    lexical: bool = True
     expand: bool = True
     filters: bool = True
+    # Advisory only by default: in the D7 live run Haiku labelled most questions "decisions"
+    # (even "what did the accessibility review find?"), and as a hard filter that dropped every
+    # transcript. Date and person stay hard filters.
+    source_filter: bool = False
     graph: bool = True
     decisions: bool = True
     rerank: bool = True
     small_to_big: bool = True
+    rerank_context: bool = True
+    rerank_fusion: bool = True
+    skip_headings: bool = True
     corrective_retry: bool = True
     arm_limit: int = 20
     fused_top: int = 50
     top_k: int = 10
     token_budget: int = 3000
     per_meeting_cap: int = 4
-    abstain_below: float = 0.05
+    # Off by default: the D7 ablation showed BGE-reranker-base scores do not separate
+    # answerable from unanswerable meeting questions (a no-answer question outscored five
+    # answerable ones). Abstention comes from the answer model's NOT_FOUND plus the citation
+    # check; the gate stays available for a better-calibrated reranker.
+    abstain_below: float = 0.0
 
 
 @dataclass
@@ -213,29 +226,26 @@ class RAGService:
 
         answer = None
         if req.generate and not degraded and self._answerer is not None:
-            low = self.config.rerank and run.best_score < self.config.abstain_below
-            if low and self.config.corrective_retry and run.filters.narrows:
-                retry = await self._run(
-                    caller,
-                    scope,
-                    req,
-                    [req.query, *run.variants],
-                    run.filters.relaxed(),
-                    expansion.topics,
-                    budget,
-                )
-                if retry.best_score > run.best_score:
-                    run = retry
-                low = run.best_score < self.config.abstain_below
-            if low or not run.passages:
-                answer = abstain()
-            else:
-                try:
-                    answer = await self._answerer.write(
-                        req.query, run.passages, org_id=caller.org_id, user_id=scope.user_id
+            try:
+                answer = await self._answer(caller, scope, req, run)
+                if answer.abstained and self.config.corrective_retry and run.filters.narrows:
+                    # Corrective retry: the filters may have been read too narrowly ("last
+                    # week" for something said earlier). Once, without date and person.
+                    retry = await self._run(
+                        caller,
+                        scope,
+                        req,
+                        [req.query, *run.variants],
+                        run.filters.relaxed(),
+                        expansion.topics,
+                        budget,
                     )
-                except BudgetBlocked:
-                    degraded, answer = True, None
+                    if retry.passages:
+                        retry.variants = run.variants
+                        run = retry
+                        answer = await self._answer(caller, scope, req, run)
+            except BudgetBlocked:
+                degraded, answer = True, None
 
         f = run.filters
         response = RagResponse(
@@ -256,6 +266,20 @@ class RAGService:
             except Exception:
                 logger.warning("rag: answer cache write failed")
         return response
+
+    async def _answer(
+        self, caller: Caller, scope: Scope, req: RagQueryRequest, run: _Run
+    ) -> Answer:
+        """No passages, or (when the optional score gate is on) a best rerank score under it:
+        abstain with no model call. Otherwise the model answers or says NOT_FOUND, and every
+        sentence is checked against the passages (`answer.validate`)."""
+        assert self._answerer is not None
+        gate = self.config.rerank and self.config.abstain_below > 0
+        if not run.passages or (gate and run.best_score < self.config.abstain_below):
+            return abstain()
+        return await self._answerer.write(
+            req.query, run.passages, org_id=caller.org_id, user_id=scope.user_id
+        )
 
     async def _expand_and_run(
         self, caller: Caller, scope: Scope, req: RagQueryRequest, degraded: bool, budget: int
@@ -286,6 +310,8 @@ class RAGService:
                 logger.exception("rag: expansion failed; continuing with the raw query")
                 expansion = Expansion()
         filters = expansion.filters if self.config.filters else Filters()
+        if not self.config.source_filter:
+            filters = replace(filters, source=None)
         topics = expansion.topics if self.config.graph else []
         lists, pool = await raw_lists
         if filters.narrows:
@@ -349,7 +375,7 @@ class RAGService:
                     org, v, meeting_ids=meetings, speaker_ids=speakers, kinds=kinds, limit=limit
                 )
             )
-        if "transcript" in kinds:
+        if self.config.lexical and "transcript" in kinds:
             for t in texts:
                 calls.append(
                     self._lexical.search(
@@ -423,15 +449,31 @@ class RAGService:
 
         if self.config.rerank:
             try:
-                order = await self._reranker.rerank(
-                    caller.org_id, req.query, [c.text for c in hydrated], len(hydrated)
-                )
+                inputs = [
+                    (
+                        " ".join(x for x in (c.before, c.text, c.after) if x)
+                        if self.config.rerank_context
+                        else c.text
+                    )
+                    for c in hydrated
+                ]
+                order = await self._reranker.rerank(caller.org_id, req.query, inputs, len(hydrated))
                 ranked = [replace(hydrated[i], score=s) for i, s in order]
+                if self.config.rerank_fusion:
+                    # Fuse the cross-encoder's order with the first-stage order (RRF again).
+                    # BGE-reranker-base widens recall on meeting speech but misorders short
+                    # utterances; fusing keeps the recall and protects the top of the list.
+                    # The rerank score is kept on each passage for the abstain check.
+                    by_key = {c.key: c for c in ranked}
+                    order_keys = rrf([[c.key for c in hydrated], [c.key for c in ranked]])
+                    ranked = [by_key[k] for k, _ in order_keys if k in by_key]
             except Exception:
                 logger.warning("rag: rerank failed; keeping the fused order")
                 ranked = hydrated
         else:
             ranked = hydrated
+        if not self.config.small_to_big:
+            ranked = [replace(c, before="", after="") for c in ranked]
         ranked = ranked[: self.config.top_k]
         best = ranked[0].score if ranked else 0.0
         return _Run(
@@ -441,7 +483,10 @@ class RAGService:
     async def _hydrate(
         self, caller: Caller, scope: Scope, candidates: list[Candidate]
     ) -> list[Candidate]:
-        neighbors = 1 if self.config.small_to_big else 0
+        # Neighbours are fetched for the answer context (small-to-big) and for the reranker
+        # (context-aware rerank: a short reply such as "Yes, agreed." is scored with the turn
+        # it answers). Which of the two keeps them is decided after the rerank.
+        neighbors = 1 if (self.config.small_to_big or self.config.rerank_context) else 0
         text_kinds = [c for c in candidates if c.kind in ("transcript", "document")]
         decisions = [c.decision_id for c in candidates if c.kind == "decision" and c.decision_id]
         actions = [c.action_id for c in candidates if c.kind == "action" and c.action_id]
@@ -454,6 +499,8 @@ class RAGService:
             got = texts.get(c.key) or records.get(c.key)
             if got is None or not got.text:
                 continue  # cannot be hydrated, so cannot be cited: dropped
+            if self.config.skip_headings and got.kind == "document" and got.element_type == "Title":
+                continue  # a bare heading answers nothing, and cross-encoders overrate it
             if (
                 c.kind in ("transcript", "decision", "action")
                 and got.meeting_id not in scope.meetings

@@ -30,6 +30,7 @@ _MESSAGES: dict[str, list[tuple[str, int, int, bool, str | None]]] = {
         ("meeting_ids", 4, _F.TYPE_STRING, True, None),
         ("speaker_ids", 5, _F.TYPE_STRING, True, None),
         ("scoped", 6, _F.TYPE_BOOL, False, None),
+        ("match_any", 7, _F.TYPE_BOOL, False, None),
     ],
     "FtsHit": [
         ("passage", 1, _F.TYPE_STRING, False, None),

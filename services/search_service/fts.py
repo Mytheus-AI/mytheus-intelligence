@@ -36,19 +36,29 @@ async def fts_search(
     limit: int,
     meeting_ids: list[UUID] | None = None,
     speaker_ids: list[str] | None = None,
+    match_any: bool = False,
 ) -> list[FtsRow]:
     """`meeting_ids` is an allowlist when given (rag-service's participant scope, mytheus-docs
     ADR-0033 D1): an empty list means the asker has no meetings and the answer is empty, never
     "unfiltered"."""
     if meeting_ids is not None and not meeting_ids:
         return []
+    # `websearch_to_tsquery` ANDs every term, which suits a user typing keywords into a search
+    # box. A RAG question ("how much did we decide to charge for Pro?") almost never has every
+    # word in one utterance, so rag-service asks for any-term matching ranked by ts_rank: the
+    # same lexemes, joined with OR (ADR-0033 D7 ablation: AND contributed nothing).
+    tsq = (
+        "to_tsquery('english', replace(plainto_tsquery('english', :q)::text, ' & ', ' | '))"
+        if match_any
+        else "websearch_to_tsquery('english', :q)"
+    )
     # websearch_to_tsquery: safe for raw user input (never a syntax error), supports phrases.
-    sql = """
+    sql = f"""
         SELECT chunk_id, meeting_id, speaker_id, start_ms, end_ms, text,
-               ts_rank(tsv, websearch_to_tsquery('english', :q)) AS rank
+               ts_rank(tsv, {tsq}) AS rank
         FROM intelligence.transcript_chunk_search
         WHERE org_id = :org_id
-          AND tsv @@ websearch_to_tsquery('english', :q)
+          AND tsv @@ {tsq}
     """
     params: dict[str, object] = {"org_id": str(org_id), "q": q, "limit": limit}
     if meeting_id is not None:

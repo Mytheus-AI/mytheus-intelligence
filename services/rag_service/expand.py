@@ -144,7 +144,8 @@ class Expander:
             ),
             org_id=org_id,
             user_id=user_id,
-            max_tokens=200,
+            # 200 truncated real Haiku output mid-JSON (finish_reason=length, D7 live run).
+            max_tokens=1000,
             prompt_ref=prompt.ref,
         )
         return parse_expansion(completion.text, query, people, self._topics)

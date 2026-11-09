@@ -1,0 +1,30 @@
+{
+  "private_meeting": "m6",
+  "questions": [
+    {"q": "How much did we decide to charge for the Pro plan?", "kind": "answerable", "gold": ["m1#2", "m1#3", "dec1"]},
+    {"q": "When is the public launch?", "kind": "answerable", "gold": ["m2#1", "m2#2", "m2#5", "dec2"]},
+    {"q": "What is PLAT-4412?", "kind": "answerable", "gold": ["m2#4"]},
+    {"q": "Which build passed regression?", "kind": "answerable", "gold": ["m2#0"]},
+    {"q": "Who handles sales tax?", "kind": "answerable", "gold": ["m1#6", "d1#e4"]},
+    {"q": "What happens when a customer's payment fails?", "kind": "answerable", "gold": ["d1#e3"]},
+    {"q": "Why was the database CPU spiking at night?", "kind": "answerable", "gold": ["m4#0"]},
+    {"q": "What did we do about the Redis memory alarm?", "kind": "answerable", "gold": ["m4#4"]},
+    {"q": "How do we roll back the launch if something breaks?", "kind": "answerable", "gold": ["m2#7"]},
+    {"q": "Where do people drop off in onboarding?", "kind": "answerable", "gold": ["m3#0"]},
+    {"q": "What are we changing about the calendar connection step?", "kind": "answerable", "gold": ["m3#2"]},
+    {"q": "Who are we hiring for the frontend role?", "kind": "answerable", "gold": ["m5#2", "dec4"]},
+    {"q": "Is there a discount for paying yearly?", "kind": "answerable", "gold": ["m1#5"]},
+    {"q": "What is the minimum seat count for Enterprise?", "kind": "answerable", "gold": ["m1#4"]},
+    {"q": "How long do we keep backups?", "kind": "answerable", "gold": ["m4#5"]},
+    {"q": "When do invoices go out?", "kind": "answerable", "gold": ["d1#e2"]},
+    {"q": "What did the accessibility review find?", "kind": "answerable", "gold": ["m3#4", "m3#5"]},
+    {"q": "When is the launch webinar?", "kind": "answerable", "gold": ["m2#6"]},
+    {"q": "What did Lee say about the SSO bug last week?", "kind": "answerable", "gold": ["m2#4", "m2#2"]},
+    {"q": "What did we decide in October about the database?", "kind": "answerable", "gold": ["m4#2", "dec3"]},
+    {"q": "What is happening with Northwind?", "kind": "trap"},
+    {"q": "Is the Pro price going up next quarter?", "kind": "trap"},
+    {"q": "Is Lee moving to another team?", "kind": "trap"},
+    {"q": "What is our parental leave policy?", "kind": "no_answer"},
+    {"q": "Which office are we opening in Berlin?", "kind": "no_answer"}
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "today": "2026-11-09",
+  "asker": "priya",
+  "people": {
+    "priya": "priya.nair@acme.test",
+    "sam": "sam.okafor@acme.test",
+    "lee": "lee.chen@acme.test"
+  },
+  "meetings": [
+    {
+      "id": "m1", "title": "Pricing review", "date": "2026-11-04", "participants": ["priya", "sam"],
+      "chunks": [
+        ["sam", "Okay, let's get through pricing. Last time we had three options on the table for the Pro tier."],
+        ["priya", "I looked at the competitor sheet. Most of them sit between twenty and thirty dollars per seat."],
+        ["sam", "Then let's lock Pro at twenty-five dollars per seat per month. Everyone okay with that?"],
+        ["priya", "Yes, agreed. Twenty-five it is."],
+        ["sam", "Enterprise stays custom-quoted, with a minimum of fifty seats."],
+        ["priya", "For annual billing we give two months free."],
+        ["sam", "Tax we will not build ourselves; we hand that to Stripe Tax."],
+        ["priya", "I'll update the pricing page copy by Friday."]
+      ]
+    },
+    {
+      "id": "m2", "title": "Launch planning", "date": "2026-11-06", "participants": ["priya", "sam", "lee"],
+      "chunks": [
+        ["lee", "The release candidate build ATLAS-RC3 passed the full regression suite last night."],
+        ["sam", "Good. Do we still target the second of December for the public launch?"],
+        ["lee", "Yes, December second holds, unless the SSO bug reopens."],
+        ["priya", "Marketing needs the final screenshots a week before, so by the twenty-fifth."],
+        ["lee", "Ticket PLAT-4412 is the SSO redirect loop; it is fixed on staging."],
+        ["sam", "Then we ship on December second. Decision made."],
+        ["priya", "I'll book the launch webinar for December third."],
+        ["lee", "Rollback plan is the blue-green switch; we keep RC2 warm for forty-eight hours."]
+      ]
+    },
+    {
+      "id": "m3", "title": "Design critique", "date": "2026-10-15", "participants": ["priya", "lee"],
+      "chunks": [
+        ["priya", "The onboarding flow has too many steps; people drop off at step four."],
+        ["lee", "We could merge the workspace and team steps into one screen."],
+        ["priya", "Let's also make the calendar connection optional instead of blocking."],
+        ["lee", "The empty state on the dashboard needs a sample meeting so it does not look broken."],
+        ["priya", "Accessibility review flagged contrast on the secondary buttons."],
+        ["lee", "I'll bump the secondary button contrast to meet AA."]
+      ]
+    },
+    {
+      "id": "m4", "title": "Infra sync", "date": "2026-10-02", "participants": ["priya", "sam"],
+      "chunks": [
+        ["sam", "Postgres CPU spikes every night at two, it is the analytics export job."],
+        ["priya", "Can we move the export to the read replica?"],
+        ["sam", "Yes, we move the nightly export to the replica starting this week."],
+        ["priya", "And the Redis memory alarm?"],
+        ["sam", "That one was the session cache with no TTL; we set a twenty-four hour TTL."],
+        ["priya", "Okay. Backups are still nightly to R2 with thirty days retention."]
+      ]
+    },
+    {
+      "id": "m5", "title": "Hiring sync", "date": "2026-11-07", "participants": ["priya", "lee"],
+      "chunks": [
+        ["lee", "We have two finalists for the frontend role."],
+        ["priya", "I liked the second candidate's take-home, the state management was clean."],
+        ["lee", "Let's extend the offer to the second candidate, Maya."],
+        ["priya", "Agreed, and we start the onboarding buddy plan with Lee."]
+      ]
+    },
+    {
+      "id": "m6", "title": "Sam and Lee 1:1", "date": "2026-11-05", "participants": ["sam", "lee"],
+      "chunks": [
+        ["sam", "Between us, the Pro price might go to thirty dollars next quarter."],
+        ["lee", "I am thinking about moving to the platform team in January."],
+        ["sam", "Let's keep the acquisition talks with Northwind confidential."],
+        ["lee", "Understood, nobody else hears about Northwind yet."]
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "id": "d1", "title": "Billing RFC",
+      "elements": [
+        ["e1", "Title", "Billing RFC"],
+        ["e2", "NarrativeText", "Invoices are generated on the first of each month and emailed as PDF."],
+        ["e3", "NarrativeText", "Failed payments are retried three times over ten days before the workspace is downgraded."],
+        ["e4", "NarrativeText", "Sales tax and VAT are calculated by Stripe Tax; we store only the resulting amounts."]
+      ]
+    }
+  ],
+  "decisions": [
+    {"id": "dec1", "meeting": "m1", "content": "Pro tier priced at 25 dollars per seat per month."},
+    {"id": "dec2", "meeting": "m2", "content": "Public launch on December 2."},
+    {"id": "dec3", "meeting": "m4", "content": "Nightly analytics export moves to the read replica."},
+    {"id": "dec4", "meeting": "m5", "content": "Extend the frontend offer to Maya."},
+    {"id": "dec5", "meeting": "m6", "content": "Keep the Northwind acquisition talks confidential."}
+  ]
+}

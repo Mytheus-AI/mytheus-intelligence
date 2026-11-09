@@ -32,6 +32,7 @@ message FtsSearchRequest {
   repeated string meeting_ids = 4;  // the asker's meetings, honoured when scoped is true
   repeated string speaker_ids = 5;  // optional speaker (users.id) filter
   bool scoped = 6;                  // true: meeting_ids is an allowlist; empty means no results
+  bool match_any = 7;               // true: any query term matches (OR), ranked by ts_rank
 }
 
 message FtsHit {
