@@ -219,7 +219,9 @@ class BaseConsumer(ABC):
             offset=offset,
         )
 
-        if await is_duplicate(self._redis, str(org_id), topic, evt.idempotency_key):
+        if await is_duplicate(
+            self._redis, str(org_id), topic, evt.idempotency_key, consumer_group=self.group
+        ):
             logger.info("consumer %s: duplicate (redis) %s", self.group, evt.idempotency_key)
             return "duplicate"
 

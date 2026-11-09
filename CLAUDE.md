@@ -130,7 +130,7 @@ When in doubt, look it up. Do not guess.
 1. Add the template in `knowledge-graph-service`, parameterized by `$org_id` so traversal cannot leave the org subgraph. Use only frozen node/edge labels.
 2. If it writes, it must be driven by a confirmed `decisions` / `actions` event consumed from `core-api`. Never write the graph from an unconfirmed agent claim.
 3. If it reads (for `rag-service` or `ProactiveAgent`), keep it side-effect-free.
-4. Add idempotency: the consumer dedupes on `idempotency_key` via the inbox table + `nexus:{org_id}:dedupe:{topic}:{idempotency_key}`.
+4. Add idempotency: the consumer dedupes on `idempotency_key` via the inbox table + `nexus:{org_id}:dedupe:{topic}:{consumer_group}:{idempotency_key}` (ADR-0031 D6).
 
 ### Tune the LLM cost pipeline
 
