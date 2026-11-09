@@ -1,0 +1,16 @@
+{
+  "about": "Targets ActionAgent (action_gate@v1 + action_agent@v1) must reach on action_golden.json: extraction F1 over emitted candidates (silent and surfaced) and the Brier score of their confidence against matched/unmatched. Measured from the current defaults on their first live run; a new prompt must at least match F1 and not exceed the Brier ceiling (the measured score plus 0.02 headroom for run-to-run variance).",
+  "measured": true,
+  "prompt": "action_agent@v1",
+  "gate_prompt": "action_gate@v1",
+  "golden_windows": 14,
+  "min_f1": 1.0,
+  "max_brier": 0.027,
+  "measured_on": "2026-11-09",
+  "model": "claude-sonnet-5-5",
+  "gate_model": "claude-haiku-5-5",
+  "threshold": 0.5,
+  "tokens": 13095,
+  "measured_f1": 1.0,
+  "measured_brier": 0.0069
+}

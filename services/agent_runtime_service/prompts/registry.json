@@ -1,7 +1,11 @@
 {
   "defaults": {
     "personal_listener": "v1",
-    "personal_listener_gate": "v1"
+    "personal_listener_gate": "v1",
+    "decision_gate": "v1",
+    "decision_agent": "v1",
+    "action_gate": "v1",
+    "action_agent": "v1"
   },
   "pins": {}
 }
