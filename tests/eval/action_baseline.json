@@ -1,0 +1,9 @@
+{
+  "about": "Targets ActionAgent (action_gate@v1 + action_agent@v1) must reach on action_golden.json: extraction F1 over emitted candidates (silent and surfaced) and Brier score of their confidence against matched/unmatched. Not measured yet: the live eval records tests/eval/action_last_run.json and only asserts once 'measured' is true and these numbers come from a recorded run.",
+  "measured": false,
+  "prompt": "action_agent@v1",
+  "gate_prompt": "action_gate@v1",
+  "golden_windows": 14,
+  "min_f1": 0.75,
+  "max_brier": 0.2
+}
