@@ -159,8 +159,9 @@ async def test_one_personal_listener_per_participant_per_meeting():
     await runtime.process_window(second)
 
     m = runtime._meetings[(ORG, MEETING)]
-    assert sorted(k[0] for k in m.agents) == ["PersonalListenerAgent"] * 3
-    assert {k[1] for k in m.agents} == {ALICE, BOB, CARA}
+    listeners = [k for k in m.agents if k[0] == "PersonalListenerAgent"]
+    assert len(listeners) == 3
+    assert {k[1] for k in listeners} == {ALICE, BOB, CARA}
     assert len(sink.results) == 6  # 3 participants x 2 windows, instances reused
     assert {r["agent"] for r in sink.results} == {"PersonalListenerAgent"}
 
@@ -278,6 +279,10 @@ def test_the_shipped_prompts_are_registered_and_render():
     assert json.loads((Path(PROMPTS_DIR) / "registry.json").read_text())["defaults"] == {
         "personal_listener": "v1",
         "personal_listener_gate": "v1",
+        "decision_gate": "v1",
+        "decision_agent": "v1",
+        "action_gate": "v1",
+        "action_agent": "v1",
     }
 
 
