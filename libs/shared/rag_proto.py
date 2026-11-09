@@ -1,4 +1,4 @@
-"""Runtime mirror of the messages/service in `proto/rag.proto` (FtsSearch only, for now).
+"""Runtime mirror of the messages/service in `proto/rag.proto` (search-service's FtsService).
 
 There is no `protoc` / `grpcio-tools` in this repo's dev or CI toolchain, so rather than commit
 generated stubs nobody can regenerate, the descriptor is built here with `descriptor_pb2` and
@@ -17,6 +17,7 @@ from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
 PACKAGE = "mytheus.intelligence.rag.v1"
 SERVICE_NAME = f"{PACKAGE}.FtsService"
 FTS_SEARCH_METHOD = f"/{SERVICE_NAME}/FtsSearch"
+GET_PASSAGES_METHOD = f"/{SERVICE_NAME}/GetPassages"
 
 _F = descriptor_pb2.FieldDescriptorProto
 
@@ -26,6 +27,9 @@ _MESSAGES: dict[str, list[tuple[str, int, int, bool, str | None]]] = {
         ("query", 1, _F.TYPE_STRING, False, None),
         ("meeting_id", 2, _F.TYPE_STRING, False, None),
         ("limit", 3, _F.TYPE_INT32, False, None),
+        ("meeting_ids", 4, _F.TYPE_STRING, True, None),
+        ("speaker_ids", 5, _F.TYPE_STRING, True, None),
+        ("scoped", 6, _F.TYPE_BOOL, False, None),
     ],
     "FtsHit": [
         ("passage", 1, _F.TYPE_STRING, False, None),
@@ -39,6 +43,35 @@ _MESSAGES: dict[str, list[tuple[str, int, int, bool, str | None]]] = {
     "FtsSearchResponse": [
         ("query", 1, _F.TYPE_STRING, False, None),
         ("results", 2, _F.TYPE_MESSAGE, True, f".{PACKAGE}.FtsHit"),
+    ],
+    "DocumentRef": [
+        ("document_id", 1, _F.TYPE_STRING, False, None),
+        ("element_id", 2, _F.TYPE_STRING, False, None),
+    ],
+    "GetPassagesRequest": [
+        ("chunk_ids", 1, _F.TYPE_STRING, True, None),
+        ("neighbors", 2, _F.TYPE_INT32, False, None),
+        ("documents", 3, _F.TYPE_MESSAGE, True, f".{PACKAGE}.DocumentRef"),
+    ],
+    "TranscriptPassage": [
+        ("chunk_id", 1, _F.TYPE_STRING, False, None),
+        ("meeting_id", 2, _F.TYPE_STRING, False, None),
+        ("speaker_id", 3, _F.TYPE_STRING, False, None),
+        ("start_ms", 4, _F.TYPE_INT64, False, None),
+        ("end_ms", 5, _F.TYPE_INT64, False, None),
+        ("text", 6, _F.TYPE_STRING, False, None),
+        ("before", 7, _F.TYPE_STRING, False, None),
+        ("after", 8, _F.TYPE_STRING, False, None),
+    ],
+    "DocumentPassage": [
+        ("document_id", 1, _F.TYPE_STRING, False, None),
+        ("element_id", 2, _F.TYPE_STRING, False, None),
+        ("element_type", 3, _F.TYPE_STRING, False, None),
+        ("text", 4, _F.TYPE_STRING, False, None),
+    ],
+    "GetPassagesResponse": [
+        ("transcripts", 1, _F.TYPE_MESSAGE, True, f".{PACKAGE}.TranscriptPassage"),
+        ("documents", 2, _F.TYPE_MESSAGE, True, f".{PACKAGE}.DocumentPassage"),
     ],
 }
 
@@ -63,6 +96,10 @@ def _build() -> dict[str, Any]:
     method.name = "FtsSearch"
     method.input_type = f".{PACKAGE}.FtsSearchRequest"
     method.output_type = f".{PACKAGE}.FtsSearchResponse"
+    passages = svc.method.add()
+    passages.name = "GetPassages"
+    passages.input_type = f".{PACKAGE}.GetPassagesRequest"
+    passages.output_type = f".{PACKAGE}.GetPassagesResponse"
 
     pool = descriptor_pool.DescriptorPool()
     pool.Add(fdp)
@@ -76,3 +113,8 @@ _classes = _build()
 FtsSearchRequest: Any = _classes["FtsSearchRequest"]
 FtsHit: Any = _classes["FtsHit"]
 FtsSearchResponse: Any = _classes["FtsSearchResponse"]
+DocumentRef: Any = _classes["DocumentRef"]
+GetPassagesRequest: Any = _classes["GetPassagesRequest"]
+TranscriptPassage: Any = _classes["TranscriptPassage"]
+DocumentPassage: Any = _classes["DocumentPassage"]
+GetPassagesResponse: Any = _classes["GetPassagesResponse"]

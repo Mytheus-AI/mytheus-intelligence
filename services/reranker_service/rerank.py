@@ -31,12 +31,17 @@ from uuid import UUID
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel, Field
 
-from libs.shared.auth import verified_org_id
+from libs.shared.auth import verified_or_service_org_id
 from services.reranker_service.model import rerank_batch
 
 logger = logging.getLogger("reranker_service")
 
 _MAX_PASSAGES = 50  # plan 3.8: "top-50 -> top-10"
+
+
+# rag-service calls this as itself (mytheus-docs ADR-0033); a user's token still works.
+CALLER_TOKENS_ENV = "MYTHEUS_RERANK_CALLER_TOKENS"
+_caller_org_id = verified_or_service_org_id(CALLER_TOKENS_ENV, frozenset({"rag-service"}))
 
 
 class RerankRequest(BaseModel):
@@ -61,7 +66,7 @@ def create_rerank_app() -> FastAPI:
     @app.post("/rerank", response_model=RerankResponse)
     async def rerank(
         req: RerankRequest,
-        org_id: UUID = Depends(verified_org_id),  # noqa: B008 - FastAPI's own required pattern
+        org_id: UUID = Depends(_caller_org_id),  # noqa: B008 - FastAPI's own required pattern
     ) -> RerankResponse:
         top_k = max(1, min(req.top_k, len(req.passages)))
         ranked, elapsed = rerank_batch(req.query, req.passages, top_k=top_k)

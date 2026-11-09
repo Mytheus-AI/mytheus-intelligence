@@ -58,9 +58,11 @@ from typing import Any
 from uuid import UUID
 
 import jwt
-from fastapi import HTTPException, Security
+from fastapi import HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient, PyJWKClientError
+
+from libs.shared.service_auth import SERVICE_HEADER, ServiceAuthError, authenticate
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -147,3 +149,29 @@ def verified_org_id(
     `org_id`, in place of the old `Header(..., alias="X-Org-Id")` — see module docstring.
     """
     return org_id_from(claims)
+
+
+def verified_or_service_org_id(env_name: str, allowed: frozenset[str]) -> Any:
+    """A route dependency accepting EITHER a verified Clerk token OR an internal service caller.
+
+    `rag-service` authenticates the asker itself (a user's token, or an agent asking for a
+    participant, which has no user token) and then calls `embedding-service` / `reranker-service`
+    as itself: `X-Mytheus-Service`, `X-Mytheus-Service-Token` (secrets in `env_name`), and the
+    tenant in `X-Mytheus-Org` (mytheus-docs ADR-0033). The service path is taken only when the
+    service header is present, and then it must succeed: a bad secret never falls back to the
+    bearer path. Both paths fail closed with 401.
+    """
+
+    def _dep(
+        request: Request,
+        credentials: HTTPAuthorizationCredentials | None = Security(_bearer),  # noqa: B008
+    ) -> UUID:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if SERVICE_HEADER in headers:
+            try:
+                return authenticate(headers, env_name=env_name, allowed=allowed).org_id
+            except ServiceAuthError:
+                raise HTTPException(status_code=401, detail="Unauthenticated") from None
+        return org_id_from(verify_token(credentials))
+
+    return _dep

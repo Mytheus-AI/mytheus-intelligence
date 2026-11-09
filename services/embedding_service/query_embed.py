@@ -32,8 +32,12 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from redis.asyncio import Redis
 
-from libs.shared.auth import verified_org_id
+from libs.shared.auth import verified_or_service_org_id
 from services.embedding_service.model import embed_batch
+
+# rag-service calls this as itself (mytheus-docs ADR-0033); a user's token still works.
+CALLER_TOKENS_ENV = "MYTHEUS_EMBED_CALLER_TOKENS"
+_caller_org_id = verified_or_service_org_id(CALLER_TOKENS_ENV, frozenset({"rag-service"}))
 
 _QEMBED_TTL = 600  # ~10 minutes, per plan 3.7 step 5
 
@@ -63,7 +67,7 @@ def create_query_embed_app(redis: Redis) -> FastAPI:
     @app.post("/embed", response_model=EmbedResponse)
     async def embed(
         req: EmbedRequest,
-        org_id: UUID = Depends(verified_org_id),  # noqa: B008 - FastAPI's own required pattern
+        org_id: UUID = Depends(_caller_org_id),  # noqa: B008 - FastAPI's own required pattern
     ) -> EmbedResponse:
         if not (1 <= len(req.queries) <= 3):
             raise HTTPException(status_code=422, detail="queries must contain 1-3 variants")

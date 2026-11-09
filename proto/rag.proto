@@ -1,10 +1,11 @@
-// Placeholder for the internal gRPC mesh of the AI/inference tier.
+// The internal gRPC mesh of the RAG path. org_id rides in gRPC metadata on every hop (never in
+// the message body).
 //
-// rag-service fans out to embedding / reranker / knowledge-graph / search over this mesh; org_id
-// rides in gRPC metadata on every hop (never in the message body). The real service and message
-// definitions land in the RAG band; this file only reserves the package + path.
+// search-service serves two RPCs to rag-service: FtsSearch (the FTS arm of hybrid retrieval) and
+// GetPassages (text and neighbouring chunks for passages the vector arm found, which Qdrant
+// payloads do not carry). rag-service itself is called over REST, POST /api/rag/query
+// (mytheus-docs ADR-0033); it has no gRPC surface of its own.
 //
-// FtsSearch is the first real RPC (search-service's internal FTS arm for rag-service).
 // Messages are mirrored at runtime by libs/shared/rag_proto.py (no protoc in dev/CI yet);
 // tests/test_search_grpc.py asserts that mirror matches this file field-for-field.
 
@@ -12,24 +13,25 @@ syntax = "proto3";
 
 package mytheus.intelligence.rag.v1;
 
-// TODO(RAG band): define RagService (Query), plus Embed/Rerank/GraphTraverse messages.
-// org_id travels in gRPC metadata, not in these messages.
-message RagQueryPlaceholder {
-  string query = 1;
-}
-
 // search-service: Postgres FTS over intelligence.transcript_chunk_search (transcript chunks only;
 // chat_messages is NOT covered, see README "chat_messages FTS design note").
-// Auth: `authorization: Bearer <Clerk JWT>` in gRPC metadata; org_id comes from the verified
-// token, never from the message.
+// Auth: either `authorization: Bearer <Clerk JWT>` (FtsSearch only), or rag-service's service
+// credentials (x-mytheus-service, x-mytheus-service-token, x-mytheus-org; secrets in
+// MYTHEUS_SEARCH_CALLER_TOKENS). org_id comes from the verified token or the authenticated
+// caller's org header, never from the message.
 service FtsService {
   rpc FtsSearch(FtsSearchRequest) returns (FtsSearchResponse);
+  // Service credentials only.
+  rpc GetPassages(GetPassagesRequest) returns (GetPassagesResponse);
 }
 
 message FtsSearchRequest {
   string query = 1;
-  string meeting_id = 2; // optional; empty = all meetings
-  int32 limit = 3;       // 1..50, default 20 when 0
+  string meeting_id = 2;            // optional; empty = all meetings
+  int32 limit = 3;                  // 1..50, default 20 when 0
+  repeated string meeting_ids = 4;  // the asker's meetings, honoured when scoped is true
+  repeated string speaker_ids = 5;  // optional speaker (users.id) filter
+  bool scoped = 6;                  // true: meeting_ids is an allowlist; empty means no results
 }
 
 message FtsHit {
@@ -45,4 +47,38 @@ message FtsHit {
 message FtsSearchResponse {
   string query = 1;
   repeated FtsHit results = 2;
+}
+
+message DocumentRef {
+  string document_id = 1;
+  string element_id = 2;
+}
+
+message GetPassagesRequest {
+  repeated string chunk_ids = 1;     // transcript chunks, at most 50
+  int32 neighbors = 2;               // chunks of context on each side, 0..3
+  repeated DocumentRef documents = 3; // at most 50
+}
+
+message TranscriptPassage {
+  string chunk_id = 1;
+  string meeting_id = 2;
+  string speaker_id = 3;
+  int64 start_ms = 4;
+  int64 end_ms = 5;
+  string text = 6;
+  string before = 7; // neighbouring chunks before, same meeting, oldest first
+  string after = 8;  // neighbouring chunks after, same meeting
+}
+
+message DocumentPassage {
+  string document_id = 1;
+  string element_id = 2;
+  string element_type = 3;
+  string text = 4;
+}
+
+message GetPassagesResponse {
+  repeated TranscriptPassage transcripts = 1;
+  repeated DocumentPassage documents = 2;
 }
