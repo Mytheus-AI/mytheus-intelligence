@@ -107,3 +107,4 @@ logs/
 tests/eval/personal_listener_last_run.json
 tests/eval/decision_last_run.json
 tests/eval/action_last_run.json
+tests/eval/question_last_run.json

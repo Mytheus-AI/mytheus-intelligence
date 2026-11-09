@@ -1,0 +1,19 @@
+{
+  "about": "Targets QuestionAgent (question_gate@v1 + question_agent@v1) must reach on question_golden.json, over surfaced suggestions only: ask_rate (useful / surfaced, the Ask-rate proxy), gap_recall (gaps addressed / gaps) and noise_rate (no-gap windows with a surfaced suggestion). Measured on the first live run after triage calls ran with thinking disabled. Each bound allows one case of run-to-run variance (7 gap windows, 7 no-gap windows): a new prompt must at least match them.",
+  "measured": true,
+  "prompt": "question_agent@v1",
+  "gate_prompt": "question_gate@v1",
+  "golden_windows": 14,
+  "min_ask_rate": 0.85,
+  "min_gap_recall": 0.85,
+  "max_noise_rate": 0.15,
+  "measured_on": "2026-11-09",
+  "model": "claude-sonnet-5-5",
+  "gate_model": "claude-haiku-5-5",
+  "threshold": 0.5,
+  "tokens": 16867,
+  "calls": 22,
+  "measured_ask_rate": 1.0,
+  "measured_gap_recall": 1.0,
+  "measured_noise_rate": 0.0
+}

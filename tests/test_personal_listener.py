@@ -283,6 +283,8 @@ def test_the_shipped_prompts_are_registered_and_render():
         "decision_agent": "v1",
         "action_gate": "v1",
         "action_agent": "v1",
+        "question_gate": "v1",
+        "question_agent": "v1",
     }
 
 

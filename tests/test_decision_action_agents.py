@@ -73,7 +73,8 @@ def cands(*items: dict[str, Any]) -> str:
 
 class ScriptedLLM:
     """Haiku answers every gate with `score`; Sonnet answers by which extractor is asking.
-    The PersonalListener gate (only in the runtime test) always scores 0, so it stays quiet."""
+    The PersonalListener and QuestionAgent gates (only in the runtime test) always score 0, so
+    those participant-scoped agents stay quiet."""
 
     def __init__(self, score: float, decision: str = "", action: str = "") -> None:
         self.score = score
@@ -88,6 +89,8 @@ class ScriptedLLM:
         if "haiku" in model:
             if "personal meeting note-taker" in system:
                 return '{"relevance": 0}'
+            if "question coach" in system:
+                return '{"score": 0}'
             return json.dumps({"score": self.score})
         return self.decision if "extract decisions" in system else self.action
 
@@ -446,14 +449,16 @@ async def test_one_instance_per_meeting_and_one_result_per_window():
     await runtime.process_window(window(f"{MEETING}:30000"))
 
     m = runtime._meetings[(ORG, MEETING)]
-    meeting_scoped = sorted(k for k in m.agents if k[0] != "PersonalListenerAgent")
+    per_participant = ("PersonalListenerAgent", "QuestionAgent")
+    meeting_scoped = sorted(k for k in m.agents if k[0] not in per_participant)
     assert meeting_scoped == [("ActionAgent", MEETING), ("DecisionAgent", MEETING)]
     assert len([k for k in m.agents if k[0] == "PersonalListenerAgent"]) == 3
+    assert len([k for k in m.agents if k[0] == "QuestionAgent"]) == 3
 
     by_agent: dict[str, list[dict[str, Any]]] = {}
     for r in sink.results:
         by_agent.setdefault(r["agent"], []).append(r)
-    assert set(by_agent) == {"DecisionAgent", "ActionAgent"}  # the PL gate scored 0
+    assert set(by_agent) == {"DecisionAgent", "ActionAgent"}  # the PL and question gates scored 0
     lowest = min((ALICE, BOB, CARA), key=str)
     for agent, results in by_agent.items():
         assert len(results) == 2, agent  # once per window, not once per participant

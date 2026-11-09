@@ -72,9 +72,9 @@ def parse_score(text: str) -> float:
     return _clamp(float(match.group(0))) if match else 0.0
 
 
-def parse_candidates(text: str) -> list[Any]:
-    """The `candidates` list of `{"candidates": [...]}`, tolerating code fences and prose around
-    the object. Anything else is an empty list (never raises)."""
+def parse_candidates(text: str, key: str = "candidates") -> list[Any]:
+    """The `key` list of `{"<key>": [...]}` (`candidates` by default), tolerating code fences
+    and prose around the object. Anything else is an empty list (never raises)."""
     body = _strip_fences(text)
     try:
         data = json.loads(body)
@@ -86,9 +86,9 @@ def parse_candidates(text: str) -> list[Any]:
             data = json.loads(body[start : end + 1])
         except ValueError:
             return []
-    if not isinstance(data, dict) or not isinstance(data.get("candidates"), list):
+    if not isinstance(data, dict) or not isinstance(data.get(key), list):
         return []
-    return list(data["candidates"])
+    return list(data[key])
 
 
 def candidate_id(agent: str, window_id: str, index: int) -> str:

@@ -1,0 +1,89 @@
+{
+  "about": "Golden set for QuestionAgent. Each case is one 30 s window as seen by one participant ('You'; everyone else 'Participant N' in order of first speaking), that participant's profile, and the gaps a useful question would close. Each gap is a list of lowercase keyword groups; a suggestion addresses a gap when its question contains every group ('a|b' means either). Windows with no gap are clear discussions, small talk, gaps already asked about in the window, or gaps outside the participant's role. Labels are the maintainer's judgement, written before any model was run against them.",
+  "cases": [
+    {
+      "id": "vendor-no-budget",
+      "profile": {"role": "Finance lead", "skills": ["budgeting", "procurement"], "bio": "Owns vendor spend and the quarterly budget."},
+      "window": "Participant 1: We're switching to the new analytics vendor next month, the enterprise tier for every team.\nParticipant 2: Great, their dashboards are much better than what we have.\nParticipant 1: I'll tell them we're ready to sign this week.",
+      "gaps": [{"keywords": ["cost|budget|price|pricing|spend|how much"]}]
+    },
+    {
+      "id": "launch-no-owner",
+      "profile": {"role": "Engineering manager", "skills": ["delivery", "staffing"], "bio": "Runs the platform team."},
+      "window": "Participant 1: So the migration to the new auth provider has to be done before the launch on the 15th.\nParticipant 2: Agreed, it's the blocker.\nParticipant 1: Good, let's make sure it happens, then move on to pricing.",
+      "gaps": [{"keywords": ["who|owner|own|lead|responsible"]}]
+    },
+    {
+      "id": "feature-no-deadline",
+      "profile": {"role": "Product manager", "skills": ["roadmap", "launch planning"], "bio": "Owns the mobile roadmap."},
+      "window": "Participant 1: I'll pick up the offline mode for the mobile app.\nParticipant 2: Nice, customers keep asking for it.\nParticipant 1: Yeah, I'll start on it after the current sprint and get it done.",
+      "gaps": [{"keywords": ["when|date|deadline|timeline|ship|land|done by|by when"]}]
+    },
+    {
+      "id": "scope-unclear",
+      "profile": {"role": "Designer", "skills": ["UX research", "interaction design"], "bio": "Designs the onboarding flow."},
+      "window": "Participant 1: We'll redo onboarding this quarter, it's the biggest drop-off point.\nParticipant 2: Should we also cover the invite flow, or just sign-up?\nParticipant 1: Let's see. Anyway, the main thing is that conversion goes up.",
+      "gaps": [{"keywords": ["invite|scope|include|cover|sign-up|signup"]}]
+    },
+    {
+      "id": "metric-undefined",
+      "profile": {"role": "Data analyst", "skills": ["metrics", "experimentation"], "bio": "Owns the product analytics dashboards."},
+      "window": "Participant 1: The goal for the new checkout is to improve conversion significantly.\nParticipant 2: And we'll run it as an experiment for two weeks.\nParticipant 1: Right, and if it wins we roll it out to everyone.",
+      "gaps": [{"keywords": ["how much|target|baseline|measure|significant|percent|%|success|metric|threshold|define"]}]
+    },
+    {
+      "id": "dependency-hidden",
+      "profile": {"role": "Backend engineer", "skills": ["APIs", "data pipelines"], "bio": "Maintains the billing service."},
+      "window": "Participant 1: For the new invoicing feature we'll just pull the usage numbers from billing and show them on the dashboard.\nParticipant 2: Should be easy then.\nParticipant 1: Yep, front end can start tomorrow.",
+      "gaps": [{"keywords": ["api|endpoint|billing|usage|data|schema|format|real-time|realtime|latency|load"]}]
+    },
+    {
+      "id": "risk-unaddressed",
+      "profile": {"role": "Security engineer", "skills": ["threat modelling", "compliance"], "bio": "Reviews data handling for new features."},
+      "window": "Participant 1: The new export lets any user download all the customer records as a CSV.\nParticipant 2: Sales will love that, they've been asking for months.\nParticipant 1: Great, we'll turn it on for every workspace on Monday.",
+      "gaps": [{"keywords": ["permission|access|admin|role|restrict|who can|pii|personal|security|audit|privacy|sensitive"]}]
+    },
+    {
+      "id": "small-talk",
+      "profile": {"role": "Product manager", "skills": ["roadmap"], "bio": "Owns the web roadmap."},
+      "window": "Participant 1: Morning everyone, did you all have a good weekend?\nYou: Yes, finally some sun. How was the hike?\nParticipant 1: Muddy but great. Let's wait two more minutes for the others to join.",
+      "gaps": []
+    },
+    {
+      "id": "already-asked-and-answered",
+      "profile": {"role": "Finance lead", "skills": ["budgeting"], "bio": "Owns vendor spend."},
+      "window": "Participant 1: We're renewing the design tool for another year.\nYou: What does the renewal cost us this time?\nParticipant 1: Same as last year, 12,000 for the whole team, already in the budget.\nYou: Good, then I'm fine with it.",
+      "gaps": []
+    },
+    {
+      "id": "clear-plan",
+      "profile": {"role": "Engineering manager", "skills": ["delivery"], "bio": "Runs the platform team."},
+      "window": "Participant 1: Priya owns the database upgrade, she'll do it Saturday at 6am with a one-hour window.\nParticipant 2: Rollback plan is the snapshot we take at 5:45, and I'm on call as backup.\nParticipant 1: And we announce the window to customers on Thursday.",
+      "gaps": []
+    },
+    {
+      "id": "status-update",
+      "profile": {"role": "Backend engineer", "skills": ["APIs"], "bio": "Maintains the billing service."},
+      "window": "Participant 1: Quick update: the flaky test in the payments suite is fixed and merged.\nParticipant 2: And the dashboard latency is back to normal since the cache fix yesterday.\nParticipant 1: That's all from me.",
+      "gaps": []
+    },
+    {
+      "id": "logistics",
+      "profile": {"role": "Designer", "skills": ["interaction design"], "bio": "Designs the onboarding flow."},
+      "window": "Participant 1: Can you all see my screen?\nParticipant 2: Yes, it's a bit small though.\nParticipant 1: Let me zoom in. Better? Okay, I'll share the link in the chat too.",
+      "gaps": []
+    },
+    {
+      "id": "gap-outside-role",
+      "profile": {"role": "Designer", "skills": ["visual design", "illustration"], "bio": "Designs marketing illustrations."},
+      "window": "Participant 1: The Postgres replica lag spiked to forty seconds during the batch job last night.\nParticipant 2: We should move the batch job to the read replica's off-peak window.\nParticipant 1: Let's tune the WAL settings first and see.",
+      "gaps": []
+    },
+    {
+      "id": "decision-complete",
+      "profile": {"role": "Product manager", "skills": ["pricing"], "bio": "Owns pricing and packaging."},
+      "window": "Participant 1: Final call: the Pro plan goes from 20 to 25 dollars per seat on January 1st for new customers only.\nParticipant 2: Existing customers keep 20 until their renewal, and support has the FAQ ready.\nParticipant 1: Marketing sends the announcement on December 1st. Done.",
+      "gaps": []
+    }
+  ]
+}
