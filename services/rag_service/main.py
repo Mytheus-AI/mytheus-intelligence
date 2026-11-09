@@ -49,6 +49,10 @@ ALLOWED_CALLERS = frozenset({"agent-runtime-service"})
 USER_HEADER = "x-mytheus-user"
 
 
+class NotConfigured(RuntimeError):
+    """rag-service's own secrets are absent: serve 503, do not crash."""
+
+
 def resolve_caller(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),  # noqa: B008
@@ -88,8 +92,15 @@ def build_app(service: RAGService | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         closers: list[Any] = []
-        if getattr(app.state, "rag", None) is None:  # pragma: no cover - production wiring
-            app.state.rag, closers = _wire_from_env()
+        if getattr(app.state, "rag", None) is None and not getattr(app.state, "wired", False):
+            # Not configured (no RAG_SERVICE_TOKEN yet, before enable-tiers.sh has run) is a
+            # 503 on the route, not a crash loop: one tier's missing secret must not fail the
+            # whole stack's deploy health gate. /healthz stays up; the reason is logged.
+            app.state.wired = True
+            try:
+                app.state.rag, closers = _wire_from_env()
+            except NotConfigured as exc:
+                logger.error("rag-service not configured: %s; /api/rag/query answers 503", exc)
         yield
         for close in closers:  # pragma: no cover
             close()
@@ -127,7 +138,7 @@ def _wire_from_env() -> tuple[RAGService, list[Any]]:  # pragma: no cover - prod
 
     token = os.environ.get("RAG_SERVICE_TOKEN", "")
     if len(token) < 32:
-        raise RuntimeError("RAG_SERVICE_TOKEN must be set (32+ characters)")
+        raise NotConfigured("RAG_SERVICE_TOKEN must be set (32+ characters)")
     redis = from_url(os.environ.get("REDIS_URL", "redis://localhost:6390"))
     gate = BudgetGate(redis, BillingRefresher(service="rag-service", token=token))
     producer = Producer(

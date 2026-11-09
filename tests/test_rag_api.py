@@ -189,3 +189,13 @@ def test_parse_passages_tolerates_missing_optional_fields():
         }
     )
     assert p.kind == "document" and p.element_id == "el" and p.meeting_id is None
+
+
+def test_unconfigured_service_stays_up_and_answers_503(monkeypatch):
+    """No RAG_SERVICE_TOKEN (before enable-tiers.sh runs): /healthz is up, the route is 503."""
+    monkeypatch.delenv("RAG_SERVICE_TOKEN", raising=False)
+    monkeypatch.setenv(rag_main.CALLER_TOKENS_ENV, f"agent-runtime-service={SECRET}")
+    with TestClient(rag_main.build_app()) as client:
+        assert client.get("/healthz").status_code == 200
+        r = client.post("/api/rag/query", json={"query": "x"}, headers=_agent())
+        assert r.status_code == 503
