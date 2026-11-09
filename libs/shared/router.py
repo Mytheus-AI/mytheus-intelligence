@@ -170,16 +170,23 @@ class LiteLLMRouter:
             {"role": "user", "content": user},
         ]
         call_id = str(uuid.uuid4())
+        extra = dict(self._extra)
+        if tier == "triage":
+            # Haiku 5.5 thinks by default (effort `medium`), and a gate's few output tokens
+            # were spent on thinking blocks: the call stopped at `length` with empty text, which
+            # parses as score 0 and silently closed the gate. Triage calls are short
+            # classifications; thinking stays off for them (allowed at effort <= high).
+            extra["thinking"] = {"type": "disabled"}
         if on_delta is None:
             resp = await self._complete(
-                model=model, messages=messages, max_tokens=max_tokens, **self._extra
+                model=model, messages=messages, max_tokens=max_tokens, **extra
             )
             usage = resp.get("usage") if isinstance(resp, dict) else getattr(resp, "usage", None)
             in_tok, out_tok = _usage_tokens(usage)
             await self._meter(org_id, user_id, in_tok + out_tok, tier, call_id)
             text = _text_of(resp)
         else:
-            text, in_tok, out_tok = await self._stream(model, messages, max_tokens, on_delta)
+            text, in_tok, out_tok = await self._stream(model, messages, max_tokens, on_delta, extra)
             await self._meter(org_id, user_id, in_tok + out_tok, tier, call_id)
         if key is not None and self._cache is not None and text:
             await self._cache.set(key, CachedCompletion(text, in_tok, out_tok))
@@ -199,7 +206,12 @@ class LiteLLMRouter:
         )
 
     async def _stream(
-        self, model: str, messages: list[dict[str, Any]], max_tokens: int, on_delta: OnDelta
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        max_tokens: int,
+        on_delta: OnDelta,
+        extra: dict[str, Any],
     ) -> tuple[str, int, int]:
         stream = await self._complete(
             model=model,
@@ -207,7 +219,7 @@ class LiteLLMRouter:
             max_tokens=max_tokens,
             stream=True,
             stream_options={"include_usage": True},
-            **self._extra,
+            **extra,
         )
         parts: list[str] = []
         in_tok = out_tok = 0
