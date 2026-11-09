@@ -1,6 +1,12 @@
 {
-  "about": "Minimum relevance precision and recall the pre-gate prompt must reach on the golden set at the default threshold before it may become the default. These are targets set before the first measured run, not measurements. Replace them with the measured numbers of the current default once a live run has been recorded, so a new prompt must beat it.",
-  "measured": false,
-  "min_precision": 0.75,
-  "min_recall": 0.75
+  "about": "Minimum relevance precision and recall the pre-gate prompt must reach on the golden set at the default threshold before it may become the default. Measured from the current default (personal_listener_gate@v1) on its first live run; a new prompt must at least match these.",
+  "measured": true,
+  "measured_on": "2026-11-09",
+  "prompt": "personal_listener_gate@v1",
+  "model": "claude-haiku-5-5",
+  "threshold": 0.5,
+  "golden_windows": 14,
+  "tokens": 6034,
+  "min_precision": 1.0,
+  "min_recall": 1.0
 }
