@@ -125,6 +125,39 @@ class Emitter:
         )
         self._produce(env, key=f"{window.org_id}:{window.meeting_id}")
 
+    async def caption_translation(
+        self,
+        *,
+        org_id: UUID,
+        meeting_id: UUID,
+        chunk_id: str,
+        language: str,
+        status: str,
+        text: str,
+    ) -> None:
+        """One live caption translated into one language (`translation.py`): an `agent-stream`
+        record of kind `caption_translation`, to no person (the nil user); realtime-gateway
+        delivers it to the sockets of the meeting that chose `language`."""
+        env = EventEnvelope(
+            topic="agent-stream",
+            org_id=str(org_id),
+            producer=PRODUCER,
+            idempotency_key=f"caption:{chunk_id}:{language}",
+            payload={
+                "meeting_id": str(meeting_id),
+                "user_id": "00000000-0000-0000-0000-000000000000",
+                "window_id": f"caption:{chunk_id}",
+                "seq": 0,
+                "delta": text,
+                "done": True,
+                "kind": "caption_translation",
+                "chunk_id": str(chunk_id),
+                "language": language,
+                "status": status,
+            },
+        )
+        self._produce(env, key=f"{org_id}:{meeting_id}")
+
     async def result(
         self, *, window: TranscriptWindow, user_id: UUID, agent: str, result: AgentResult
     ) -> None:

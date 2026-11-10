@@ -209,6 +209,8 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.proactive.loop import (
         consumer_config as proactive_consumer_config,
     )
+    from services.agent_runtime_service.translation import enabled as translation_enabled
+    from services.agent_runtime_service.translation import start_translation
 
     logging.basicConfig(level=logging.INFO)
     set_service(GROUP)
@@ -331,6 +333,17 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         background.append(
             asyncio.create_task(run_proactive_loop(proactive_consumer, codec, proactive_loop, stop))
         )
+    if translation_enabled():  # live caption translation (translation.py), same event loop
+        translation_task, translation_consumer = start_translation(
+            brokers=brokers,
+            codec=codec,
+            redis=redis,
+            router=router,
+            org_context=org_contexts.get_strict,
+            stop=stop,
+        )
+        background.append(translation_task)
+        a2a_consumers.append(translation_consumer)
     loop = Loop(runtime, emitter, Windower(idle_s=float(os.environ.get("WINDOW_IDLE_S", "15"))))
     consumer = Consumer(
         {
