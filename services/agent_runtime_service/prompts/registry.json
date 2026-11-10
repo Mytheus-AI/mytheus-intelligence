@@ -15,7 +15,8 @@
     "meeting_agent": "v2",
     "proactive_already_decided_gate": "v2",
     "proactive_already_decided": "v2",
-    "proactive_topic_watch": "v2"
+    "proactive_topic_watch": "v2",
+    "minutes": "v1"
   },
   "pins": {}
 }

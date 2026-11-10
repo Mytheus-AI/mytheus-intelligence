@@ -1,0 +1,12 @@
+{
+  "about": "Targets minutes@vN must reach on minutes_golden.json: decision_recall (expected decisions found with the right status), item_recall (open items found with the right owner), question_recall, promise_recall (each person's promises in their personal minutes), shared_promise_free (no promise on any shared minutes; must be 1.0) and leak_free (no forbidden never-record text anywhere; must be 1.0). Not yet measured: the first live run (EVAL_LIVE=1, about 10 Sonnet calls) fills in the measured_* fields and sets measured.",
+  "measured": false,
+  "prompt": "minutes@v1",
+  "golden_meetings": 3,
+  "min_decision_recall": 0.75,
+  "min_item_recall": 0.75,
+  "min_question_recall": 0.5,
+  "min_promise_recall": 0.75,
+  "min_shared_promise_free": 1.0,
+  "min_leak_free": 1.0
+}

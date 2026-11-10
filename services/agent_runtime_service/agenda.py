@@ -26,6 +26,11 @@ ADR-0039 adds, all optional and parsed tolerantly (an older core-api leaves them
   runtime's per-meeting read already. `confidential` absent is None, which the topic_watch check
   treats as confidential (fail closed).
 
+Minutes for everyone: `carry_forward.open_items` and `carry_forward.questions` (plain strings,
+optional) come from the previous meeting's shared minutes. The open items join `open_actions`
+(after them, de-duplicated, still at most 20), so the MeetingAgent carries them forward like any
+open action ("C3", raised, `unaddressed`); the questions are kept on `Agenda.questions`.
+
 `CachedAgendaSource` shares one read per meeting between the runtime (proxies) and the agents,
 for `ttl_s` (default 60 s); a failure is not cached.
 
@@ -94,6 +99,7 @@ class Agenda:
     proxies: list[Proxy] = field(default_factory=list)
     title: str = ""
     confidential: bool | None = None  # None: the route did not say (treated as confidential)
+    questions: list[str] = field(default_factory=list)  # unanswered last time (minutes)
 
     def proxy(self, user_id: UUID | None) -> Proxy | None:
         return next((p for p in self.proxies if p.user_id == user_id), None)
@@ -192,6 +198,17 @@ def parse_proxies(raw: object) -> list[Proxy]:
     return out
 
 
+def _carried(carry: dict[str, Any]) -> list[str]:
+    """The open actions, then the minutes' open items not already among them, at most 20."""
+    out = _strings(carry.get("open_actions"))
+    seen = {t.casefold() for t in out}
+    for item in _strings(carry.get("open_items")):
+        if item.casefold() not in seen and len(out) < MAX_CARRIED:
+            out.append(item)
+            seen.add(item.casefold())
+    return out
+
+
 def parse_agenda(body: object) -> Agenda | None:
     if not isinstance(body, dict) or not isinstance(body.get("items"), list):
         return None
@@ -207,12 +224,13 @@ def parse_agenda(body: object) -> Agenda | None:
         host_user_id=_uuid(body.get("host_user_id")),
         items=items,
         previous_meeting_id=_uuid(body.get("previous_meeting_id")),
-        open_actions=_strings(carry.get("open_actions")),
+        open_actions=_carried(carry),
         decisions=_strings(carry.get("decisions")),
         scheduled_minutes=_scheduled_minutes(body, items),
         proxies=parse_proxies(body.get("proxies")),
         title=" ".join(body["title"].split())[:200] if isinstance(body.get("title"), str) else "",
         confidential=body["confidential"] if isinstance(body.get("confidential"), bool) else None,
+        questions=_strings(carry.get("questions")),
     )
 
 

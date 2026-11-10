@@ -29,6 +29,11 @@ ProactiveAgent (P11, `proactive/loop.py`) runs beside it too: `decisions` + `act
 the process exits without committing, like the window loop, and restarts from the last safe
 offset. `PROACTIVE_AGENT=0` leaves it unstarted.
 
+Minutes for everyone (`minutes.py`) runs beside it too: `meeting-events` in group
+`agent-runtime-minutes`, its own producer; on `ended` it writes one set of minutes per
+participant and one shared set. It needs `CORE_URL` + `CORE_CALLER_TOKEN` (core-api's internal
+minutes source); `MINUTES_AGENT=0` leaves it unstarted.
+
 ADR-0039: one `OrgContextClient` (the company brain over `GetOrgContext`, cached in-process) feeds
 every window's prompts, and one `CachedAgendaSource` (core-api's internal agenda route) is shared
 by the runtime (proxied participants, C6), the MeetingAgent and ProactiveAgent's window checks
@@ -198,6 +203,16 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         deps_from_env as proactive_from_env,
     )
     from services.agent_runtime_service.emitter import Emitter
+    from services.agent_runtime_service.minutes import TOPIC as MINUTES_TOPIC
+    from services.agent_runtime_service.minutes import (
+        MinutesLoop,
+        MinutesWriter,
+        run_minutes_loop,
+    )
+    from services.agent_runtime_service.minutes import (
+        consumer_config as minutes_consumer_config,
+    )
+    from services.agent_runtime_service.minutes import source_from_env as minutes_from_env
     from services.agent_runtime_service.policy import AgentPolicyClient
     from services.agent_runtime_service.proactive.loop import (
         TOPICS as PROACTIVE_TOPICS,
@@ -330,6 +345,33 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         background.append(
             asyncio.create_task(run_proactive_loop(proactive_consumer, codec, proactive_loop, stop))
         )
+    minutes_source = minutes_from_env()
+    if minutes_source is not None and os.environ.get("MINUTES_AGENT", "1") != "0":
+        minutes_consumer = Consumer(minutes_consumer_config(brokers))
+        minutes_consumer.subscribe([MINUTES_TOPIC])
+        a2a_consumers.append(minutes_consumer)
+        minutes_emitter = Emitter(
+            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            codec,
+        )
+        minutes_loop = MinutesLoop(
+            MinutesWriter(
+                loader,
+                router,
+                source=minutes_source,
+                # Strict: minutes are durable and shareable, so an unknown never-record list is
+                # retried, never treated as "none".
+                org_context=org_contexts.get_strict,
+            ),
+            minutes_emitter,
+            claims=redis,
+            settle_s=float(os.environ.get("MINUTES_SETTLE_S", "15")),
+        )
+        background.append(
+            asyncio.create_task(run_minutes_loop(minutes_consumer, codec, minutes_loop, stop))
+        )
+    else:
+        logger.warning("minutes off: no CORE_URL / CORE_CALLER_TOKEN, or MINUTES_AGENT=0")
     loop = Loop(runtime, emitter, Windower(idle_s=float(os.environ.get("WINDOW_IDLE_S", "15"))))
     consumer = Consumer(
         {

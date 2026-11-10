@@ -31,7 +31,9 @@ from typing import Any, TypedDict
 from uuid import UUID
 
 USER_MARKER = "---user---"
-CACHED_KEYS = ("company", "ground_rules", "owners")  # org-stable: the same for every window
+# org-stable: the same for every window. `meeting_record` (minutes@vN) is the ended meeting's
+# whole record, the same for the shared minutes and every participant's minutes.
+CACHED_KEYS = ("company", "ground_rules", "owners", "meeting_record")
 _LEADING = re.compile(r"\{(\w+)\}")
 
 
