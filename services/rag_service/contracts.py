@@ -22,6 +22,9 @@ class RagQueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     generate: bool = False
     meeting_id: UUID | None = None  # optional: narrow to one meeting (still participant-scoped)
+    # Optional: a caller-forced source filter (P11 ProactiveAgent asks for "decisions" only).
+    # It overrides the expansion's advisory source and is still participant-scoped.
+    source: Literal["transcripts", "documents", "decisions"] | None = None
 
 
 class Citation(BaseModel):

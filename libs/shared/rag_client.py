@@ -93,14 +93,25 @@ class HttpRagClient:
         self._timeout = timeout_s
 
     async def retrieve(
-        self, *, org_id: UUID, user_id: UUID, query: str, meeting_id: UUID | None = None
+        self,
+        *,
+        org_id: UUID,
+        user_id: UUID,
+        query: str,
+        meeting_id: UUID | None = None,
+        source: str | None = None,
     ) -> list[RagPassage]:
+        """`source` ("transcripts" | "documents" | "decisions") forces rag-service's source
+        filter; ProactiveAgent's conflict check asks for "decisions" only. Not part of the
+        `RagClient` protocol: only callers that hold an `HttpRagClient` use it."""
         if not self._token:
             logger.warning("rag_client: RAG_CALLER_TOKEN unset; no grounding")
             return []
         body: dict[str, Any] = {"query": query[:1000], "generate": False}
         if meeting_id is not None:
             body["meeting_id"] = str(meeting_id)
+        if source is not None:
+            body["source"] = source
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 res = await client.post(

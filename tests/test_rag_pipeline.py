@@ -467,3 +467,29 @@ def test_rerank_rebinds_duplicate_texts_to_distinct_indexes():
         (2, 0.8),
         (1, pytest.approx(0.8808, abs=1e-3)),
     ]
+
+
+# --- P11: a caller-forced source (ProactiveAgent's decision-only search) -------------------
+
+
+async def test_a_caller_forced_source_returns_decisions_only():
+    svc, parts = build(llm_replies=["{}"])
+    res = await svc.query(
+        CALLER, q("what did we decide about the pro seat price", source="decisions")
+    )
+    assert res.answer_passages and {p.citation.kind for p in res.answer_passages} == {"decision"}
+    assert parts["vector"].calls and all(
+        c["kinds"] <= {"decision", "action"} for c in parts["vector"].calls
+    )
+    assert parts["lexical"].calls == []  # the transcript-only arm never runs
+    assert res.filters is not None and res.filters.source == "decisions"
+    # still participant-scoped: only the asker's meetings reach the arm
+    assert all(set(c["meeting_ids"]) <= {M_OLD, M_NEW} for c in parts["vector"].calls)
+    assert cache_key(ORG, PRIYA, q("seat", source="decisions")) != cache_key(ORG, PRIYA, q("seat"))
+
+
+def test_an_unknown_forced_source_is_rejected():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        q("seat", source="emails")

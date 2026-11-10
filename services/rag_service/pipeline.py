@@ -120,7 +120,7 @@ class _Run:
 
 def query_hash(req: RagQueryRequest) -> str:
     norm = " ".join(req.query.lower().split())
-    raw = f"{int(req.generate)}|{req.meeting_id or ''}|{norm}"
+    raw = f"{int(req.generate)}|{req.meeting_id or ''}|{req.source or ''}|{norm}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
@@ -290,8 +290,10 @@ class RAGService:
             and self._expander is not None
             and should_expand(req.query)
         )
+        # A caller-forced source (`req.source`) holds from the first retrieval on.
+        base = Filters(source=req.source)
         raw_lists = asyncio.create_task(
-            self._retrieve_lists(caller, scope, req, [req.query], Filters(), [])
+            self._retrieve_lists(caller, scope, req, [req.query], base, [])
         )
         expansion = Expansion()
         if expand:
@@ -312,9 +314,12 @@ class RAGService:
         filters = expansion.filters if self.config.filters else Filters()
         if not self.config.source_filter:
             filters = replace(filters, source=None)
+        if req.source is not None:
+            filters = replace(filters, source=req.source)
         topics = expansion.topics if self.config.graph else []
         lists, pool = await raw_lists
-        if filters.narrows:
+        narrower = filters != base  # the raw query ran under `base` only
+        if narrower:
             # The raw query ran before the filters existed: hold its hits to them now.
             allowed, kinds, speakers = self._admission(scope, req, filters)
             lists = [
@@ -322,7 +327,7 @@ class RAGService:
                 for ranked in lists
             ]
         extra = list(expansion.variants)
-        if filters.narrows:
+        if narrower:
             extra = [req.query, *extra]  # the raw query again, now with the filters pushed down
         if extra or topics:
             more_lists, more_pool = await self._retrieve_lists(
