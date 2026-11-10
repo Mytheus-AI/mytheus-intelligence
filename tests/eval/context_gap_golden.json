@@ -1,0 +1,113 @@
+{
+  "about": "Golden set for ContextGapAgent's shared gate (context_gap_gate@v1). Each case is one 30 s window, every speaker as 'Participant N' in order of first speaking. is_gap: the window refers to specific prior context (an earlier decision, meeting, task or discussion) that it does not restate, so a participant who missed it would lack it. For gap cases, keywords are lowercase groups the standalone query must contain ('a|b' = either), i.e. the query names the topic. No-gap cases are mostly windows that DO trip the deterministic detector but are not a gap (a generic phrase, a reference explained in the same window, a plan about the future), plus two that never reach the model. Labels are the maintainer's judgement, written before any model was run against them.",
+  "cases": [
+    {
+      "id": "pricing-decision-reference",
+      "window": "Participant 1: Before we go further on the dashboards, the pricing decision from last time still stands, right?\nParticipant 2: Yes, nothing changed there.\nParticipant 1: Good, then marketing can build the page around it.",
+      "is_gap": true,
+      "keywords": ["pricing|price"]
+    },
+    {
+      "id": "db-choice-we-decided",
+      "window": "Participant 1: For the new service, we decided on Postgres last sprint, so no Mongo.\nParticipant 2: Right, same reasons as before.\nParticipant 3: Okay, I'll set up the schema then.",
+      "is_gap": true,
+      "keywords": ["postgres|database|mongo"]
+    },
+    {
+      "id": "who-owns-auth-migration",
+      "window": "Participant 1: Who owns the auth migration now that Priya moved teams?\nParticipant 2: I thought we settled that in the previous meeting.\nParticipant 1: I wasn't there.",
+      "is_gap": true,
+      "keywords": ["auth|authentication|login"]
+    },
+    {
+      "id": "vendor-contract-what-happened",
+      "window": "Participant 1: What happened with the Acme vendor contract?\nParticipant 2: Legal had concerns, it went back and forth for a while.\nParticipant 1: So where did it land?",
+      "is_gap": true,
+      "keywords": ["acme|vendor|contract"]
+    },
+    {
+      "id": "as-discussed-rollout",
+      "window": "Participant 1: As discussed, the mobile rollout waits until the crash rate is fixed.\nParticipant 2: Do we have a target number for that?\nParticipant 1: The one we agreed on.",
+      "is_gap": true,
+      "keywords": ["mobile|rollout|crash"]
+    },
+    {
+      "id": "per-security-review",
+      "window": "Participant 1: Per the security review, we can't ship the export feature yet.\nParticipant 2: What exactly did they flag?\nParticipant 1: It's in the findings, there were a few items.",
+      "is_gap": true,
+      "keywords": ["security|export"]
+    },
+    {
+      "id": "follow-up-hiring-plan",
+      "window": "Participant 1: Can someone follow up on the hiring plan from the leadership sync?\nParticipant 2: Which version, the one with two backend roles?\nParticipant 1: Whatever we ended up with.",
+      "is_gap": true,
+      "keywords": ["hiring|hire|headcount"]
+    },
+    {
+      "id": "remember-launch-move",
+      "window": "Participant 1: Remember when we moved the launch because of the payment provider?\nParticipant 2: Vaguely.\nParticipant 1: Same risk again with the new provider, I think.",
+      "is_gap": true,
+      "keywords": ["launch|payment|provider"]
+    },
+    {
+      "id": "sso-agreed-scope",
+      "window": "Participant 1: We agreed on the SSO scope with the enterprise customer, so let's not reopen it.\nParticipant 2: Fine by me.\nParticipant 3: I just want to make sure SAML is in.",
+      "is_gap": true,
+      "keywords": ["sso|saml|single sign"]
+    },
+    {
+      "id": "last-time-i-checked",
+      "window": "Participant 1: Last time I checked, the build took about eight minutes.\nParticipant 2: It's closer to ten now.\nParticipant 1: Let's look at caching then.",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "decision-made-in-window",
+      "window": "Participant 1: Okay, so the decision is we go with weekly releases from now on.\nParticipant 2: Agreed, weekly releases starting next Monday.\nParticipant 3: I'll update the release calendar.",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "explained-in-window",
+      "window": "Participant 1: As we discussed, the API rate limit is 100 requests per minute per tenant.\nParticipant 2: Right, 100 per minute, enforced at the gateway.\nParticipant 1: And we return a 429 with a retry header.",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "future-follow-up",
+      "window": "Participant 1: I'll follow up on this tomorrow once I have the numbers.\nParticipant 2: Sounds good.\nParticipant 1: Thanks everyone, talk soon.",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "small-talk-last-meeting",
+      "window": "Participant 1: Sorry I dropped off the last meeting, my internet died.\nParticipant 2: No worries, happens to everyone.\nParticipant 1: Can you all hear me okay now?",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "who-owns-answered",
+      "window": "Participant 1: Who owns the onboarding email redesign?\nParticipant 2: That's me, I picked it up on Monday, first draft by Friday.\nParticipant 1: Great, thanks.",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "per-the-agenda",
+      "window": "Participant 1: Per the agenda, let's start with the demo.\nParticipant 2: Sharing my screen now.\nParticipant 1: Can everyone see it?",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "no-reference-status",
+      "window": "Participant 1: The dashboard now loads in under two seconds.\nParticipant 2: Nice, that's a big improvement.\nParticipant 1: Next I'm looking at the export button.",
+      "is_gap": false,
+      "keywords": []
+    },
+    {
+      "id": "no-reference-planning",
+      "window": "Participant 1: Let's decide the date for the offsite.\nParticipant 2: How about the second week of March?\nParticipant 3: Works for me.",
+      "is_gap": false,
+      "keywords": []
+    }
+  ]
+}

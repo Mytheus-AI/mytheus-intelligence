@@ -1,0 +1,17 @@
+{
+  "about": "Targets ContextGapAgent's shared gate (context_gap_gate@v1) must reach on context_gap_golden.json: gap_recall (gap windows the gate opens for / gap windows), false_gap_rate (no-gap windows it opens for / no-gap windows) and query_hit_rate (opened gap windows whose standalone query names the topic). Measured on the first live run (Haiku 5.5, thinking disabled on triage). The one miss: 'explained-in-window' (the reference is restated in the same window) opened at 0.6. Each bound allows one more case of run-to-run variance (9 gap windows, 9 no-gap windows): a new prompt must at least match them.",
+  "measured": true,
+  "gate_prompt": "context_gap_gate@v1",
+  "golden_windows": 18,
+  "min_gap_recall": 0.85,
+  "max_false_gap_rate": 0.25,
+  "min_query_hit_rate": 0.85,
+  "measured_on": "2026-11-10",
+  "gate_model": "claude-haiku-5-5",
+  "threshold": 0.5,
+  "tokens": 9893,
+  "calls": 16,
+  "measured_gap_recall": 1.0,
+  "measured_false_gap_rate": 0.111,
+  "measured_query_hit_rate": 1.0
+}
