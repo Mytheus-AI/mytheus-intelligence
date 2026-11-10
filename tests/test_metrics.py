@@ -27,7 +27,9 @@ def test_create_app_exposes_metrics_without_raw_paths() -> None:
     body = c.get("/metrics").text
     assert 'route="/v1/items/{item_id}"' in body
     assert "11111111-2222" not in body
-    assert "org_id" not in body
+    # HTTP series never carry a tenant label (the agent quality series do, by design:
+    # libs/shared/agent_metrics.py)
+    assert not any("org_id" in ln for ln in body.splitlines() if ln.startswith("mytheus_http"))
     assert "mytheus_http_request_duration_seconds_bucket" in body
     assert c.get("/metrics", headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 404
 

@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Literal
 from uuid import UUID
 
+from libs.shared import agent_metrics
 from libs.shared.prompts import Prompt, PromptLoader
 from libs.shared.router import BudgetBlocked, LiteLLMRouter
 from libs.shared.state import AgentResult, AgentState
@@ -73,6 +74,7 @@ class BaseAgent(ABC):
             self.blocked = True
             return None
         final = out if isinstance(out, AgentState) else dataclasses.replace(state, **dict(out))
+        agent_metrics.observe_window(self.name, state.org_id, final)
         return final.result
 
     async def terminate(self) -> None:

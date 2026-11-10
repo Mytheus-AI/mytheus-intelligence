@@ -95,6 +95,13 @@ EMBEDDING_BATCH_SIZE = Histogram(
     buckets=(1, 2, 4, 8, 16, 32, 64, 128, 256),
 )
 
+AGENT_TIME_TO_CARD = Histogram(
+    "mytheus_agent_time_to_card_seconds",
+    "Seconds from the end of the speech a card is about to when its result is emitted.",
+    ["agent", "org_id"],
+    buckets=(0.5, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 60),
+)
+
 
 def set_service(name: str) -> None:
     global _SERVICE

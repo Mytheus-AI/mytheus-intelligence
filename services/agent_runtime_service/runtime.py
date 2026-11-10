@@ -48,6 +48,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from uuid import UUID
 
+from libs.shared import agent_metrics
 from libs.shared.base_agent import BaseAgent
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import CompanyContext
@@ -160,6 +161,7 @@ class AgentRuntime:
 
     async def process_window(self, window: TranscriptWindow) -> int:
         """Run every agent on one closed window. Returns the number of results emitted."""
+        agent_metrics.observe_meeting_window(window)
         m = self._meeting(window.org_id, window.meeting_id)
         assign_labels(m.labels, window)
         m.roster.update(u for u in map(as_user_id, window.speaker_ids) if u is not None)
@@ -179,6 +181,7 @@ class AgentRuntime:
             m.quiet_until_ms = window.end_ms + (window.end_ms - window.start_ms)
         if window.start_ms < m.quiet_until_ms:
             logger.info("window %s is never-record; no agent runs", window.window_id)
+            agent_metrics.never_record_skip("window", window.org_id)
             return 0
         everyone = dict(zip([*users, *proxied], found, strict=True))
         extra: dict[str, Any] = {CONTEXT_KEY: overrides}
@@ -257,6 +260,7 @@ class AgentRuntime:
             for user_id, raw in results:
                 result = post.result(raw)
                 if result is None:
+                    agent_metrics.never_record_skip("output", window.org_id)
                     continue  # nothing of it may leave the tier (never record)
                 try:
                     await self._sink.result(
@@ -332,6 +336,8 @@ class AgentRuntime:
                 )
             if result is not None:
                 result = post.result(result)
+                if result is None:
+                    agent_metrics.never_record_skip("output", window.org_id)
             if result is not None:
                 await self._sink.result(
                     window=window, user_id=user_id, agent=agent.name, result=result

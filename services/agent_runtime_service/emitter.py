@@ -34,6 +34,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
+from libs.shared import agent_metrics
 from libs.shared.events import EventEnvelope
 from libs.shared.state import AgentResult, TranscriptWindow
 
@@ -149,6 +150,7 @@ class Emitter:
     ) -> None:
         """One `agent-results` record. `result()` is this for a window; ProactiveAgent's
         event-driven alerts (no window) call it directly."""
+        agent_metrics.observe_result(agent, org_id, result)
         env = EventEnvelope(
             topic="agent-results",
             org_id=str(org_id),
