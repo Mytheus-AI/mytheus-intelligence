@@ -18,6 +18,16 @@ outage costs one call per org per 15 s, never one per window. The parsing mirror
 The bands are `confidence > surface` surfaced, `confidence >= silent` kept silent, below that
 dropped: exactly core-api's comparisons (`worklogs.surfaced = confidence > surface`, nothing
 written below `silent`).
+
+Polish wave 2 (agents that learn): core-api now serves its CALIBRATED thresholds. The workspace
+band per agent stays in `agent_confidence_overrides` (the tenant's override moved by the
+workspace's confirm/dismiss rates), and `user_overrides` adds a person's own band for the agents
+whose output is one person's (`USER_SCOPED_AGENTS`: notes, suggestions, context fills). The
+runtime gives each participant's context their merged map (`merged_for`), so a person's notes
+and suggestions are banded with their own threshold and the meeting-wide decision and action
+cards with the workspace's, which is exactly what core-api's store and reload apply. An
+`agent-feedback` event drops the org's cached policy (`invalidate`), so a recalibration reaches
+the next window instead of waiting out the 60 s TTL.
 """
 
 from __future__ import annotations
@@ -40,6 +50,9 @@ SILENT_FROM = 0.4
 DEFAULT_TTL_S = 60.0
 FAILURE_TTL_S = 15.0
 CONTEXT_KEY = "confidence_overrides"  # where the runtime puts the overrides in each context
+# The agents whose output is one person's: the only ones a person's own band applies to (the
+# same set as core-api's `learning.USER_SCOPED_AGENTS`).
+USER_SCOPED_AGENTS = frozenset({"PersonalListenerAgent", "QuestionAgent", "ContextGapAgent"})
 
 Band = Literal["surfaced", "silent", "dropped"]
 
@@ -89,8 +102,42 @@ def parse_overrides(body: object) -> dict[str, dict[str, float]]:
     return out
 
 
+Bands = dict[str, dict[str, float]]
+
+
+@dataclass(frozen=True)
+class AgentPolicy:
+    """The workspace bands per agent and, per user id (str), that person's own bands."""
+
+    overrides: Bands
+    user_overrides: dict[str, Bands]
+
+    def merged_for(self, user_id: UUID | str | None) -> Bands:
+        """The bands one participant's context carries: the workspace's, with the person's own
+        on top for the user-scoped agents only."""
+        mine = self.user_overrides.get(str(user_id), {}) if user_id is not None else {}
+        merged = dict(self.overrides)
+        merged.update({a: b for a, b in mine.items() if a in USER_SCOPED_AGENTS})
+        return merged
+
+
+EMPTY_POLICY = AgentPolicy(overrides={}, user_overrides={})
+
+
+def parse_policy(body: object) -> AgentPolicy:
+    """The whole response; `user_overrides` absent (a core-api before wave 2) is `{}`."""
+    raw = body.get("user_overrides") if isinstance(body, Mapping) else None
+    users: dict[str, Bands] = {}
+    for user, bands in (raw.items() if isinstance(raw, Mapping) else []):
+        parsed = parse_overrides({"agent_confidence_overrides": bands})
+        kept = {a: b for a, b in parsed.items() if a in USER_SCOPED_AGENTS}
+        if kept:
+            users[str(user)] = kept
+    return AgentPolicy(overrides=parse_overrides(body), user_overrides=users)
+
+
 class AgentPolicyClient:
-    """`overrides(org_id)` never raises: a failure is `{}` (the defaults)."""
+    """`overrides(org_id)` / `policy(org_id)` never raise: a failure is `{}` (the defaults)."""
 
     def __init__(
         self,
@@ -115,10 +162,14 @@ class AgentPolicyClient:
         self._timeout = timeout_s
         self._clock = clock
         self._transport = transport
-        self._cache: dict[UUID, tuple[float, dict[str, dict[str, float]]]] = {}
+        self._cache: dict[UUID, tuple[float, AgentPolicy]] = {}
         self.fetches = 0
 
     async def overrides(self, org_id: UUID) -> dict[str, dict[str, float]]:
+        """The workspace bands (what every agent used before wave 2; ProactiveAgent still)."""
+        return (await self.policy(org_id)).overrides
+
+    async def policy(self, org_id: UUID) -> AgentPolicy:
         hit = self._cache.get(org_id)
         now = self._clock()
         if hit is not None and now < hit[0]:
@@ -129,10 +180,14 @@ class AgentPolicyClient:
             self._cache[org_id] = (now + ttl, found)
         return found
 
-    async def _fetch(self, org_id: UUID) -> tuple[dict[str, dict[str, float]], bool]:
+    def invalidate(self, org_id: UUID) -> None:
+        """Drop the org's cached policy: the next window fetches the recalibrated one."""
+        self._cache.pop(org_id, None)
+
+    async def _fetch(self, org_id: UUID) -> tuple[AgentPolicy, bool]:
         self.fetches += 1
         if not self._url or not self._token:
-            return {}, True  # unconfigured: the defaults, the same as core-api without overrides
+            return EMPTY_POLICY, True  # unconfigured: the defaults, as core-api without any
         try:
             async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as c:
                 res = await c.get(
@@ -145,13 +200,13 @@ class AgentPolicyClient:
                 )
         except httpx.HTTPError as exc:
             logger.warning("agent-policy unreachable org=%s: %s (default thresholds)", org_id, exc)
-            return {}, False
+            return EMPTY_POLICY, False
         if res.status_code != 200:
             logger.warning(
                 "agent-policy org=%s answered %s (default thresholds)", org_id, res.status_code
             )
-            return {}, False
+            return EMPTY_POLICY, False
         try:
-            return parse_overrides(res.json()), True
+            return parse_policy(res.json()), True
         except ValueError:
-            return {}, False
+            return EMPTY_POLICY, False

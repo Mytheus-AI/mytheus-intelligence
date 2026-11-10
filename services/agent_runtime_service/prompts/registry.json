@@ -1,13 +1,13 @@
 {
   "defaults": {
-    "personal_listener": "v3",
-    "personal_listener_gate": "v4",
+    "personal_listener": "v4",
+    "personal_listener_gate": "v5",
     "decision_gate": "v2",
-    "decision_agent": "v2",
+    "decision_agent": "v4",
     "action_gate": "v3",
-    "action_agent": "v2",
+    "action_agent": "v4",
     "question_gate": "v4",
-    "question_agent": "v3",
+    "question_agent": "v4",
     "context_gap_gate": "v2",
     "context_gap_agent": "v2",
     "proactive_conflict": "v2",

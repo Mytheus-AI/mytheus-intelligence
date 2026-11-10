@@ -47,6 +47,7 @@ from libs.shared.router import EXTRACT_MAX_TOKENS, EXTRACTION_EFFORT, TIER_NAMES
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
 from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
 from services.agent_runtime_service.agents.personal_listener_agent import band
+from services.agent_runtime_service.guidance import guidance_values
 from services.agent_runtime_service.names import speaker_labels
 from services.agent_runtime_service.policy import thresholds_for
 
@@ -254,7 +255,12 @@ class CandidateAgent(BaseAgent):
             out = await self.router.complete(
                 tier="extract",
                 system=self.prompt.system,
-                **self.prompt.user_parts(window=transcript, **self.user_values(s.context)),
+                **self.prompt.user_parts(
+                    window=transcript,
+                    **self.user_values(s.context),
+                    # polish wave 2: recent kept / corrected / dismissed examples ("" if none)
+                    **guidance_values(self.name, s.context),
+                ),
                 org_id=s.org_id,
                 user_id=s.user_id,
                 max_tokens=self.extract_max_tokens,

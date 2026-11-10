@@ -35,6 +35,12 @@ and the window after it, run no agent at all. Every result and every streamed de
 `names.Postprocess` on its way out: labels become display names (from the contexts fetched
 here), and anything naming a never-record topic is dropped.
 
+Polish wave 2 (agents that learn). With `learning` (`learning.LearningClient`), every
+participant's context also carries their own thresholds (the workspace's calibrated bands, plus
+their personal ones for their notes, suggestions and context fills), recent feedback examples
+for the `{guidance}` prompt block and their memory across meetings for `{person_memory}`.
+Without it, or on a failure, contexts are exactly as before.
+
 Roster and agents are in memory. That is safe for the same reason the open windows are: a
 meeting's events all arrive on one partition of this consumer group.
 """
@@ -62,6 +68,15 @@ ContextFn = Callable[[UUID, UUID], Awaitable[dict[str, Any] | None]]
 OrgContextFn = Callable[[UUID], Awaitable[CompanyContext]]
 ProxiesFn = Callable[[UUID, UUID], Awaitable[list[UUID]]]
 PolicyFn = Callable[[UUID], Awaitable[dict[str, dict[str, float]]]]
+
+
+class Learner(Protocol):
+    """Polish wave 2 (`learning.LearningClient`): each participant's context gains their own
+    thresholds, guidance examples and memory across meetings."""
+
+    async def enrich(
+        self, org_id: UUID, contexts: dict[UUID, dict[str, Any] | None]
+    ) -> dict[UUID, dict[str, Any] | None]: ...
 
 
 class Sink(Protocol):
@@ -105,6 +120,7 @@ class AgentRuntime:
         org_context: OrgContextFn | None = None,
         proxies: ProxiesFn | None = None,
         policy: PolicyFn | None = None,
+        learning: Learner | None = None,
     ) -> None:
         self._sink = sink
         self._context = user_context
@@ -112,6 +128,7 @@ class AgentRuntime:
         self._org_context = org_context
         self._proxies = proxies
         self._policy = policy
+        self._learning = learning
         self._meetings: dict[tuple[UUID, UUID], _Meeting] = {}
         self._sem = asyncio.Semaphore(max_concurrency)
 
@@ -185,6 +202,7 @@ class AgentRuntime:
         if org is not None:
             extra["org"] = org
         everyone = {u: (None if c is None else {**c, **extra}) for u, c in everyone.items()}
+        everyone = await self._learn(window, everyone)
         post = Postprocess(Namer.build(m.labels, everyone), never)
         contexts = {u: everyone[u] for u in users}
         jobs = [self._run_user(m, window, u, contexts[u], post) for u in users]
@@ -212,6 +230,17 @@ class AgentRuntime:
         except Exception:  # noqa: BLE001 - the default thresholds, as core-api without overrides
             logger.warning("agent policy unavailable org=%s; default thresholds", window.org_id)
             return {}
+
+    async def _learn(
+        self, window: TranscriptWindow, contexts: dict[UUID, dict[str, Any] | None]
+    ) -> dict[UUID, dict[str, Any] | None]:
+        if self._learning is None:
+            return contexts
+        try:
+            return await self._learning.enrich(window.org_id, contexts)
+        except Exception:  # noqa: BLE001 - nothing learned: the window runs as before wave 2
+            logger.warning("learning unavailable org=%s; window runs without it", window.org_id)
+            return contexts
 
     async def _proxied(self, window: TranscriptWindow) -> list[UUID]:
         if self._proxies is None:

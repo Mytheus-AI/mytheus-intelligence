@@ -63,7 +63,9 @@ from libs.shared.prompts import Prompt
 from libs.shared.router import EXTRACT_MAX_TOKENS, EXTRACTION_EFFORT
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
 from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
+from services.agent_runtime_service.guidance import guidance_values
 from services.agent_runtime_service.names import speaker_labels
+from services.agent_runtime_service.person_memory import memory_focus, memory_values
 from services.agent_runtime_service.policy import DEFAULT as DEFAULT_THRESHOLDS
 from services.agent_runtime_service.policy import (
     Thresholds,
@@ -250,6 +252,7 @@ def gate_values(context: dict[str, Any]) -> dict[str, str]:
         "focus": render_focus(context),
         "attendance": render_attendance(context),
         **gate_ground_rules(context),
+        **memory_focus(context),  # polish wave 2 (`personal_listener_gate@v5`); "" if none
     }
 
 
@@ -375,7 +378,11 @@ class PersonalListenerAgent(BaseAgent):
                 tier="extract",
                 system=self.prompt.system,
                 **self.prompt.user_parts(
-                    **persona_values(s.context), window=render_window(s.chunk, s.user_id)
+                    **persona_values(s.context),
+                    # polish wave 2: memory across meetings and the person's own note ratings
+                    **memory_values(s.context),
+                    **guidance_values(self.name, s.context),
+                    window=render_window(s.chunk, s.user_id),
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,
