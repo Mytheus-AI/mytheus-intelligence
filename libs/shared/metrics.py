@@ -13,6 +13,7 @@ Cardinality and privacy rules (do not relax):
 from __future__ import annotations
 
 import os
+import threading
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -171,13 +172,24 @@ def install(app: FastAPI, service_name_: str) -> None:
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+_served_ports: set[int] = set()
+_serve_lock = threading.Lock()
+
+
 def serve_metrics(port: int | None = None) -> None:
     """Expose /metrics from a non-HTTP worker (consumer, relay). ``METRICS_PORT`` overrides;
-    0 or unset-with-no-port disables. Safe to call once per process."""
+    0 or unset-with-no-port disables. Idempotent per port: a worker running several consumers
+    on threads (embedding-service's embed-on-ingest and embed-decisions) calls it once per
+    consumer, and the second bind used to raise EADDRINUSE and kill that consumer's thread."""
     env = os.environ.get("METRICS_PORT")
     chosen = port if port is not None else (int(env) if env else 0)
-    if chosen:
+    if not chosen:
+        return
+    with _serve_lock:
+        if chosen in _served_ports:
+            return
         start_http_server(chosen)
+        _served_ports.add(chosen)
 
 
 # --- consumer helpers -------------------------------------------------------------------------
