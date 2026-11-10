@@ -109,3 +109,4 @@ tests/eval/decision_last_run.json
 tests/eval/action_last_run.json
 tests/eval/question_last_run.json
 tests/eval/context_gap_last_run.json
+tests/eval/proactive_conflict_last_run.json

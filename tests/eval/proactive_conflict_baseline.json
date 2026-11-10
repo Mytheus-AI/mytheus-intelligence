@@ -1,0 +1,18 @@
+{
+  "about": "Targets ProactiveAgent's conflict judge (proactive_conflict@v1) must reach on proactive_conflict_golden.json (12 cases: 4 contradicting, 3 superseding by wording, 3 related, 2 unrelated). precision / recall are for 'an alert is emitted' (confidence >= 0.4); false_positive_rate = non-contradicting cases that raise an alert / non-contradicting cases. Measured on the first live run (Sonnet 5.5): every contradiction alerted at 0.90 to 0.95 (surfaced), no superseding, related or unrelated case alerted. Each bound allows one more case of run-to-run variance (one false alarm, one missed contradiction): a new prompt must at least match them.",
+  "measured": true,
+  "prompt": "proactive_conflict@v1",
+  "golden_cases": 12,
+  "min_precision": 0.8,
+  "min_recall": 0.75,
+  "max_false_positive_rate": 0.125,
+  "measured_on": "2026-11-10",
+  "judge_model": "claude-sonnet-5-5",
+  "tokens": 9211,
+  "calls": 12,
+  "measured_precision": 1.0,
+  "measured_recall": 1.0,
+  "measured_surfaced_precision": 1.0,
+  "measured_surfaced_recall": 1.0,
+  "measured_false_positive_rate": 0.0
+}

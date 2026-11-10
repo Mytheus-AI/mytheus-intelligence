@@ -1,0 +1,101 @@
+{
+  "about": "Golden set for ProactiveAgent's conflict judge (proactive_conflict@v1). Each case is a newly confirmed decision and ONE earlier confirmed decision of the same org (the candidate the agent would show the judge). contradicts: both cannot stand at the same time and the new decision does not say it replaces the earlier one. Categories: contradicting (a real clash), superseding (the new decision's own wording knowingly replaces, moves or reverses the earlier one; not a conflict), related (same project or topic, compatible), unrelated (different subject, sometimes similar words). Labels are the maintainer's judgement, written before any model was run against them.",
+  "cases": [
+    {
+      "id": "launch-date-clash",
+      "category": "contradicting",
+      "decision": "Launch the analytics beta to all customers on 2 December.",
+      "rationale": "Marketing wants it live before the holiday campaign.",
+      "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.",
+      "contradicts": true
+    },
+    {
+      "id": "vendor-choice-clash",
+      "category": "contradicting",
+      "decision": "Use Postgres full-text search for product search; no external search vendor.",
+      "rationale": "Keeps the stack small.",
+      "candidate": "We will adopt Algolia as the product search vendor starting this quarter.",
+      "contradicts": true
+    },
+    {
+      "id": "budget-cap-clash",
+      "category": "contradicting",
+      "decision": "Approve a 40,000 dollar contractor budget for the mobile rewrite in Q1.",
+      "rationale": "",
+      "candidate": "No contractor spending is allowed in Q1; all Q1 work stays in-house.",
+      "contradicts": true
+    },
+    {
+      "id": "region-policy-clash",
+      "category": "contradicting",
+      "decision": "Store EU customer data in the US region to simplify operations.",
+      "rationale": "One region is cheaper to run.",
+      "candidate": "EU customer data must stay in the Frankfurt region.",
+      "contradicts": true
+    },
+    {
+      "id": "launch-moved-explicitly",
+      "category": "superseding",
+      "decision": "Move the analytics beta launch from 15 January to 2 December; the security review finished early.",
+      "rationale": "Review signed off last week.",
+      "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.",
+      "contradicts": false
+    },
+    {
+      "id": "pricing-revised",
+      "category": "superseding",
+      "decision": "Update the Pro plan price from 20 to 25 dollars per seat, replacing the earlier price.",
+      "rationale": "Costs went up.",
+      "candidate": "The Pro plan costs 20 dollars per seat per month.",
+      "contradicts": false
+    },
+    {
+      "id": "vendor-reversed",
+      "category": "superseding",
+      "decision": "Reverse the earlier Algolia decision and move product search to Postgres full-text search.",
+      "rationale": "Algolia costs tripled at renewal.",
+      "candidate": "We will adopt Algolia as the product search vendor starting this quarter.",
+      "contradicts": false
+    },
+    {
+      "id": "launch-detail-added",
+      "category": "related",
+      "decision": "The analytics beta launch email goes out the morning of 15 January.",
+      "rationale": "",
+      "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.",
+      "contradicts": false
+    },
+    {
+      "id": "pricing-annual-discount",
+      "category": "related",
+      "decision": "Annual Pro plans get two months free.",
+      "rationale": "Improve cash flow.",
+      "candidate": "The Pro plan costs 20 dollars per seat per month.",
+      "contradicts": false
+    },
+    {
+      "id": "search-indexing-owner",
+      "category": "related",
+      "decision": "The data team owns the Algolia indexing pipeline.",
+      "rationale": "",
+      "candidate": "We will adopt Algolia as the product search vendor starting this quarter.",
+      "contradicts": false
+    },
+    {
+      "id": "different-product-dates",
+      "category": "unrelated",
+      "decision": "Ship the iOS app redesign on 2 December.",
+      "rationale": "",
+      "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.",
+      "contradicts": false
+    },
+    {
+      "id": "office-vs-hiring",
+      "category": "unrelated",
+      "decision": "Open the Berlin office in March.",
+      "rationale": "",
+      "candidate": "Freeze engineering hiring until the Series B closes.",
+      "contradicts": false
+    }
+  ]
+}
