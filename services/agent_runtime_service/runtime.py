@@ -49,7 +49,9 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.metrics import record_off_record_skip
 from libs.shared.never_record import NeverRecordPolicy
+from libs.shared.off_record import is_off_record
 from libs.shared.org_context import CompanyContext
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
 from services.agent_runtime_service.names import Namer, Postprocess, assign_labels
@@ -105,7 +107,9 @@ class AgentRuntime:
         org_context: OrgContextFn | None = None,
         proxies: ProxiesFn | None = None,
         policy: PolicyFn | None = None,
+        redis: Any | None = None,  # the off-record flag (libs/shared/off_record.py)
     ) -> None:
+        self._redis = redis
         self._sink = sink
         self._context = user_context
         self._factories = agents
@@ -160,6 +164,12 @@ class AgentRuntime:
 
     async def process_window(self, window: TranscriptWindow) -> int:
         """Run every agent on one closed window. Returns the number of results emitted."""
+        if self._redis is not None and await is_off_record(
+            self._redis, window.org_id, window.meeting_id
+        ):  # off the record: no agent, no result, no delta, no model call
+            logger.info("window %s is off the record; no agent runs", window.window_id)
+            record_off_record_skip("agent_window")
+            return 0
         m = self._meeting(window.org_id, window.meeting_id)
         assign_labels(m.labels, window)
         m.roster.update(u for u in map(as_user_id, window.speaker_ids) if u is not None)

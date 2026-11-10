@@ -290,6 +290,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
             meeting=MeetingDeps(agenda=agenda, redis=redis),
         ),
         max_concurrency=int(os.environ.get("AGENT_MAX_CONCURRENCY", "8")),
+        redis=redis,  # off the record: no agent runs (libs/shared/off_record.py)
     )
     stop = asyncio.Event()
     background: list[asyncio.Task[None]] = []
