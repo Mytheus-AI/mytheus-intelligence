@@ -31,6 +31,7 @@ from qdrant_client.models import (
     MatchValue,
     OptimizersConfigDiff,
     PointStruct,
+    Range,
     ScalarQuantization,
     ScalarQuantizationConfig,
     ScalarType,
@@ -131,8 +132,40 @@ async def ensure_collection(client: AsyncQdrantClient, name: str) -> None:
 
 
 def _org_filter(org_id: UUID) -> Filter:
-    """The mandatory payload backstop (ADR-0006 §1: "every query is org-scoped TWICE")."""
-    return Filter(must=[FieldCondition(key="org_id", match=MatchValue(value=str(org_id)))])
+    """The mandatory payload backstop (ADR-0006 §1: "every query is org-scoped TWICE"). An
+    org-wide search never returns a chunk of a confidential meeting (`confidential: true`,
+    `libs/shared/index_guard.py`): those are reachable only through a participant-scoped query
+    (rag-service's `meeting_ids` allowlist)."""
+    return Filter(
+        must=[FieldCondition(key="org_id", match=MatchValue(value=str(org_id)))],
+        must_not=[FieldCondition(key="confidential", match=MatchValue(value=True))],
+    )
+
+
+async def delete_window(
+    client: AsyncQdrantClient,
+    logical: str,
+    org_id: UUID,
+    meeting_id: UUID,
+    start_ms: int,
+    end_ms: int,
+) -> None:
+    """Remove a meeting's points whose `start_ms` is in [start_ms, end_ms): the never-record
+    purge of a window indexed before the chunk that named the topic arrived. Org-scoped twice,
+    like every other operation; a collection that does not exist yet has nothing to remove."""
+    name = physical_collection(logical, org_id)
+    if not await client.collection_exists(name):
+        return
+    await client.delete(
+        name,
+        points_selector=Filter(
+            must=[
+                FieldCondition(key="org_id", match=MatchValue(value=str(org_id))),
+                FieldCondition(key="meeting_id", match=MatchValue(value=str(meeting_id))),
+                FieldCondition(key="start_ms", range=Range(gte=start_ms, lt=end_ms)),
+            ]
+        ),
+    )
 
 
 async def upsert(

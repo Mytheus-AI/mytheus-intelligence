@@ -21,6 +21,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from libs.shared.avro_codec import AvroCodec
+from libs.shared.index_guard import guard_from_env
 from services.search_service.consumer import TranscriptChunkSearchConsumer
 
 
@@ -34,9 +35,12 @@ def main() -> None:
     engine = create_async_engine(database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
+    redis = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6390"))
     consumer = TranscriptChunkSearchConsumer(
+        # never record + confidential meetings (libs/shared/index_guard.py)
+        guard=guard_from_env("search-service", redis),
         session_factory=session_factory,
-        redis=Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6390")),
+        redis=redis,
         codec=AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085")),
         dlq_producer=Producer(
             {"bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092")}
