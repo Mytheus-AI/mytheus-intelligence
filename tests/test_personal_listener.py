@@ -304,6 +304,7 @@ def test_the_shipped_prompts_are_registered_and_render():
         "proactive_already_decided_gate": "v2",
         "proactive_already_decided": "v2",
         "proactive_topic_watch": "v2",
+        "minutes": "v1",  # minutes for everyone
     }
 
 

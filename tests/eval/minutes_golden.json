@@ -1,0 +1,79 @@
+{
+  "about": "Golden meetings for minutes@vN (minutes for everyone). Each case is a whole ended meeting: speakers by label, recorded decisions, the never-record topics. Expected facts are keyword groups ('a|b' = either): shared decisions with status, open items with the owner's label, unanswered questions, and per label the promises that person made. `forbidden` texts (never-record) must appear nowhere in any minutes. Speakers 'Participant N' are mapped to synthetic users in order.",
+  "cases": [
+    {
+      "id": "pricing",
+      "participants": ["Participant 1", "Participant 2", "Participant 3"],
+      "never_record": [],
+      "recorded_decisions": [{"content": "Raise the base price by 8% from January", "status": "proposed"}],
+      "transcript": [
+        "Participant 1: Let's settle pricing. The proposal is an 8% rise on the base plan from January.",
+        "Participant 2: I'm fine with 8%. Enterprise stays where it is for now.",
+        "Participant 3: Agreed on 8%. What about the vendor split for hosting? Finance hasn't confirmed it.",
+        "Participant 2: I'll confirm the vendor split with finance by Friday.",
+        "Participant 1: Good. Let's push the reseller discount decision to October, we don't have the data.",
+        "Participant 3: Does legal need to review the new data terms before we announce?",
+        "Participant 1: Not sure, nobody here knows. Let's move on.",
+        "Participant 3: I'll draft the customer announcement for Participant 1 to review next week."
+      ],
+      "decisions": [
+        {"keywords": ["8|eight", "price|pricing"], "status": "agreed"},
+        {"keywords": ["reseller", "discount"], "status": "deferred"}
+      ],
+      "open_items": [
+        {"keywords": ["vendor"], "owner": "Participant 2"},
+        {"keywords": ["announcement"], "owner": "Participant 3"}
+      ],
+      "questions": [{"keywords": ["legal"]}],
+      "promises": {
+        "Participant 2": [{"keywords": ["vendor"]}],
+        "Participant 3": [{"keywords": ["announcement"]}],
+        "Participant 1": []
+      },
+      "forbidden": []
+    },
+    {
+      "id": "hiring-never-record",
+      "participants": ["Participant 1", "Participant 2"],
+      "never_record": ["layoffs"],
+      "recorded_decisions": [],
+      "transcript": [
+        "Participant 1: Two backend hires for Q4, we agreed last week, so let's open the roles today.",
+        "Participant 2: Yes. I'll post both job descriptions by Wednesday.",
+        "Participant 1: Who interviews for the platform role? We still don't have a second interviewer.",
+        "Participant 2: No idea yet.",
+        "Participant 1: Separately, the layoffs in the sales team are planned for March.",
+        "Participant 2: Understood, the sales reductions stay between us.",
+        "Participant 1: Back to hiring: we keep the salary bands as they are."
+      ],
+      "decisions": [
+        {"keywords": ["salary|band"], "status": "agreed"},
+        {"keywords": ["hire|hiring|roles"], "status": "agreed"}
+      ],
+      "open_items": [{"keywords": ["job description|job post|post"], "owner": "Participant 2"}],
+      "questions": [{"keywords": ["interview"]}],
+      "promises": {
+        "Participant 2": [{"keywords": ["job description|post"]}],
+        "Participant 1": []
+      },
+      "forbidden": ["layoff", "march", "sales team", "reduction"]
+    },
+    {
+      "id": "small-talk",
+      "participants": ["Participant 1", "Participant 2"],
+      "never_record": [],
+      "recorded_decisions": [],
+      "transcript": [
+        "Participant 1: Morning! How was the weekend?",
+        "Participant 2: Great, went hiking. You?",
+        "Participant 1: Quiet one. Can you hear me okay?",
+        "Participant 2: Yes, all good. Let's catch up properly tomorrow."
+      ],
+      "decisions": [],
+      "open_items": [],
+      "questions": [],
+      "promises": {"Participant 1": [], "Participant 2": []},
+      "forbidden": ["hiking", "weekend"]
+    }
+  ]
+}
