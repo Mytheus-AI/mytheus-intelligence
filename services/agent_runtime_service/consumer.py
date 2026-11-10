@@ -23,6 +23,11 @@ on `agent-requests` (group `agent-runtime-a2a`) and this instance's response rou
 `agent-responses` (group `agent-runtime-resp-{hostname}`). Every `poll` runs in a worker thread
 so a waiting `ContextGapAgent` (which awaits responses inside `process_window`) is never starved.
 Without `AGENT_IDENTITY_SECRET` neither starts and ContextGapAgent runs RAG-only.
+
+ProactiveAgent (P11, `proactive/loop.py`) runs beside it too: `decisions` + `actions` in group
+`agent-runtime-proactive`, with its own producer. If that loop dies (an unacknowledged alert),
+the process exits without committing, like the window loop, and restarts from the last safe
+offset. `PROACTIVE_AGENT=0` leaves it unstarted.
 """
 
 from __future__ import annotations
@@ -177,7 +182,24 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         ContextGapSettings,
         rag_from_env,
     )
+    from services.agent_runtime_service.agents.proactive_agent import (
+        ProactiveAgent,
+        ProactiveSettings,
+    )
+    from services.agent_runtime_service.agents.proactive_agent import (
+        deps_from_env as proactive_from_env,
+    )
     from services.agent_runtime_service.emitter import Emitter
+    from services.agent_runtime_service.proactive.loop import (
+        TOPICS as PROACTIVE_TOPICS,
+    )
+    from services.agent_runtime_service.proactive.loop import (
+        ProactiveLoop,
+        run_proactive_loop,
+    )
+    from services.agent_runtime_service.proactive.loop import (
+        consumer_config as proactive_consumer_config,
+    )
 
     logging.basicConfig(level=logging.INFO)
     set_service(GROUP)
@@ -224,10 +246,12 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         related=related_from_env(),
         user_context=contexts.get,
     )
+    proactive_settings = ProactiveSettings.from_env()
+    proactive = proactive_from_env()
     runtime = AgentRuntime(
         sink=emitter,
         user_context=contexts.get,
-        agents=registered_agents(loader, router, context_gap=gap),
+        agents=registered_agents(loader, router, context_gap=gap, proactive=proactive),
         max_concurrency=int(os.environ.get("AGENT_MAX_CONCURRENCY", "8")),
     )
     stop = asyncio.Event()
@@ -254,6 +278,21 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         ]
     else:
         logger.warning("AGENT_IDENTITY_SECRET unset: agent-to-agent off, ContextGapAgent RAG-only")
+    if proactive_settings.enabled:
+        proactive_consumer = Consumer(proactive_consumer_config(brokers))
+        proactive_consumer.subscribe(PROACTIVE_TOPICS)
+        a2a_consumers.append(proactive_consumer)
+        alert_emitter = Emitter(
+            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            codec,
+        )
+        proactive_loop = ProactiveLoop(
+            ProactiveAgent(loader, router, deps=proactive, settings=proactive_settings),
+            alert_emitter,
+        )
+        background.append(
+            asyncio.create_task(run_proactive_loop(proactive_consumer, codec, proactive_loop, stop))
+        )
     loop = Loop(runtime, emitter, Windower(idle_s=float(os.environ.get("WINDOW_IDLE_S", "15"))))
     consumer = Consumer(
         {
@@ -267,6 +306,9 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     committed: dict[tuple[str, int], int] = {}
     try:
         while True:
+            for task in background:
+                if task.done() and not task.cancelled() and task.exception() is not None:
+                    raise RuntimeError("a background consumer loop died") from task.exception()
             msg = await asyncio.to_thread(consumer.poll, 1.0)
             if msg is not None and not msg.error():
                 topic, partition, offset = msg.topic(), msg.partition(), msg.offset()

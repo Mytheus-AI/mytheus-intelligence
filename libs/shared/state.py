@@ -63,6 +63,9 @@ class AgentResult:
     confidence: float
     source_chunk_ids: list[str]
     payload: dict[str, Any] = field(default_factory=dict)
+    # Overrides the window's id on `agent-results` (and in the idempotency key). ProactiveAgent
+    # sets `proactive:{alert_type}:{subject}` so a replay of any trigger yields the same key.
+    window_id: str | None = None
 
 
 @dataclass

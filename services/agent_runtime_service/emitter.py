@@ -11,7 +11,8 @@ commits the input offsets, so a crash replays the window rather than losing its 
 
 Duplicates on replay are made harmless by the idempotency keys:
 - `agent-results`: `agentresult:{meeting_id}:{window_id}:{user_id}:{agent}`, deduped by
-  `core-api`. A replayed window republishes the same key.
+  `core-api`. A replayed window republishes the same key. ProactiveAgent alerts use
+  `window_id = proactive:{alert_type}:{subject}`, so a replayed trigger does too.
 - `usage-events`: `usage:{org_id}:agent_token:{occurred_at}:{call_id}`, one per real model
   call. A replay makes real calls again, which are real cost, so they are metered again.
 - `agent-requests` / `agent-responses`: `areq:{correlation_id}` / `aresp:{correlation_id}`,
@@ -127,14 +128,35 @@ class Emitter:
     async def result(
         self, *, window: TranscriptWindow, user_id: UUID, agent: str, result: AgentResult
     ) -> None:
+        await self.agent_result(
+            org_id=window.org_id,
+            meeting_id=window.meeting_id,
+            window_id=result.window_id or window.window_id,
+            user_id=user_id,
+            agent=agent,
+            result=result,
+        )
+
+    async def agent_result(
+        self,
+        *,
+        org_id: UUID,
+        meeting_id: UUID,
+        window_id: str,
+        user_id: UUID,
+        agent: str,
+        result: AgentResult,
+    ) -> None:
+        """One `agent-results` record. `result()` is this for a window; ProactiveAgent's
+        event-driven alerts (no window) call it directly."""
         env = EventEnvelope(
             topic="agent-results",
-            org_id=str(window.org_id),
+            org_id=str(org_id),
             producer=PRODUCER,
-            idempotency_key=f"agentresult:{window.meeting_id}:{window.window_id}:{user_id}:{agent}",
+            idempotency_key=f"agentresult:{meeting_id}:{window_id}:{user_id}:{agent}",
             payload={
-                "meeting_id": str(window.meeting_id),
-                "window_id": window.window_id,
+                "meeting_id": str(meeting_id),
+                "window_id": window_id,
                 "user_id": str(user_id),
                 "agent": agent,
                 "kind": result.kind,
@@ -145,7 +167,7 @@ class Emitter:
                 "source_chunk_ids": list(result.source_chunk_ids),
             },
         )
-        self._produce(env, key=str(window.org_id))
+        self._produce(env, key=str(org_id))
 
     async def notification(
         self, *, org_id: UUID, user_id: UUID, source_event_id: str, title: str, body: str
