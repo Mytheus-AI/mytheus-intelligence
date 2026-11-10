@@ -121,9 +121,12 @@ async def test_headroom_for_thinking_does_not_block_a_tenant_near_its_cap():
     assert len(llm.calls) == 1
 
 
-async def test_a_truncated_answer_is_reported_and_never_cached(caplog: Any):
+async def test_a_truncated_answer_is_reported_and_never_cached(monkeypatch: Any):
+    from libs.shared import router as router_module
     from libs.shared.llm_cache import ResponseCache
 
+    warned: list[str] = []
+    monkeypatch.setattr(router_module.logger, "warning", lambda msg, *a: warned.append(msg % a))
     redis = fakeredis.aioredis.FakeRedis()
     llm = LLM(finish="length")
     router = LiteLLMRouter(gate(), Sink(), llm, cache=ResponseCache(redis))
@@ -139,7 +142,7 @@ async def test_a_truncated_answer_is_reported_and_never_cached(caplog: Any):
         )
         assert out.truncated
     assert len(llm.calls) == 2  # the cut answer was not stored
-    assert "stopped at max_tokens" in caplog.text and "p@v1" in caplog.text
+    assert len(warned) == 2 and "stopped at max_tokens" in warned[0] and "p@v1" in warned[0]
 
 
 # --- 3. two cache breakpoints ----------------------------------------------------------------

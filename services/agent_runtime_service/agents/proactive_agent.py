@@ -96,6 +96,7 @@ from uuid import UUID, uuid5
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.index_guard import RouterClassifier
 from libs.shared.kg_client import KgClient, KgNode, KgUnavailable, kg_client_from_env
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import EMPTY, CompanyContext
@@ -619,6 +620,22 @@ class ProactiveAgent(BaseAgent):
         except Exception:  # noqa: BLE001 - the defaults, as core-api without overrides
             return DEFAULT_THRESHOLDS
 
+    async def _never(self, org_id: UUID, never: NeverRecordPolicy, *texts: str | None) -> bool:
+        """The loop checks have no window and some make no model call (workload, dependency),
+        so the never-record test is theirs to make: a topic said outright, or, when a text only
+        shares a word with one, the indexers' triage check (`never_record_check@v1`). A check
+        that cannot run counts as never-record: no alert is the fail-closed answer."""
+        if never.hits(*texts):
+            return True
+        ambiguous = [t for t in texts if t and never.ambiguous(t)]
+        if not ambiguous:
+            return False
+        try:
+            about = await RouterClassifier(self.router).about(org_id, " ".join(ambiguous), never)
+        except Exception:  # noqa: BLE001 - unknown: no alert
+            about = None
+        return about is not False
+
     def _prompt(self, key: str, org_id: UUID) -> Prompt:
         return self._loader.load(key, self._loader.resolve(key, org_id))
 
@@ -654,7 +671,7 @@ class ProactiveAgent(BaseAgent):
             return []
         org = await self._company(d.org_id)
         never = NeverRecordPolicy.from_org(org)
-        if never.hits(d.content, d.rationale):
+        if await self._never(d.org_id, never, d.content, d.rationale):
             return []  # ADR-0039 C2: a never-record decision raises nothing anywhere
         priors = [p for p in await self.conflict_candidates(d) if not never.hits(p.text)]
         if not priors:
@@ -795,7 +812,7 @@ class ProactiveAgent(BaseAgent):
         if ctx is None:
             return []
         never = NeverRecordPolicy.from_org(await self._company(a.org_id))
-        if never.hits(a.content) or any(never.hits(dep.content) for dep in ctx.depends_on):
+        if await self._never(a.org_id, never, a.content, *(d.content for d in ctx.depends_on)):
             return []  # ADR-0039 C2
         limits = await self._thresholds(a.org_id)
         alerts = [self._workload(a, ctx), self._dependency(a, ctx)]

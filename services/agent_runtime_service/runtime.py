@@ -30,9 +30,10 @@ Polish (stable names, one threshold source, never record). Each meeting keeps on
 (`names.assign_labels`): a speaker is "Participant N" from their first appearance to the end of
 the meeting, in every agent's prompt. With `policy` (core-api's `agent_confidence_overrides`,
 cached), every context carries the tenant's thresholds so each agent bands `surfaced` exactly as
-core-api does. Every result and every streamed delta passes `names.Postprocess` on its way out:
-labels become display names (from the contexts fetched here), and anything naming one of the
-org's never-record topics is dropped.
+core-api does. A window that names one of the org's never-record topics (or a glossary alias),
+and the window after it, run no agent at all. Every result and every streamed delta passes
+`names.Postprocess` on its way out: labels become display names (from the contexts fetched
+here), and anything naming a never-record topic is dropped.
 
 Roster and agents are in memory. That is safe for the same reason the open windows are: a
 meeting's events all arrive on one partition of this consumer group.
@@ -90,6 +91,7 @@ class _Meeting:
     agents: dict[tuple[str, UUID], BaseAgent] = field(default_factory=dict)
     blocked_notified: set[UUID] = field(default_factory=set)
     labels: dict[str, str] = field(default_factory=dict)  # speaker id -> "Participant N"
+    quiet_until_ms: int = -1  # never record: windows starting before this run no agent
 
 
 class AgentRuntime:
@@ -168,12 +170,22 @@ class AgentRuntime:
             self._overrides(window),
             *(self._ctx(window, u) for u in [*users, *proxied]),
         )
+        never = NeverRecordPolicy.from_org(org)
+        if any(never.hits(t.text) for t in window.turns):
+            # A never-record topic was named in this window: nothing of it, or of the next
+            # window (the talk around a topic rarely names it in every sentence), reaches any
+            # agent, so no model is called and nothing is emitted (the indexers skip the same
+            # windows, libs/shared/index_guard.py).
+            m.quiet_until_ms = window.end_ms + (window.end_ms - window.start_ms)
+        if window.start_ms < m.quiet_until_ms:
+            logger.info("window %s is never-record; no agent runs", window.window_id)
+            return 0
         everyone = dict(zip([*users, *proxied], found, strict=True))
         extra: dict[str, Any] = {CONTEXT_KEY: overrides}
         if org is not None:
             extra["org"] = org
         everyone = {u: (None if c is None else {**c, **extra}) for u, c in everyone.items()}
-        post = Postprocess(Namer.build(m.labels, everyone), NeverRecordPolicy.from_org(org))
+        post = Postprocess(Namer.build(m.labels, everyone), never)
         contexts = {u: everyone[u] for u in users}
         jobs = [self._run_user(m, window, u, contexts[u], post) for u in users]
         jobs.extend(
