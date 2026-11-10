@@ -44,6 +44,7 @@ class RagPassage:
     decision_id: UUID | None = None
     action_id: UUID | None = None
     meeting_title: str | None = None
+    occurred_at: str | None = None  # ISO-8601: when the cited meeting took place
 
 
 class RagClient(Protocol):
@@ -73,6 +74,7 @@ def parse_passages(body: dict[str, Any]) -> list[RagPassage]:
                 decision_id=_uuid(c.get("decision_id")),
                 action_id=_uuid(c.get("action_id")),
                 meeting_title=p.get("meeting_title"),
+                occurred_at=p.get("occurred_at") if isinstance(p.get("occurred_at"), str) else None,
             )
         )
     return out

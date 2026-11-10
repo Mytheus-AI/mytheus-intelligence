@@ -12,7 +12,10 @@
     "context_gap_agent": "v1",
     "proactive_conflict": "v1",
     "proactive_stakeholder": "v1",
-    "meeting_agent": "v2"
+    "meeting_agent": "v2",
+    "proactive_already_decided_gate": "v1",
+    "proactive_already_decided": "v1",
+    "proactive_topic_watch": "v1"
   },
   "pins": {}
 }

@@ -298,6 +298,9 @@ def test_the_shipped_prompts_are_registered_and_render():
         "proactive_conflict": "v1",
         "proactive_stakeholder": "v1",
         "meeting_agent": "v2",
+        "proactive_already_decided_gate": "v1",
+        "proactive_already_decided": "v1",
+        "proactive_topic_watch": "v1",
     }
 
 
