@@ -1,5 +1,6 @@
 """Everything `agent-runtime-service` publishes: `usage-events`, `agent-stream`,
-`agent-results`, `notifications`.
+`agent-results`, `notifications`, and for agent-to-agent collaboration (P10) `agent-requests`,
+`agent-responses` and the JSON dead letters on `agent-requests.dlq`.
 
 Produced straight to Redpanda with an idempotent producer (`acks=all`,
 `enable.idempotence`), NOT through a transactional outbox. The plan's section 3.2 step 10 says
@@ -13,6 +14,8 @@ Duplicates on replay are made harmless by the idempotency keys:
   `core-api`. A replayed window republishes the same key.
 - `usage-events`: `usage:{org_id}:agent_token:{occurred_at}:{call_id}`, one per real model
   call. A replay makes real calls again, which are real cost, so they are metered again.
+- `agent-requests` / `agent-responses`: `areq:{correlation_id}` / `aresp:{correlation_id}`,
+  partition key `org_id`. Both are deadline-bound (about 1.5 s): nobody replays them.
 - `agent-stream` deltas are throwaway (shed first under backpressure); `notifications`
   carry `notif:{source_event_id}:{channel}:{user_id}`.
 
@@ -22,8 +25,10 @@ Partition keys: `org_id` everywhere except `agent-stream`, which is `{org_id}:{m
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import time
 from typing import Any
 from uuid import UUID
 
@@ -148,3 +153,93 @@ class Emitter:
             },
         )
         self._produce(env, key=str(org_id))
+
+    async def agent_request(
+        self,
+        *,
+        org_id: UUID,
+        requester_agent_id: str,
+        responder_target: str,
+        query: str,
+        deadline_us: int,
+        correlation_id: str,
+    ) -> None:
+        env = EventEnvelope(
+            topic="agent-requests",
+            org_id=str(org_id),
+            producer=PRODUCER,
+            idempotency_key=f"areq:{correlation_id}",
+            correlation_id=correlation_id,
+            payload={
+                "requester_agent_id": requester_agent_id,
+                "responder_target": responder_target,
+                "query": query,
+                "deadline": int(deadline_us),
+                "correlation_id": correlation_id,
+            },
+        )
+        self._produce(env, key=str(org_id))
+
+    async def agent_response(
+        self,
+        *,
+        org_id: UUID,
+        correlation_id: str,
+        responder_agent_id: str,
+        result: str,
+        success: bool,
+        latency_ms: int,
+    ) -> None:
+        env = EventEnvelope(
+            topic="agent-responses",
+            org_id=str(org_id),
+            producer=PRODUCER,
+            idempotency_key=f"aresp:{correlation_id}",
+            correlation_id=correlation_id,
+            payload={
+                "correlation_id": correlation_id,
+                "responder_agent_id": responder_agent_id,
+                "result": result,
+                "success": success,
+                "latency_ms": int(latency_ms),
+            },
+        )
+        self._produce(env, key=str(org_id))
+
+    def dead_letter(
+        self,
+        *,
+        topic: str,
+        dlq_topic: str,
+        consumer_group: str,
+        partition: int,
+        offset: int,
+        org_id: str | None,
+        key_org: str | None,
+        idempotency_key: str,
+        failure_class: str,
+        error: str,
+        raw_value: bytes,
+    ) -> None:
+        """A `DlqEnvelope`-shaped JSON dead letter, the same shape `libs/shared/consumer.py`
+        writes (not Avro: the message is here because it failed to conform). `key_org` is the
+        partition key: the DERIVED org when there is one, never the untrusted envelope org."""
+        envelope = {
+            "original_topic": topic,
+            "original_partition": partition,
+            "original_offset": offset,
+            "org_id": org_id or "unknown",
+            "idempotency_key": idempotency_key,
+            "consumer_group": consumer_group,
+            "failure_class": failure_class,
+            "error": error,
+            "attempts": 1,
+            "first_seen_at": int(time.time() * 1_000_000),
+            "raw_value_b64": base64.b64encode(raw_value).decode("ascii"),
+        }
+        self._producer.produce(
+            dlq_topic,
+            key=key_org.encode() if key_org else None,
+            value=json.dumps(envelope).encode(),
+        )
+        self._producer.flush(5)

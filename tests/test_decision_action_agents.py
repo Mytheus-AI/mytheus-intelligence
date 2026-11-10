@@ -451,7 +451,11 @@ async def test_one_instance_per_meeting_and_one_result_per_window():
     m = runtime._meetings[(ORG, MEETING)]
     per_participant = ("PersonalListenerAgent", "QuestionAgent")
     meeting_scoped = sorted(k for k in m.agents if k[0] not in per_participant)
-    assert meeting_scoped == [("ActionAgent", MEETING), ("DecisionAgent", MEETING)]
+    assert meeting_scoped == [
+        ("ActionAgent", MEETING),
+        ("ContextGapAgent", MEETING),
+        ("DecisionAgent", MEETING),
+    ]
     assert len([k for k in m.agents if k[0] == "PersonalListenerAgent"]) == 3
     assert len([k for k in m.agents if k[0] == "QuestionAgent"]) == 3
 

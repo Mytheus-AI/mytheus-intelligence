@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
-from libs.shared.budget import BudgetGate
+from libs.shared.budget import BudgetGate, Decision
 from libs.shared.llm_cache import CachedCompletion, ResponseCache, cache_key
 from libs.shared.pii import redact_always
 
@@ -123,6 +123,12 @@ class LiteLLMRouter:
         self._extra: dict[str, Any] = (
             {"extra_headers": {"anthropic-workspace-id": workspace}} if workspace else {}
         )
+
+    async def budget_state(self, org_id: UUID) -> Decision:
+        """The tenant's budget state without spending: `ok`, `throttle` or `block` (a zero-token
+        check of the same gate every call goes through). ContextGapAgent reads it to take the
+        RAG-only path when throttled (plan 10-13 3.3, the R6 descope as a runtime degradation)."""
+        return await self._budget.check(org_id, 0)
 
     async def complete(
         self,

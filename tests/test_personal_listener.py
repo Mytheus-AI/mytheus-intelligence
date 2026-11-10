@@ -285,6 +285,8 @@ def test_the_shipped_prompts_are_registered_and_render():
         "action_agent": "v1",
         "question_gate": "v1",
         "question_agent": "v1",
+        "context_gap_gate": "v1",
+        "context_gap_agent": "v1",
     }
 
 

@@ -7,6 +7,9 @@ every `meeting`-scope agent per meeting. Speakers seen in a window are added too
 that restarted mid-meeting (and missed the `joined` events) still serves everyone who talks.
 `left` terminates that user's agents; the meeting's last window flushes on `close_meeting`.
 
+`multi_user` agents (P10 `ContextGapAgent`) are meeting-scope but emit one result per
+participant: they run once per window in `_run_multi` with every participant's context.
+
 Per closed window, for every (user, agent) pair, concurrently up to `max_concurrency`:
 1. `get_user_context(user_id)` over gRPC (skip the user on failure: no context, no spend);
 2. `agent.process(AgentState)`; the agent's own graph calls the router, which gates every
@@ -126,18 +129,73 @@ class AgentRuntime:
         """Run every agent on one closed window. Returns the number of results emitted."""
         m = self._meeting(window.org_id, window.meeting_id)
         m.roster.update(u for u in map(as_user_id, window.speaker_ids) if u is not None)
-        jobs = [self._run_user(m, window, user_id) for user_id in sorted(m.roster, key=str)]
+        users = sorted(m.roster, key=str)
+        found = await asyncio.gather(*(self._ctx(window, u) for u in users))
+        contexts = dict(zip(users, found, strict=True))
+        jobs = [self._run_user(m, window, u, contexts[u]) for u in users]
+        jobs.append(self._run_multi(m, window, contexts))
         counts = await asyncio.gather(*jobs)
         return sum(counts)
 
-    async def _run_user(self, m: _Meeting, window: TranscriptWindow, user_id: UUID) -> int:
+    async def _ctx(self, window: TranscriptWindow, user_id: UUID) -> dict[str, Any] | None:
         async with self._sem:
-            context = await self._context(window.org_id, user_id)
+            return await self._context(window.org_id, user_id)
+
+    async def _run_multi(
+        self, m: _Meeting, window: TranscriptWindow, contexts: dict[UUID, dict[str, Any] | None]
+    ) -> int:
+        """Meeting-scope agents that emit one result per participant (`multi_user`, P10's
+        `ContextGapAgent`): run once per window with every participant's context. Not under
+        the semaphore: they mostly wait on rag-service and agent-responses, not on a model."""
+        if not m.roster or all(c is None for c in contexts.values()):
+            return 0
+        emitted = 0
+        for factory in self._factories:
+            probe = factory()
+            if not getattr(probe, "multi_user", False):
+                continue
+            agent = await self._agent(m, factory, window, window.meeting_id)
+            try:
+                results = await agent.process_meeting(window, contexts)  # type: ignore[attr-defined]
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - same rule as _run_user: skip, never crash
+                logger.exception(
+                    "agent %s failed on window %s; skipped", agent.name, window.window_id
+                )
+                continue
+            for user_id, result in results:
+                try:
+                    await self._sink.result(
+                        window=window, user_id=user_id, agent=agent.name, result=result
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001
+                    # Most likely a registered agent-results schema without this agent's kind
+                    # (the AvroCodec serializes against the registry's latest version). Losing
+                    # this result beats crash-looping the window and re-billing every call.
+                    logger.exception(
+                        "could not emit %s result for window %s", agent.name, window.window_id
+                    )
+                    continue
+                emitted += 1
+        return emitted
+
+    async def _run_user(
+        self,
+        m: _Meeting,
+        window: TranscriptWindow,
+        user_id: UUID,
+        context: dict[str, Any] | None,
+    ) -> int:
         if context is None:
             return 0
         emitted = 0
         for factory in self._factories:
             agent = await self._agent(m, factory, window, user_id)
+            if getattr(agent, "multi_user", False):
+                continue  # run once per window by _run_multi
             if agent.scope == "meeting" and user_id != min(m.roster, key=str):
                 continue  # a meeting-scope agent runs once per window, not once per user
             state = AgentState(
