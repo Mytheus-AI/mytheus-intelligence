@@ -269,7 +269,13 @@ def payloads(alerts: list[Any]) -> list[tuple[UUID, dict[str, Any]]]:
 
 
 async def test_a_contradicting_lineage_ancestor_raises_one_red_alert_per_recipient():
-    agent, llm, parts = make()
+    core = FakeCore(
+        participants={
+            MEETING: [person(PRIYA), person(SAM), person(ALEX)],
+            OLD_MEETING: [person(PRIYA), person(SAM), person(ALEX)],
+        }
+    )
+    agent, llm, parts = make(core=core)
     alerts = await agent.check_decision(decision())
     assert len(alerts) == 1 and len(llm.of(CONFLICT_MARKER)) == 1
     results = alerts[0].results()
@@ -403,7 +409,7 @@ async def test_conflict_bands_and_the_best_candidate_wins():
 
 async def test_conflict_recipients_are_capped_at_10_and_core_down_means_confirmer_only():
     many = [person(uuid.uuid4()) for _ in range(15)]
-    agent, _, _ = make(core=FakeCore(participants={MEETING: many}))
+    agent, _, _ = make(core=FakeCore(participants={MEETING: many, OLD_MEETING: many}))
     [alert] = await agent.check_decision(decision())
     assert len(alert.to) == 10 and alert.to[0] == PRIYA
     agent, _, _ = make(core=None)
@@ -511,8 +517,8 @@ def stakeholder_parts() -> tuple[FakeKg, FakeCore]:
     core = FakeCore(
         participants={
             MEETING: [person(PRIYA), person(SAM)],
-            OLD_MEETING: [person(PRIYA), person(ALEX)],
-            OLDER_MEETING: [person(ALEX), person(ADMIN)],
+            OLD_MEETING: [person(PRIYA), person(SAM), person(ALEX)],
+            OLDER_MEETING: [person(PRIYA), person(ALEX), person(ADMIN)],
         }
     )
     return kg, core
@@ -531,7 +537,8 @@ async def test_missing_stakeholder_fires_once_per_meeting_and_person_through_the
         await runtime.on_room_event(ORG, MEETING, "joined", str(u))
     emitted = await runtime.process_window(stakeholder_window(0))
     records = sink._producer.on("agent-results")
-    assert emitted == len(records) == 4  # ALEX and ADMIN, each to PRIYA and SAM
+    # ALEX to PRIYA and SAM; ADMIN only to PRIYA (SAM shared no earlier meeting with ADMIN)
+    assert emitted == len(records) == 3
     by_person: dict[str, list[dict[str, Any]]] = {}
     for rec in records:
         payload = json.loads(rec["payload_json"])
@@ -547,10 +554,14 @@ async def test_missing_stakeholder_fires_once_per_meeting_and_person_through_the
         )
         by_person.setdefault(missing, []).append(rec)
     assert set(by_person) == {str(ALEX), str(ADMIN)}
-    # ALEX attended both topic meetings (2 decisions) and ranks first
-    alex = json.loads(by_person[str(ALEX)][0]["payload_json"])["alert"]
-    assert "2 decision(s)" in alex["body"] and "@" not in alex["title"] + alex["body"]
-    assert {r["user_id"] for r in by_person[str(ALEX)]} == {str(PRIYA), str(SAM)}
+    alex = {r["user_id"]: json.loads(r["payload_json"])["alert"] for r in by_person[str(ALEX)]}
+    assert set(alex) == {str(PRIYA), str(SAM)}
+    # PRIYA shared both topic meetings with ALEX; SAM only the older one's sibling OLD_MEETING
+    assert "2 decision(s)" in alex[str(PRIYA)]["body"]
+    assert "1 decision(s)" in alex[str(SAM)]["body"]
+    assert "Annual plans" not in json.dumps(alex[str(SAM)])  # OLDER_MEETING's decision
+    assert "@" not in alex[str(PRIYA)]["title"] + alex[str(PRIYA)]["body"]
+    assert [r["user_id"] for r in by_person[str(ADMIN)]] == [str(PRIYA)]
     assert len(llm.of(STAKEHOLDER_MARKER)) == 1
 
     # the next window on the same topic: the gate runs, but nobody is alerted twice
@@ -704,3 +715,125 @@ def test_the_agent_is_registered_and_its_prompts_load():
     for key in ("proactive_conflict", "proactive_stakeholder"):
         prompt = loader.load(key, loader.resolve(key, ORG))
         assert prompt.version == "v1" and prompt.user_template
+
+
+# --- review fixes: privacy per recipient, silent-band dedupe, URLs --------------------------
+
+ALICE, BOB, CAROL = (uuid.uuid4() for _ in range(3))
+MEETING_X = uuid.uuid4()
+X_DECISION_TEXT = "Vendor Zeta is dropped for the payments rewrite."
+
+
+async def test_bob_never_sees_meeting_x_decision_text_or_attendees_and_alice_does():
+    # conflict: the earlier decision came from meeting X, which Alice attended and Bob did not
+    kg = FakeKg(
+        {
+            ("decision_lineage", str(DECISION)): [
+                KgNode(
+                    "Decision",
+                    str(PRIOR),
+                    "ancestor",
+                    1,
+                    {"content": X_DECISION_TEXT, "meeting_id": str(MEETING_X)},
+                )
+            ]
+        }
+    )
+    core = FakeCore(
+        participants={
+            MEETING: [person(ALICE), person(BOB)],
+            MEETING_X: [person(ALICE), Participant(CAROL, "carol@acme.example", "member")],
+        }
+    )
+    agent, _, _ = make(kg=kg, core=core)
+    [alert] = await agent.check_decision(decision(confirmed_by=ALICE))
+    views = dict(payloads([alert]))
+    assert set(views) == {ALICE, BOB}  # redacted, not dropped
+    alice, bob = views[ALICE]["alert"], views[BOB]["alert"]
+    assert X_DECISION_TEXT in alice["body"] and alice["related"][0]["label"] == X_DECISION_TEXT
+    assert bob["title"] == "This decision may conflict with an earlier one"
+    assert "Vendor Zeta" not in json.dumps(bob) and "dates are incompatible" not in json.dumps(bob)
+    assert bob["related"] == [{"kind": "decision", "id": str(PRIOR), "label": ""}]
+    assert bob["priority"] == 1 and bob["confidence"] == alice["confidence"]
+    bob_result = next(r for u, r in alert.results() if u == BOB)
+    assert "Vendor Zeta" not in bob_result.content
+
+    # missing_stakeholder: Carol (absent) is known only from meeting X
+    kg = FakeKg(
+        {
+            ("related_decisions_for_topic", "pricing"): [
+                topic_node(PRIOR, X_DECISION_TEXT, MEETING_X)
+            ]
+        }
+    )
+    agent, _, _ = make(kg=kg, core=core)
+    await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=MEETING)
+    [alert] = await agent.check_window(stakeholder_window(), {ALICE, BOB})
+    out = dict(payloads([alert]))
+    assert list(out) == [ALICE]  # Bob attended none of the source meetings: no alert at all
+    assert "carol" in out[ALICE]["alert"]["title"]
+    assert any(r["label"] == X_DECISION_TEXT for r in out[ALICE]["alert"]["related"])
+
+
+async def test_unknown_source_meeting_redacts_for_everyone_including_the_confirmer():
+    rag = ScriptedRag({PRIYA: [rag_passage(PRIOR_TEXT, 0.8, kind="decision", decision_id=PRIOR)]})
+    rag.by_user[PRIYA] = [
+        replace_meeting(p, None) for p in rag.by_user[PRIYA]
+    ]  # a citation without a meeting
+    agent, _, _ = make(kg=FakeKg(down=True), rag=rag)
+    [alert] = await agent.check_decision(decision())
+    for _u, p in payloads([alert]):
+        assert PRIOR_TEXT not in json.dumps(p)
+
+
+def replace_meeting(p: Any, meeting: UUID | None) -> Any:
+    from dataclasses import replace
+
+    return replace(p, meeting_id=meeting)
+
+
+async def test_a_silent_stakeholder_window_does_not_block_a_later_strong_one():
+    kg, core = stakeholder_parts()
+    llm = ScriptedLLM(topic={"topic": "pricing", "score": 0.6})
+    agent, _, _ = make(llm, kg=kg, core=core)
+    await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=MEETING)
+    silent = await agent.check_window(stakeholder_window(0), {PRIYA, SAM})
+    assert silent and all(not a.surfaced for a in silent)
+    llm.topic = {"topic": "pricing", "score": 0.9}
+    strong = await agent.check_window(stakeholder_window(1), {PRIYA, SAM})
+    assert strong and all(a.surfaced for a in strong)
+    assert {a.subject_key for a in strong} == {a.subject_key for a in silent}
+    # surfaced once: never again in this meeting
+    assert await agent.check_window(stakeholder_window(2), {PRIYA, SAM}) == []
+
+
+async def test_urls_are_stripped_from_alert_text():
+    url_prior = "Launch on 15 Jan, see https://evil.example/x?y=1 and www.docs.acme.io/plan."
+    kg = FakeKg(
+        {
+            ("decision_lineage", str(DECISION)): [
+                KgNode(
+                    "Decision",
+                    str(PRIOR),
+                    "ancestor",
+                    1,
+                    {"content": url_prior, "meeting_id": str(MEETING)},
+                )
+            ]
+        }
+    )
+    llm = ScriptedLLM(
+        conflict={
+            "conflicts": [
+                {"candidate": 1, "confidence": 0.9, "rationale": "See acme.io/launch-plan now."}
+            ]
+        }
+    )
+    agent, _, _ = make(llm, kg=kg)
+    [alert] = await agent.check_decision(decision(content="Launch on 2 Dec per http://x.io."))
+    for _u, p in payloads([alert]):
+        a = p["alert"]
+        text = a["title"] + a["body"] + a["rationale"]
+        assert "http" not in text and "www." not in text and "acme.io/" not in text
+        assert "x.io" not in text and "[link removed]" in a["body"]
+        assert "15 Jan" in a["body"]  # the rest of the text survives

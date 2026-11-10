@@ -36,6 +36,15 @@ Output: one `alert` AgentResult per recipient, exactly the contract's payload, w
 yields the same ids. Bands: `< 0.4` no alert, `0.4-0.7` `surfaced: false`, `> 0.7` `surfaced:
 true`. No alert writes `decisions` / `actions` or any table: the agent only proposes.
 
+Who sees what (privacy, per recipient). The KG is org-wide and rag ran as `confirmed_by`, so a
+prior decision may come from a meeting a recipient never attended. Its text and label go only to
+recipients who attended that decision's meeting (core-api participants route, per check); the
+others get a redacted conflict alert (generic title, body without the prior text, the related id
+kept with an empty label). For missing_stakeholder a recipient is told about an absent person,
+with counts and decisions, only from earlier meetings that recipient attended with them; with
+none in common there is no alert. A person is marked alerted only by a surfaced (> 0.7) alert,
+so a silent window does not block a later strong one. URLs are stripped from alert text.
+
 What a model sees: decision text (conflict) or the window with "Participant N" labels plus the
 topic list (stakeholder). Never a user id, a name or an email; the router redacts PII on top.
 
@@ -49,6 +58,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
@@ -295,6 +305,18 @@ def display_name(name: str | None) -> str:
     return local or "Someone"
 
 
+_URL = re.compile(
+    r"(?i)\b(?:https?://|www\.)\S+"  # schemes and www.
+    r"|\b[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9-]+)*\.[a-z]{2,}/\S*"  # domain/path
+)
+
+
+def strip_urls(text: str) -> str:
+    """Remove URLs before alert text leaves the agent tier: email clients auto-link them, and a
+    link lifted from meeting or decision text must not become a clickable one in an alert."""
+    return " ".join(_URL.sub("[link removed]", text).split())
+
+
 def recipients(*groups: list[UUID] | tuple[UUID, ...]) -> list[UUID]:
     out: list[UUID] = []
     for group in groups:
@@ -302,6 +324,17 @@ def recipients(*groups: list[UUID] | tuple[UUID, ...]) -> list[UUID]:
             if uid not in out:
                 out.append(uid)
     return out[:MAX_RECIPIENTS]
+
+
+@dataclass(frozen=True)
+class View:
+    """What one recipient is shown, when it differs from the alert's default text (a recipient
+    who may not see a prior decision or another meeting's attendees)."""
+
+    title: str
+    body: str
+    rationale: str
+    related: list[dict[str, str]]
 
 
 @dataclass
@@ -321,6 +354,7 @@ class Alert:
     prompt: str = ""
     model_tier: str = "none"
     source_chunk_ids: list[str] = field(default_factory=list)
+    views: dict[UUID, View] = field(default_factory=dict)  # per-recipient overrides
 
     @property
     def window_id(self) -> str:
@@ -330,19 +364,28 @@ class Alert:
     def surfaced(self) -> bool:
         return band(self.confidence) == "surfaced"
 
+    def view(self, recipient: UUID) -> View:
+        return self.views.get(recipient) or View(
+            self.title, self.body, self.rationale, self.related
+        )
+
+    def title_for(self, recipient: UUID) -> str:
+        return clip(strip_urls(self.view(recipient).title), MAX_TITLE)
+
     def payload(self, recipient: UUID) -> dict[str, Any]:
+        v = self.view(recipient)
         return {
             "alert": {
                 "id": alert_id(self.alert_type, self.subject_key, recipient),
                 "alert_type": self.alert_type,
                 "priority": PRIORITY[self.alert_type],
-                "title": clip(self.title, MAX_TITLE),
-                "body": clip(self.body, MAX_BODY),
+                "title": self.title_for(recipient),
+                "body": clip(strip_urls(v.body), MAX_BODY),
                 "confidence": self.confidence,
                 "surfaced": self.surfaced,
-                "rationale": self.rationale,
+                "rationale": strip_urls(v.rationale),
                 "subject": {"kind": self.subject_kind, "id": str(self.subject_id)},
-                "related": self.related,
+                "related": v.related,
                 "link": self.link,
             },
             "prompt": self.prompt,
@@ -358,7 +401,7 @@ class Alert:
                 user,
                 AgentResult(
                     kind="alert",
-                    content=clip(self.title, MAX_TITLE),
+                    content=self.title_for(user),
                     relevance_score=self.confidence,
                     confidence=self.confidence,
                     source_chunk_ids=list(self.source_chunk_ids),
@@ -378,6 +421,7 @@ class Prior:
     decision_id: UUID
     text: str
     source: Literal["lineage", "rag"]
+    meeting_id: UUID | None = None  # the meeting that confirmed it: who may see its text
 
 
 def lineage_priors(nodes: list[KgNode], *, offset: int = 0) -> list[Prior]:
@@ -392,7 +436,8 @@ def lineage_priors(nodes: list[KgNode], *, offset: int = 0) -> list[Prior]:
         did, text = as_uuid(n.id), n.properties.get("content")
         if did is None or depth > LINEAGE_DEPTH or not isinstance(text, str) or not text.strip():
             continue
-        out.append((depth, Prior(did, text.strip(), "lineage")))
+        meeting = as_uuid(n.properties.get("meeting_id"))
+        out.append((depth, Prior(did, text.strip(), "lineage", meeting)))
     out.sort(key=lambda t: t[0])
     return [p for _d, p in out]
 
@@ -540,6 +585,25 @@ class ProactiveAgent(BaseAgent):
         to = recipients(first, [p.user_id for p in people])
         if not to:
             return []
+        # Privacy: the earlier decision may come from a meeting a recipient never attended (the
+        # KG is org-wide, rag ran as `confirmed_by`). Only its attendees see its text; everyone
+        # else gets the same alert without it (redacted, not dropped: they still learn that the
+        # decision they are bound by may clash with something, and can ask the confirmer).
+        if prior.meeting_id == d.meeting_id:
+            seen: set[UUID] = {p.user_id for p in people}
+        elif prior.meeting_id is not None:
+            seen = {p.user_id for p in await self._participants(d.org_id, prior.meeting_id)}
+        else:
+            seen = set()  # unknown source meeting: nobody is shown its text
+        redacted = View(
+            title="This decision may conflict with an earlier one",
+            body=(
+                f'The decision "{clip(d.content, 200)}" may contradict an earlier decision from '
+                f"a meeting you did not attend. Ask the person who confirmed it for details."
+            ),
+            rationale="The details are limited to people who attended the earlier meeting.",
+            related=[{"kind": "decision", "id": str(prior.decision_id), "label": ""}],
+        )
         return [
             Alert(
                 alert_type="conflict",
@@ -565,6 +629,7 @@ class ProactiveAgent(BaseAgent):
                 to=to,
                 prompt=prompt.ref,
                 model_tier=TIER_NAMES.get(out.tier, out.tier),
+                views={u: redacted for u in to if u not in seen},
             )
         ]
 
@@ -606,7 +671,11 @@ class ProactiveAgent(BaseAgent):
             logger.warning("conflict check: rag-service failed; lineage only")
             return []
         found = sorted(found, key=lambda p: -p.score)[:MAX_RAG_CANDIDATES]
-        return [Prior(p.decision_id, p.text.strip(), "rag") for p in found if p.decision_id]
+        return [
+            Prior(p.decision_id, p.text.strip(), "rag", p.meeting_id)
+            for p in found
+            if p.decision_id
+        ]
 
     # -- workload and dependency --
 
@@ -760,34 +829,43 @@ class ProactiveAgent(BaseAgent):
             *(self._participants(window.org_id, m) for m in by_meeting),
         )
         present = roster | {p.user_id for p in here}
-        counts: dict[UUID, int] = {}
+        attendees = {
+            mid: {p.user_id for p in people}
+            for mid, people in zip(by_meeting, earlier, strict=True)
+        }
         names: dict[UUID, str | None] = {}
-        decisions_of: dict[UUID, list[KgNode]] = {}
-        for mid, people in zip(by_meeting, earlier, strict=True):
+        for people in earlier:
             for p in people:
-                if p.user_id in present:
-                    continue
-                counts[p.user_id] = counts.get(p.user_id, 0) + len(by_meeting[mid])
                 names.setdefault(p.user_id, p.name)
-                decisions_of.setdefault(p.user_id, []).extend(by_meeting[mid])
+        counts = {
+            u: sum(len(by_meeting[m]) for m, who in attendees.items() if u in who)
+            for u in names
+            if u not in present
+        }
         ranked = sorted(
             (u for u in counts if u not in self._alerted), key=lambda u: (-counts[u], str(u))
-        )[:MAX_STAKEHOLDERS]
-        to = recipients(sorted(present, key=str))
-        if not ranked or not to:
-            return []
+        )
         assert self.gate_prompt is not None
+        surfaced = band(score) == "surfaced"
         alerts: list[Alert] = []
         for person in ranked:
-            self._alerted.add(person)
-            who, count = display_name(names.get(person)), counts[person]
-            related = [{"kind": "user", "id": str(person), "label": who}]
-            for node in decisions_of[person][:3]:
-                text = node.properties.get("content")
-                if as_uuid(node.id) and isinstance(text, str) and text.strip():
-                    related.append(
-                        {"kind": "decision", "id": node.id, "label": clip(text, MAX_LABEL)}
-                    )
+            if len(alerts) >= MAX_STAKEHOLDERS:
+                break
+            # Privacy: a recipient learns about this person, and sees decisions, only from the
+            # earlier meetings that recipient attended together with them. Someone who attended
+            # none of them gets no alert.
+            views: dict[UUID, View] = {}
+            for r in sorted(present, key=str):
+                shared = [m for m, who in attendees.items() if person in who and r in who]
+                if shared:
+                    views[r] = self._stakeholder_view(person, names, topic, shared, by_meeting)
+                if len(views) >= MAX_RECIPIENTS:
+                    break
+            if not views:
+                continue
+            if surfaced:  # a silent 0.4-0.7 window must not block a later strong one
+                self._alerted.add(person)
+            first = next(iter(views.values()))
             alerts.append(
                 Alert(
                     alert_type="missing_stakeholder",
@@ -795,26 +873,51 @@ class ProactiveAgent(BaseAgent):
                     subject_id=window.meeting_id,
                     subject_key=f"{window.meeting_id}:{person}",
                     meeting_id=window.meeting_id,
-                    title=f"{who} is not here but has been part of {topic} decisions",
-                    body=(
-                        f"This meeting is discussing {topic}. {who} was in meetings that "
-                        f"confirmed {count} decision(s) on it and is not in this meeting. "
-                        f"Consider looping them in."
-                    ),
+                    title=first.title,
+                    body=first.body,
                     confidence=score,
-                    rationale=(
-                        f"Topic {topic}: {count} earlier confirmed decision(s) from meetings {who} "
-                        f"attended."
-                    ),
-                    related=related,
+                    rationale=first.rationale,
+                    related=first.related,
                     link=f"/meetings/{window.meeting_id}",
-                    to=to,
+                    to=list(views),
                     prompt=self.gate_prompt.ref,
                     model_tier=TIER_NAMES["triage"],
                     source_chunk_ids=window.chunk_ids,
+                    views=views,
                 )
             )
         return alerts
+
+    @staticmethod
+    def _stakeholder_view(
+        person: UUID,
+        names: dict[UUID, str | None],
+        topic: str,
+        shared: list[UUID],
+        by_meeting: dict[UUID, list[KgNode]],
+    ) -> View:
+        """The alert as one recipient may see it: counts and decisions from `shared` only (the
+        earlier meetings both the recipient and the absent person attended)."""
+        who = display_name(names.get(person))
+        nodes = [n for m in shared for n in by_meeting[m]]
+        related = [{"kind": "user", "id": str(person), "label": who}]
+        for node in nodes[:3]:
+            text = node.properties.get("content")
+            if as_uuid(node.id) and isinstance(text, str) and text.strip():
+                related.append({"kind": "decision", "id": node.id, "label": clip(text, MAX_LABEL)})
+        return View(
+            title=f"{who} is not here but has been part of {topic} decisions",
+            body=(
+                f"This meeting is discussing {topic}. {who} was with you in meetings that "
+                f"confirmed {len(nodes)} decision(s) on it and is not in this meeting. "
+                f"Consider looping them in."
+            ),
+            rationale=(
+                f"Topic {topic}: {len(nodes)} earlier confirmed decision(s) from meetings you "
+                f"and {who} attended."
+            ),
+            related=related,
+        )
 
     async def _gate(self, window: TranscriptWindow) -> tuple[str, float]:
         assert self._graph is not None and self.prompt is not None
