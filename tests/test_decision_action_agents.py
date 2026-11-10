@@ -195,7 +195,8 @@ async def test_the_gate_routes_haiku_and_extraction_routes_sonnet(cls, script):
     assert llm.models() == [HAIKU, SONNET]
     assert [u["model_tier"] for u in sink.usage_calls] == ["haiku", "sonnet"]
     assert result.payload["model_tier"] == "sonnet"
-    assert result.payload["prompt"] == f"{cls.prompt_key}@v1"
+    version = "v2" if cls is ActionAgent else "v1"  # ADR-0039 advanced the action prompts
+    assert result.payload["prompt"] == f"{cls.prompt_key}@{version}"
     assert result.kind == cls.kind
     assert result.relevance_score == 0.9
     assert result.source_chunk_ids == ["c1", "c2"]
@@ -481,7 +482,13 @@ def test_the_shipped_prompts_are_registered_and_render():
     loader = PromptLoader(PROMPTS_DIR)
     for key in ("decision_gate", "decision_agent", "action_gate", "action_agent"):
         prompt = loader.load(key, loader.resolve(key, ORG))
-        rendered = prompt.render_user(window="Participant 1: hi", today="Monday 2026-11-09")
+        rendered = prompt.render_user(
+            window="Participant 1: hi",
+            today="Monday 2026-11-09",
+            company="",
+            ground_rules="",
+            owners="",
+        )
         assert "Participant 1: hi" in rendered
         assert "{" not in rendered  # every placeholder filled, no stray literal braces
         assert prompt.system and "Participant 1" in prompt.system
@@ -489,8 +496,10 @@ def test_the_shipped_prompts_are_registered_and_render():
         window="x", today="Monday 2026-11-09"
     )
     registry = json.loads((Path(PROMPTS_DIR) / "registry.json").read_text())["defaults"]
-    for key in ("decision_gate", "decision_agent", "action_gate", "action_agent"):
+    for key in ("decision_gate", "decision_agent"):
         assert registry[key] == "v1"
+    for key in ("action_gate", "action_agent"):  # ADR-0039 C1, C2, C4
+        assert registry[key] == "v2"
 
 
 async def test_spawn_fails_closed_without_org_id():

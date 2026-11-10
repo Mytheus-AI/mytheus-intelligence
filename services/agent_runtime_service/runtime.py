@@ -17,6 +17,15 @@ Per closed window, for every (user, agent) pair, concurrently up to `max_concurr
 3. a result goes to `agent-results`. If an agent hit `BudgetBlocked`, the participant gets one
    in-app "budget exhausted" notification per meeting; captions are untouched.
 
+ADR-0039. With `org_context`, the company brain (`GetOrgContext`, cached in-process) is fetched
+once per window and put under `"org"` in every participant's context, for the prompts' company
+block and never-record line (C1, C2); without it, or on a failure, nothing is added and every
+prompt renders as it did before the brain existed. With `proxies` (core-api's internal agenda
+route, cached), each participant whose attendance is `agent` and who is not in the live roster
+gets a pass of the agents that serve proxies (`serves_proxies`, PersonalListener only) on every
+window, with `"attendance": "agent"` in their context (C6). They are not added to the roster: they
+never count as present for meeting-scope agents, ContextGap requesters or the meeting's end.
+
 Roster and agents are in memory. That is safe for the same reason the open windows are: a
 meeting's events all arrive on one partition of this consumer group.
 """
@@ -31,12 +40,15 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.org_context import CompanyContext
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
 
 logger = logging.getLogger(__name__)
 
 AgentFactory = Callable[[], BaseAgent]
 ContextFn = Callable[[UUID, UUID], Awaitable[dict[str, Any] | None]]
+OrgContextFn = Callable[[UUID], Awaitable[CompanyContext]]
+ProxiesFn = Callable[[UUID, UUID], Awaitable[list[UUID]]]
 
 
 class Sink(Protocol):
@@ -75,10 +87,14 @@ class AgentRuntime:
         user_context: ContextFn,
         agents: list[AgentFactory],
         max_concurrency: int = 8,
+        org_context: OrgContextFn | None = None,
+        proxies: ProxiesFn | None = None,
     ) -> None:
         self._sink = sink
         self._context = user_context
         self._factories = agents
+        self._org_context = org_context
+        self._proxies = proxies
         self._meetings: dict[tuple[UUID, UUID], _Meeting] = {}
         self._sem = asyncio.Semaphore(max_concurrency)
 
@@ -130,12 +146,40 @@ class AgentRuntime:
         m = self._meeting(window.org_id, window.meeting_id)
         m.roster.update(u for u in map(as_user_id, window.speaker_ids) if u is not None)
         users = sorted(m.roster, key=str)
-        found = await asyncio.gather(*(self._ctx(window, u) for u in users))
-        contexts = dict(zip(users, found, strict=True))
+        proxied = [u for u in await self._proxied(window) if u not in m.roster]
+        org, *found = await asyncio.gather(
+            self._org(window), *(self._ctx(window, u) for u in [*users, *proxied])
+        )
+        everyone = dict(zip([*users, *proxied], found, strict=True))
+        if org is not None:
+            everyone = {u: (None if c is None else {**c, "org": org}) for u, c in everyone.items()}
+        contexts = {u: everyone[u] for u in users}
         jobs = [self._run_user(m, window, u, contexts[u]) for u in users]
+        jobs.extend(
+            self._run_user(m, window, u, _as_proxy(everyone[u]), proxy=True) for u in proxied
+        )
         jobs.append(self._run_multi(m, window, contexts))
         counts = await asyncio.gather(*jobs)
         return sum(counts)
+
+    async def _org(self, window: TranscriptWindow) -> CompanyContext | None:
+        if self._org_context is None:
+            return None
+        try:
+            return await self._org_context(window.org_id)
+        except Exception:  # noqa: BLE001 - no company context: prompts render as before
+            logger.warning("org context unavailable org=%s; window runs without it", window.org_id)
+            return None
+
+    async def _proxied(self, window: TranscriptWindow) -> list[UUID]:
+        if self._proxies is None:
+            return []
+        try:
+            found = await self._proxies(window.org_id, window.meeting_id)
+        except Exception:  # noqa: BLE001 - no proxies this window; the live roster still runs
+            logger.warning("proxies unavailable meeting=%s", window.meeting_id)
+            return []
+        return sorted(set(found), key=str)
 
     async def _ctx(self, window: TranscriptWindow, user_id: UUID) -> dict[str, Any] | None:
         async with self._sem:
@@ -188,11 +232,15 @@ class AgentRuntime:
         window: TranscriptWindow,
         user_id: UUID,
         context: dict[str, Any] | None,
+        *,
+        proxy: bool = False,
     ) -> int:
         if context is None:
             return 0
         emitted = 0
         for factory in self._factories:
+            if proxy and not getattr(factory(), "serves_proxies", False):
+                continue  # C6: someone who sent their agent gets notes, nothing else
             agent = await self._agent(m, factory, window, user_id)
             if getattr(agent, "multi_user", False):
                 continue  # run once per window by _run_multi
@@ -223,7 +271,7 @@ class AgentRuntime:
                         user_id,
                     )
                     result = None
-            if agent.blocked and user_id not in m.blocked_notified:
+            if agent.blocked and not proxy and user_id not in m.blocked_notified:
                 m.blocked_notified.add(user_id)
                 await self._sink.notification(
                     org_id=window.org_id,
@@ -238,3 +286,7 @@ class AgentRuntime:
                 )
                 emitted += 1
         return emitted
+
+
+def _as_proxy(context: dict[str, Any] | None) -> dict[str, Any] | None:
+    return None if context is None else {**context, "attendance": "agent"}

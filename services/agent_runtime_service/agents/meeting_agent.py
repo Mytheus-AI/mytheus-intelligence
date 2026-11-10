@@ -37,6 +37,21 @@ the rate-limit state the agent cannot promise the host one nudge per 5 minutes.
 
 The agent never writes Postgres: core-api applies `updates` (host wins, never covered ->
 in_progress) and never persists the nudge.
+
+ADR-0039 (`meeting_agent@v2`):
+- C1: the user message starts with the company block (`agents/company.py`) from the participants'
+  context (`context["org"]`); its active goals are numbered G1, G2... and an agenda item whose
+  `goal_id` is one of them says "serves G2" (C5). Ids never reach the model.
+- C2: the "Never record" line; the prompt answers the nothing-changes object for a window mainly
+  about one of those topics.
+- C5: nudge type `proxy_update`, computed, no model call: when an item owned by a participant
+  whose attendance is `agent` (the agenda route's `proxies`) is in progress and that person left a
+  `proxy_update`, the host gets it, once per item (state field `proxy_update:{item_id}`). It is
+  first in the nudge order and obeys the same one-record-per-window and one-nudge-per-5-minutes
+  rules: a rate-limited one waits for a later window while the item is still in progress. Its
+  `content` is the update itself, up to 2000 chars (B5), and it carries the proxied person's
+  `user_id` for the room to label it.
+With no company brain, no goal ids and no proxies, v2 renders exactly v1's user message.
 """
 
 from __future__ import annotations
@@ -53,6 +68,7 @@ from uuid import UUID, uuid5
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.org_context import EMPTY, CompanyContext
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import BudgetBlocked, LiteLLMRouter
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
@@ -68,6 +84,7 @@ from services.agent_runtime_service.agents.candidates import (
     text_of,
 )
 from services.agent_runtime_service.agents.candidates import render_window as labelled_window
+from services.agent_runtime_service.agents.company import company_of, company_values, goal_labels
 from services.agent_runtime_service.agents.context_gap_agent import parse_object
 from services.agent_runtime_service.agents.personal_listener_agent import SURFACE_ABOVE
 
@@ -75,10 +92,11 @@ logger = logging.getLogger(__name__)
 
 AGENT = "MeetingAgent"
 KIND = "meeting_update"
-NudgeType = Literal["off_agenda", "over_time", "unaddressed"]
+NudgeType = Literal["off_agenda", "over_time", "unaddressed", "proxy_update"]
 
 MAX_NOTE = 300
 MAX_NUDGE = 200
+MAX_PROXY_NUDGE = 2000  # ADR-0039 B5: proxy_update is up to 2000 chars
 OFF_AGENDA_MIN_CONFIDENCE = 0.75
 UNADDRESSED_AT = 0.7  # fraction of the scheduled time
 NUDGE_INTERVAL_MS = 5 * 60_000
@@ -149,6 +167,7 @@ class MeetingState:
     over_time: set[str] = field(default_factory=set)  # item_ids nudged over_time
     raised: set[str] = field(default_factory=set)  # carried keys someone raised
     unaddressed: set[str] = field(default_factory=set)  # carried keys nudged unaddressed
+    proxied: set[str] = field(default_factory=set)  # item_ids nudged proxy_update (ADR-0039 C5)
     last_nudge_ms: int | None = None
     dirty: dict[str, str] = field(default_factory=dict)
 
@@ -170,6 +189,8 @@ class MeetingState:
                     s.raised.add(subject)
                 elif kind == "unaddressed":
                     s.unaddressed.add(subject)
+                elif kind == "proxy_update":
+                    s.proxied.add(subject)
                 elif key == "last_nudge_ms":
                     s.last_nudge_ms = int(value)
             except ValueError:
@@ -191,7 +212,15 @@ def effective_status(item: AgendaItem, state: MeetingState) -> str:
     return item.status
 
 
-def render_agenda(items: list[AgendaItem], status: dict[UUID, str], ran: dict[UUID, int]) -> str:
+def render_agenda(
+    items: list[AgendaItem],
+    status: dict[UUID, str],
+    ran: dict[UUID, int],
+    goals: dict[str, str] | None = None,
+) -> str:
+    """One line per item. `goals` maps an active goal's id to its label ("G1"): an item linked to
+    one says which (ADR-0039 C5); a goal that is not active (or no brain) adds nothing."""
+    goals = goals or {}
     lines = []
     for n, item in enumerate(items, start=1):
         parts = [status[item.id].replace("_", " ")]
@@ -199,6 +228,9 @@ def render_agenda(items: list[AgendaItem], status: dict[UUID, str], ran: dict[UU
             parts.append(f"{item.duration_minutes} min planned")
         if item.id in ran:
             parts.append(f"running for {ran[item.id]} min")
+        goal = goals.get(str(item.goal_id)) if item.goal_id else None
+        if goal:
+            parts.append(f"serves {goal}")
         lines.append(f"{n}. {item.title} ({', '.join(parts)})")
     return "\n".join(lines)
 
@@ -340,8 +372,9 @@ class MeetingAgent(BaseAgent):
                 state.started[str(item.id)] = window.start_ms
                 state.set(f"started:{item.id}", window.start_ms)
 
+        org = next((company_of(c) for c in contexts.values() if c), EMPTY)
         try:
-            assessment = await self._assess(window, agenda, status, state, host)
+            assessment = await self._assess(window, agenda, status, state, host, org)
         except BudgetBlocked:
             self.blocked = True
             return []
@@ -384,6 +417,7 @@ class MeetingAgent(BaseAgent):
         status: dict[UUID, str],
         state: MeetingState,
         host: UUID,
+        org: CompanyContext = EMPTY,
     ) -> Assessment:
         assert self._graph is not None and self.prompt is not None
         ran = {
@@ -397,9 +431,10 @@ class MeetingAgent(BaseAgent):
             user_id=host,
             chunk=window,
             context={
-                "agenda": render_agenda(agenda.items, status, ran),
+                "agenda": render_agenda(agenda.items, status, ran, goal_labels(org)),
                 "carried": render_carried(agenda.open_actions),
                 "window": transcript,
+                **company_values({"org": org}),
             },
             org_id=window.org_id,
             agent_id=self.agent_id,
@@ -464,7 +499,12 @@ class MeetingAgent(BaseAgent):
             return None, None  # one nudge per meeting per 5 minutes
 
         def emit(
-            kind: NudgeType, subject: str, item_id: str | None, content: str, confidence: float
+            kind: NudgeType,
+            subject: str,
+            item_id: str | None,
+            content: str,
+            confidence: float,
+            limit: int = MAX_NUDGE,
         ) -> tuple[dict[str, Any], float]:
             state.last_nudge_ms = now
             state.set("last_nudge_ms", now)
@@ -472,8 +512,23 @@ class MeetingAgent(BaseAgent):
                 "id": nudge_id(window.meeting_id, kind, subject),
                 "type": kind,
                 "item_id": item_id,
-                "content": clip(content, MAX_NUDGE),
+                "content": clip(content, limit),
             }
+            return nudge, confidence
+
+        for item in agenda.items:  # proxy_update (ADR-0039 C5): computed, once per item
+            sid = str(item.id)
+            if status[item.id] != "in_progress" or sid in state.proxied:
+                continue
+            proxy = agenda.proxy(item.owner_user_id)
+            if proxy is None or not proxy.proxy_update.strip():
+                continue
+            state.proxied.add(sid)
+            state.set(f"proxy_update:{sid}", 1)
+            nudge, confidence = emit(
+                "proxy_update", sid, sid, proxy.proxy_update, 1.0, MAX_PROXY_NUDGE
+            )
+            nudge["user_id"] = str(proxy.user_id)
             return nudge, confidence
 
         for item in agenda.items:  # over_time: computed, once per item

@@ -273,23 +273,34 @@ def test_the_shipped_prompts_are_registered_and_render():
     loader = PromptLoader(PROMPTS_DIR)
     for key in ("personal_listener", "personal_listener_gate"):
         prompt = loader.load(key, loader.resolve(key, ORG))
-        rendered = prompt.render_user(profile="Role: x", focus="", voice="", window="You: hi")
+        rendered = prompt.render_user(
+            profile="Role: x",
+            focus="",
+            voice="",
+            window="You: hi",
+            company="",
+            ground_rules="",
+            attendance="",
+        )
         assert "Role: x" in rendered and "You: hi" in rendered
 
     assert json.loads((Path(PROMPTS_DIR) / "registry.json").read_text())["defaults"] == {
-        "personal_listener": "v2",
-        "personal_listener_gate": "v2",
+        "personal_listener": "v3",
+        "personal_listener_gate": "v3",
         "decision_gate": "v1",
         "decision_agent": "v1",
-        "action_gate": "v1",
-        "action_agent": "v1",
-        "question_gate": "v2",
-        "question_agent": "v2",
+        "action_gate": "v2",
+        "action_agent": "v2",
+        "question_gate": "v3",
+        "question_agent": "v3",
         "context_gap_gate": "v1",
         "context_gap_agent": "v1",
         "proactive_conflict": "v1",
         "proactive_stakeholder": "v1",
-        "meeting_agent": "v1",
+        "meeting_agent": "v2",
+        "proactive_already_decided_gate": "v1",
+        "proactive_already_decided": "v1",
+        "proactive_topic_watch": "v1",
     }
 
 

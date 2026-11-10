@@ -1,5 +1,5 @@
 {
-  "about": "Golden set for ActionAgent. Each case is one 30 s window with speakers labelled 'Participant N' in order of first speaking; the reference date is Monday 2026-11-09 (UTC). Each expected action is a list of lowercase keyword groups a correct extraction's content must contain ('a|b' means either), plus the owner's label and the due date when the transcript states them. Reports of finished work, vague intentions, declined requests and pure decisions are not action items. Labels are the maintainer's judgement, written before any model was run against them.",
+  "about": "Golden set for ActionAgent. Each case is one 30 s window with speakers labelled 'Participant N' in order of first speaking; the reference date is Monday 2026-11-09 (UTC). Each expected action is a list of lowercase keyword groups a correct extraction's content must contain ('a|b' means either), plus the owner's label and the due date when the transcript states them. Reports of finished work, vague intentions, declined requests and pure decisions are not action items. Labels are the maintainer's judgement, written before any model was run against them. ADR-0039 C2: a case with 'never_record_topics' runs with that company ground rule, and a window mainly about one of them expects no candidate even when a task is plainly committed to.",
   "reference_date": "2026-11-09",
   "cases": [
     {"id": "release-notes",
@@ -45,6 +45,8 @@
      "expected": [{"keywords": ["onboarding"], "assignee": "Participant 2", "due_date": "2026-11-30"}]},
     {"id": "overdue-invoice",
      "window": "Participant 1: The Acme invoice is sixty days overdue.\nParticipant 2: I'll chase their finance team about the invoice.\nParticipant 1: Thank you, keep me posted.",
-     "expected": [{"keywords": ["invoice"], "assignee": "Participant 2"}]}
+     "expected": [{"keywords": ["invoice"], "assignee": "Participant 2"}]},
+    {"id": "never-record-layoffs", "never_record_topics": ["layoffs"], "window": "Participant 1: For the layoffs, HR needs the final list of affected roles.\nParticipant 2: I'll send HR the list of affected roles by Wednesday.\nParticipant 1: Keep it off the shared drive.", "expected": []},
+    {"id": "never-record-unrelated", "never_record_topics": ["layoffs"], "window": "Participant 1: The status page still shows last week's incident as open.\nParticipant 2: I'll close the incident on the status page today.\nParticipant 1: Thanks.", "expected": [{"keywords": ["status page|incident"], "assignee": "Participant 2", "due_date": "2026-11-09"}]}
   ]
 }

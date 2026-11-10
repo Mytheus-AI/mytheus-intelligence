@@ -292,7 +292,7 @@ async def test_personal_listener_sends_the_persona_to_the_note_call_only():
     agent = PersonalListenerAgent(PromptLoader(PROMPTS_DIR), _router(llm))
     await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=ME)
     result = await agent.process(_state(PERSONA))
-    assert result is not None and result.payload["prompt"] == "personal_listener@v2"
+    assert result is not None and result.payload["prompt"] == "personal_listener@v3"  # ADR-0039
     assert result.payload["surfaced"] is True  # bands unchanged
     gate_user, note_user = llm.user(0), llm.user(1)
     assert "Listen especially for: billing migration" in gate_user and "Ignore: hiring" in gate_user
@@ -334,7 +334,7 @@ async def test_question_agent_sends_the_persona_to_the_proposal_call_only():
     agent = QuestionAgent(PromptLoader(PROMPTS_DIR), _router(llm))
     await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=ME)
     result = await agent.process(_state(PERSONA))
-    assert result is not None and result.payload["prompt"] == "question_agent@v2"
+    assert result is not None and result.payload["prompt"] == "question_agent@v3"  # ADR-0039
     assert result.payload["suggestions"][0]["surfaced"] is True
     assert "Ignore: hiring" in llm.user(0) and "Ignore: hiring" in llm.user(1)
     assert "Voice:" not in llm.user(0)
@@ -367,9 +367,11 @@ def test_v2_gates_render_focus_and_say_how_to_score_it(key: str):
 
 
 def test_the_registry_advances_both_gates():
+    """ADR-0038 advanced both gates to v2; ADR-0039 to v3 (the never-record line), which with no
+    company brain and a live participant renders exactly v2 (`tests/test_company_brain.py`)."""
     loader = PromptLoader(PROMPTS_DIR)
-    assert loader.resolve("personal_listener_gate", ORG) == "v2"
-    assert loader.resolve("question_gate", ORG) == "v2"
+    assert loader.resolve("personal_listener_gate", ORG) == "v3"
+    assert loader.resolve("question_gate", ORG) == "v3"
 
 
 class _ProfileAwareGate(_LLM):

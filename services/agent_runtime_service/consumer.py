@@ -28,6 +28,11 @@ ProactiveAgent (P11, `proactive/loop.py`) runs beside it too: `decisions` + `act
 `agent-runtime-proactive`, with its own producer. If that loop dies (an unacknowledged alert),
 the process exits without committing, like the window loop, and restarts from the last safe
 offset. `PROACTIVE_AGENT=0` leaves it unstarted.
+
+ADR-0039: one `OrgContextClient` (the company brain over `GetOrgContext`, cached in-process) feeds
+every window's prompts, and one `CachedAgendaSource` (core-api's internal agenda route) is shared
+by the runtime (proxied participants, C6), the MeetingAgent and ProactiveAgent's window checks
+(meeting title and confidentiality, C7).
 """
 
 from __future__ import annotations
@@ -159,6 +164,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from libs.shared.budget import BillingRefresher, BudgetGate
     from libs.shared.llm_cache import ResponseCache
     from libs.shared.metrics import serve_metrics, set_service
+    from libs.shared.org_context import OrgContextClient
     from libs.shared.pii import EgressRedactor
     from libs.shared.prompts import PromptLoader
     from libs.shared.router import LiteLLMRouter
@@ -176,7 +182,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.a2a.identity import signer_from_env
     from services.agent_runtime_service.a2a.pep import Pep
     from services.agent_runtime_service.a2a.related import related_from_env
-    from services.agent_runtime_service.agenda import agenda_from_env
+    from services.agent_runtime_service.agenda import CachedAgendaSource, agenda_from_env
     from services.agent_runtime_service.agents import registered_agents
     from services.agent_runtime_service.agents.context_gap_agent import (
         ContextGapDeps,
@@ -248,11 +254,26 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         related=related_from_env(),
         user_context=contexts.get,
     )
+    org_contexts = OrgContextClient()
+    agenda_client = agenda_from_env()
+    agenda = CachedAgendaSource(agenda_client) if agenda_client is not None else None
     proactive_settings = ProactiveSettings.from_env()
     proactive = proactive_from_env()
+    # ADR-0039 C7: once-only claims in Redis, the meeting's title / confidentiality, and the
+    # PEP + user contexts to authorize topic watchers
+    proactive.redis, proactive.agenda, proactive.pep = redis, agenda, pep
+    proactive.user_context = contexts.get
+
+    async def proxied(org_id: UUID, meeting_id: UUID) -> list[UUID]:
+        if agenda is None:
+            return []
+        return [p.user_id for p in await agenda.proxies(org_id, meeting_id)]
+
     runtime = AgentRuntime(
         sink=emitter,
         user_context=contexts.get,
+        org_context=org_contexts.get,
+        proxies=proxied if agenda is not None else None,
         agents=registered_agents(
             loader,
             router,
@@ -260,7 +281,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
             proactive=proactive,
             # ADR-0038 D7: the agenda over core-api's internal route; rate-limit state in the
             # shared Redis under nexus:{org_id}:meeting_agent:{meeting_id}
-            meeting=MeetingDeps(agenda=agenda_from_env(), redis=redis),
+            meeting=MeetingDeps(agenda=agenda, redis=redis),
         ),
         max_concurrency=int(os.environ.get("AGENT_MAX_CONCURRENCY", "8")),
     )
@@ -351,6 +372,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         consumer.close()
         await contexts.close()
         await pdp.close()
+        await org_contexts.close()
 
 
 if __name__ == "__main__":  # pragma: no cover

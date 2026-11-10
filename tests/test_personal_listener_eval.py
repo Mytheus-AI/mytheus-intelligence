@@ -11,6 +11,12 @@ Two parts:
 
 A prompt change is promoted only if this eval passes against the CURRENT default's measured
 numbers (written into the baseline file after a recorded run).
+
+ADR-0039: a case may carry `never_record_topics` (run with that company ground rule; a window
+mainly about one is labelled not relevant) and `commitments` (how many promises "You" made).
+`test_commitments_match_the_labels` (`pytest -m eval`, `EVAL_LIVE=1`) runs the default extraction
+prompt on the labelled cases and checks the `COMMITMENTS` line's count; it has no measured
+baseline yet, so it reports and asserts only exact-count accuracy of at least 0.8.
 """
 
 from __future__ import annotations
@@ -25,12 +31,15 @@ import fakeredis
 import pytest
 
 from libs.shared.budget import BudgetGate
+from libs.shared.org_context import CompanyContext
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import LiteLLMRouter
 from services.agent_runtime_service.agents.personal_listener_agent import (
     GATE_KEY,
     gate_values,
+    parse_record,
     parse_relevance,
+    persona_values,
     relevance_threshold,
 )
 from services.agent_runtime_service.consumer import PROMPTS_DIR
@@ -75,6 +84,34 @@ def test_the_golden_set_is_balanced_and_well_formed():
     assert 0.3 <= positives / len(cases) <= 0.7
     for c in cases:
         assert c["role"] and c["window"] and isinstance(c["relevant"], bool)
+
+
+def case_context(case: dict[str, Any]) -> dict[str, Any]:
+    """The participant context a golden case runs with, company ground rules included."""
+    ctx: dict[str, Any] = {
+        "role": case["role"],
+        "skills": case["skills"],
+        "listen_for": case.get("listen_for", []),
+        "ignore_topics": case.get("ignore_topics", []),
+    }
+    if case.get("never_record_topics"):
+        ctx["org"] = CompanyContext(never_record_topics=tuple(case["never_record_topics"]))
+    return ctx
+
+
+def test_the_adr_0039_labels_are_well_formed():
+    cases = golden()
+    never = [c for c in cases if c.get("never_record_topics")]
+    assert len(never) >= 3 and any(c["relevant"] for c in never)
+    for c in never:  # a window that names its never-record topic is labelled not relevant
+        named = any(t.lower() in c["window"].lower() for t in c["never_record_topics"])
+        assert named == (not c["relevant"]), c["id"]
+    labelled = [c for c in cases if "commitments" in c]
+    assert len(labelled) >= 6 and sum(c["commitments"] > 0 for c in labelled) >= 3
+    for c in labelled:
+        assert isinstance(c["commitments"], int) and 0 <= c["commitments"] <= 5
+        you_lines = [ln for ln in c["window"].splitlines() if ln.startswith("You:")]
+        assert c["commitments"] <= len(you_lines), c["id"]
 
 
 def _load_dotenv() -> None:
@@ -123,17 +160,7 @@ async def test_pregate_meets_the_baseline():
         out = await router.complete(
             tier="triage",
             system=prompt.system,
-            user=prompt.render_user(
-                **gate_values(
-                    {
-                        "role": case["role"],
-                        "skills": case["skills"],
-                        "listen_for": case.get("listen_for", []),
-                        "ignore_topics": case.get("ignore_topics", []),
-                    }
-                ),
-                window=case["window"],
-            ),
+            user=prompt.render_user(**gate_values(case_context(case)), window=case["window"]),
             org_id=org,
             user_id=None,
             max_tokens=20,
@@ -153,3 +180,40 @@ async def test_pregate_meets_the_baseline():
     baseline = json.loads((EVAL_DIR / "personal_listener_baseline.json").read_text())
     assert m["precision"] >= baseline["min_precision"], report
     assert m["recall"] >= baseline["min_recall"], report
+
+
+@pytest.mark.eval
+async def test_commitments_match_the_labels():
+    """ADR-0039 C3, live: the extraction's COMMITMENTS line holds exactly the labelled number of
+    promises "You" made (never another participant's)."""
+    if os.environ.get("EVAL_LIVE") != "1":
+        pytest.skip("live eval: set EVAL_LIVE=1 (spends one Sonnet call per labelled case)")
+    _load_dotenv()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY is not set")
+
+    async def unlimited(_org: uuid.UUID) -> dict[str, Any]:
+        return {"tokens_consumed": 0, "token_quota": 10**9, "hard_cap": 10**9}
+
+    org = uuid.uuid4()
+    router = LiteLLMRouter(BudgetGate(fakeredis.aioredis.FakeRedis(), unlimited), _NoSpendSink())
+    loader = PromptLoader(PROMPTS_DIR)
+    prompt = loader.load("personal_listener", loader.resolve("personal_listener", org))
+    got: dict[str, int] = {}
+    labelled = [c for c in golden() if "commitments" in c]
+    for case in labelled:
+        out = await router.complete(
+            tier="extract",
+            system=prompt.system,
+            user=prompt.render_user(**persona_values(case_context(case)), window=case["window"]),
+            org_id=org,
+            user_id=None,
+            max_tokens=400,
+        )
+        got[case["id"]] = len(parse_record(out.text)[2])
+    exact = sum(got[c["id"]] == c["commitments"] for c in labelled) / len(labelled)
+    report = {"prompt": prompt.ref, "commitments": got, "exact_count_accuracy": exact}
+    (EVAL_DIR / "personal_listener_commitments_last_run.json").write_text(
+        json.dumps(report, indent=2)
+    )
+    assert exact >= 0.8, report

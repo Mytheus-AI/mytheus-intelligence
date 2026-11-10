@@ -33,6 +33,7 @@ import fakeredis
 import pytest
 
 from libs.shared.budget import BudgetGate
+from libs.shared.org_context import CompanyContext
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import LiteLLMRouter
 from libs.shared.state import AgentState, TranscriptWindow, Turn
@@ -288,7 +289,10 @@ async def _live_eval(agent_name: str, cls: type[CandidateAgent]) -> None:
     field_checks = {"assignee": [0, 0], "due_date": [0, 0]}  # [correct, labelled matches]
     for i, case in enumerate(data["cases"]):
         w, label_of = _window(org, meeting, i, case["window"])
-        state = AgentState(meeting_id=meeting, user_id=user, chunk=w, context={}, org_id=org)
+        context: dict[str, Any] = {}
+        if case.get("never_record_topics"):  # ADR-0039 C2: the company ground rule
+            context["org"] = CompanyContext(never_record_topics=tuple(case["never_record_topics"]))
+        state = AgentState(meeting_id=meeting, user_id=user, chunk=w, context=context, org_id=org)
         before = len(sink.tiers)
         result = await agent.process(state)
         emitted = list(result.payload["candidates"]) if result is not None else []
@@ -314,8 +318,8 @@ async def _live_eval(agent_name: str, cls: type[CandidateAgent]) -> None:
     m = score(windows)
     report = {
         "agent": cls.name,
-        "prompt": f"{cls.prompt_key}@v1",
-        "gate_prompt": f"{cls.gate_key}@v1",
+        "prompt": f"{cls.prompt_key}@{loader.resolve(cls.prompt_key, org)}",
+        "gate_prompt": f"{cls.gate_key}@{loader.resolve(cls.gate_key, org)}",
         "tokens": sink.tokens,
         "calls": len(sink.tiers),
         **m,
