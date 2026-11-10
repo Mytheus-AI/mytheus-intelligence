@@ -27,7 +27,11 @@ def test_create_app_exposes_metrics_without_raw_paths() -> None:
     body = c.get("/metrics").text
     assert 'route="/v1/items/{item_id}"' in body
     assert "11111111-2222" not in body
-    assert "org_id" not in body
+    # the one named exception (libs/shared/metrics.py): the per-workspace speech-to-card SLO
+    tenant_free = [
+        line for line in body.splitlines() if "mytheus_agent_time_to_card_seconds" not in line
+    ]
+    assert not any("org_id" in line for line in tenant_free)
     assert "mytheus_http_request_duration_seconds_bucket" in body
     assert c.get("/metrics", headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 404
 

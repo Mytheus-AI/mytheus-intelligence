@@ -314,7 +314,9 @@ def test_with_no_brain_the_new_version_renders_exactly_the_old_user_message(
         "agenda": "1. A (pending)",
         "carried": "(none)",
     }
-    assert loader.resolve(key, ORG) == new  # the default advanced
+    # the default advanced (to this version or, like decision_agent / action_agent@v3 for the
+    # in-meeting memory, past it)
+    assert int(loader.resolve(key, ORG)[1:]) >= int(new[1:])
     assert loader.load(key, new).render_user(**values) == loader.load(key, old).render_user(
         **values
     )

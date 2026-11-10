@@ -35,11 +35,30 @@ from typing import Any
 from uuid import UUID
 
 from libs.shared.events import EventEnvelope
+from libs.shared.metrics import AGENT_TIME_TO_CARD
 from libs.shared.state import AgentResult, TranscriptWindow
 
 logger = logging.getLogger(__name__)
 
 PRODUCER = "agent-runtime-service"
+MAX_TIME_TO_CARD_S = 600.0  # a replay of old finals is not a latency
+
+
+def top_item(result: AgentResult) -> dict[str, Any]:
+    """The item a result's `content` is about: the note's own payload, or the candidate /
+    suggestion matching the content (else the most confident). Its moment fields are copied to
+    the record's top level for consumers that do not read `payload_json`."""
+    payload = result.payload or {}
+    for key, text_key in (("candidates", "content"), ("suggestions", "question")):
+        items = [i for i in payload.get(key) or [] if isinstance(i, dict)]
+        if items:
+            same = [i for i in items if i.get(text_key) == result.content]
+            return (same or sorted(items, key=lambda i: -float(i.get("confidence") or 0.0)))[0]
+    return payload
+
+
+def _opt_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 class EmitError(RuntimeError):
@@ -135,7 +154,13 @@ class Emitter:
             user_id=user_id,
             agent=agent,
             result=result,
+            window=window,
         )
+        if window.last_chunk_at:
+            # speech-to-card: the window's last final was produced -> this result is out
+            latency = time.time() - window.last_chunk_at
+            if 0.0 <= latency <= MAX_TIME_TO_CARD_S:
+                AGENT_TIME_TO_CARD.labels(agent, str(window.org_id)).observe(latency)
 
     async def agent_result(
         self,
@@ -146,9 +171,17 @@ class Emitter:
         user_id: UUID,
         agent: str,
         result: AgentResult,
+        window: TranscriptWindow | None = None,
     ) -> None:
         """One `agent-results` record. `result()` is this for a window; ProactiveAgent's
-        event-driven alerts (no window) call it directly."""
+        event-driven alerts (no window) call it directly.
+
+        Polish (one card per moment): the optional top-level fields `moment_id`, `why`,
+        `updates_candidate_id` (the top item's, `top_item`) and `window_start_ms` /
+        `window_end_ms` (meeting time) ride beside `payload_json`, where every item keeps its
+        own. A Schema Registry still on the previous `agent-results` version simply drops them
+        (the serializer writes the registered fields only)."""
+        top = top_item(result)
         env = EventEnvelope(
             topic="agent-results",
             org_id=str(org_id),
@@ -165,6 +198,11 @@ class Emitter:
                 "content": result.content,
                 "payload_json": json.dumps(result.payload),
                 "source_chunk_ids": list(result.source_chunk_ids),
+                "moment_id": _opt_str(top.get("moment_id")),
+                "why": _opt_str(top.get("why")),
+                "updates_candidate_id": _opt_str(top.get("updates_candidate_id")),
+                "window_start_ms": int(window.start_ms) if window is not None else None,
+                "window_end_ms": int(window.end_ms) if window is not None else None,
             },
         )
         self._produce(env, key=str(org_id))

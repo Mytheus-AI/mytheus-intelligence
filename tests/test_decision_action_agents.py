@@ -196,7 +196,7 @@ async def test_the_gate_routes_haiku_and_extraction_routes_sonnet(cls, script):
     assert [u["model_tier"] for u in sink.usage_calls] == ["haiku", "sonnet"]
     assert result.payload["model_tier"] == "sonnet"
     # ADR-0039 advanced the action prompts, the polish plan the decision ones (never record)
-    assert result.payload["prompt"] == f"{cls.prompt_key}@v2"
+    assert result.payload["prompt"] == f"{cls.prompt_key}@v3"  # polish: in-meeting memory
     # extraction: adaptive thinking at effort low, with room for it (polish: model settings)
     extract = llm.calls[1]
     assert extract["thinking"] == {"type": "adaptive"}
@@ -492,6 +492,7 @@ def test_the_shipped_prompts_are_registered_and_render():
             company="",
             ground_rules="",
             owners="",
+            memory="",
         )
         assert "Participant 1: hi" in rendered
         assert "{" not in rendered  # every placeholder filled, no stray literal braces
@@ -500,9 +501,10 @@ def test_the_shipped_prompts_are_registered_and_render():
         window="x", today="Monday 2026-11-09"
     )
     registry = json.loads((Path(PROMPTS_DIR) / "registry.json").read_text())["defaults"]
-    for key in ("decision_gate", "decision_agent"):  # polish: never record everywhere
-        assert registry[key] == "v2"
-    assert registry["action_agent"] == "v2"  # ADR-0039 C1, C2, C4
+    assert registry["decision_gate"] == "v2"  # polish: never record everywhere
+    # polish: memory inside the meeting (v2: never record; ADR-0039 C1, C2, C4 for actions)
+    assert registry["decision_agent"] == "v3"
+    assert registry["action_agent"] == "v3"
     assert registry["action_gate"] == "v3"  # polish: past the 512-token cache minimum
 
 

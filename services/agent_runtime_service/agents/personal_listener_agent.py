@@ -79,6 +79,19 @@ MAX_COMMITMENT = 500  # B6: content up to 500
 MAX_DUE_HINT = 100  # B6: due_hint up to 100
 
 
+DEFAULT_NOTE_MIN_SPAN_MS = 30_000
+
+
+def note_min_span_ms() -> int:
+    """Polish (calm): notes run on at least this much meeting time (`NOTE_MIN_SPAN_MS`, default
+    30 s), collected from the event-driven windows, or sooner when a window carries a cue (a
+    promise is time-sensitive). Fast windows are for the cards; a note per 4 s is noise."""
+    try:
+        return max(0, int(os.environ.get("NOTE_MIN_SPAN_MS", DEFAULT_NOTE_MIN_SPAN_MS)))
+    except ValueError:
+        return DEFAULT_NOTE_MIN_SPAN_MS
+
+
 def relevance_threshold() -> float:
     return float(os.environ.get("PERSONAL_LISTENER_RELEVANCE_THRESHOLD", "0.5"))
 
@@ -340,6 +353,10 @@ class PersonalListenerAgent(BaseAgent):
     prompt_key: ClassVar[str] = "personal_listener"
     scope: ClassVar[Literal["participant", "meeting"]] = "participant"
     serves_proxies: ClassVar[bool] = True  # ADR-0039 C6: runs for attendance `agent` too
+
+    @property
+    def min_span_ms(self) -> int:
+        return note_min_span_ms()
 
     gate_prompt: Prompt | None = None
 

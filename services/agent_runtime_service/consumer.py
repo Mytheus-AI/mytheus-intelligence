@@ -15,8 +15,10 @@ is nothing durable to protect here, and the producer's own DLQ handling is where
 kept. A transient failure (Redpanda unacknowledged, an unexpected error in an agent) stops the
 loop without committing, so the process restarts from the last safe offset.
 
-Windows are processed one at a time on this loop. Within a window, users run concurrently.
-That is enough for this project's scale; partitions are the unit of horizontal scale.
+Polish (calm and fast): windows are event-driven (`windowing.py`: a cue, a turn end, at most
+15 s) and each meeting has its own asyncio task (`Loop`), so one meeting's slow model call
+never holds up another's cards. Within a window, users run concurrently. Partitions remain the
+unit of horizontal scale.
 
 Agent-to-agent (P10, `a2a/bus.py`) runs beside this loop on the same event loop: the responder
 on `agent-requests` (group `agent-runtime-a2a`) and this instance's response router on
@@ -40,14 +42,22 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections import defaultdict
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from libs.shared.tenancy import parse_org_id
 from services.agent_runtime_service.runtime import AgentRuntime
-from services.agent_runtime_service.windowing import Chunk, ClosedWindow, Windower
+from services.agent_runtime_service.windowing import (
+    Chunk,
+    ClosedWindow,
+    Windower,
+    WindowSettings,
+    merge_windows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,61 +109,189 @@ def parse_chunk(value: dict[str, Any], partition: int, offset: int) -> Chunk | N
         text=str(value["text"]),
         partition=partition,
         offset=offset,
+        produced_at=_produced_at(header.get("occurred_at")),
     )
 
 
+def _produced_at(raw: object) -> float | None:
+    """The envelope's `occurred_at` (timestamp-micros; a datetime once decoded by fastavro)."""
+    if isinstance(raw, datetime):
+        return raw.timestamp()
+    if isinstance(raw, int | float) and not isinstance(raw, bool) and raw > 0:
+        return float(raw) / 1_000_000
+    return None
+
+
+@dataclass
+class _Job:
+    windows: list[ClosedWindow] = field(default_factory=list)
+    room: tuple[str, object, str, int, int] | None = None  # (event, participant, topic, p, o)
+
+
+class _Worker:
+    """One meeting's consumer task: its windows and room events, in order, one at a time."""
+
+    def __init__(self) -> None:
+        self.jobs: deque[_Job] = deque()
+        self.wake = asyncio.Event()
+        self.task: asyncio.Task[None] | None = None
+        self.busy = False
+
+    def put(self, job: _Job) -> None:
+        self.jobs.append(job)
+        self.wake.set()
+
+
 class Loop:
-    """The testable core: decoded messages in, windows processed, offsets tracked."""
+    """The testable core: decoded messages in, windows processed, offsets tracked.
+
+    Polish (calm and fast): one asyncio task per meeting (`_Worker`, keyed by org and meeting).
+    The poll loop only windows chunks and hands closed windows to their meeting's task, so one
+    meeting's slow model call never delays another meeting's cards. Within a meeting, windows
+    (and that meeting's room events) are applied in order, one at a time, which is what keeps
+    the in-meeting memory and the roster consistent. A task that falls behind merges the
+    windows waiting for it into one (`windowing.merge_windows`) and runs the agents once on
+    all of them, instead of paying for every window late. Offsets are marked done only after
+    the window is processed AND the emitter is flushed; a task that fails (an unacknowledged
+    produce) is surfaced by `check()` on the poll loop, which then stops without committing.
+    """
 
     def __init__(self, runtime: AgentRuntime, emitter: Any, windower: Windower) -> None:
         self.runtime = runtime
         self.emitter = emitter
         self.windower = windower
         self.offsets = OffsetTracker()
+        self._workers: dict[tuple[UUID, UUID], _Worker] = {}
 
     async def handle(self, topic: str, partition: int, offset: int, value: dict[str, Any]) -> None:
+        self.check()
         self.offsets.received(topic, partition, offset)
-        closed: list[ClosedWindow] = []
         if topic == "transcript-chunks":
             chunk = parse_chunk(value, partition, offset)
             if chunk is None:
                 logger.warning("transcript-chunks: skipping malformed message at %s", offset)
                 self.offsets.done(topic, partition, offset)
             else:
-                closed = self.windower.add(chunk)
+                self._submit(self.windower.add(chunk))
         elif topic == "meeting-room-events":
-            closed = await self._room_event(value)
+            self._room_event(value, topic, partition, offset)
+        else:
             self.offsets.done(topic, partition, offset)
-        await self.run_closed(closed)
 
-    async def _room_event(self, value: dict[str, Any]) -> list[ClosedWindow]:
+    def _room_event(self, value: dict[str, Any], topic: str, partition: int, offset: int) -> None:
         org_id = parse_org_id((value.get("header") or {}).get("org_id"))
         try:
             meeting_id = UUID(str(value.get("meeting_id")))
         except ValueError:
-            return []
+            self.offsets.done(topic, partition, offset)
+            return
         if org_id is None:
-            return []
+            self.offsets.done(topic, partition, offset)
+            return
         event = str(value.get("event_type"))
-        await self.runtime.on_room_event(org_id, meeting_id, event, value.get("participant_id"))
-        if event == "left" and not self.runtime.roster(org_id, meeting_id):
-            closed = self.windower.close_meeting(org_id, meeting_id)
-            await self.run_closed(closed)
-            await self.runtime.end_meeting(org_id, meeting_id)
-        return []
+        self._worker(org_id, meeting_id).put(
+            _Job(room=(event, value.get("participant_id"), topic, partition, offset))
+        )
 
     async def tick(self) -> None:
-        """Close windows of meetings that went quiet."""
-        await self.run_closed(self.windower.expire_idle())
+        """Close windows whose speaker went quiet or that waited long enough."""
+        self.check()
+        self._submit(self.windower.expire_idle())
 
-    async def run_closed(self, closed: list[ClosedWindow]) -> None:
+    def check(self) -> None:
+        """Raise the error of any meeting task that died (nothing it held is committed)."""
+        for key, worker in list(self._workers.items()):
+            task = worker.task
+            if task is not None and task.done():
+                if not task.cancelled() and task.exception() is not None:
+                    raise task.exception()  # type: ignore[misc]
+                if not worker.jobs:
+                    self._workers.pop(key, None)
+
+    async def drain(self) -> None:
+        """Wait until every meeting task has applied everything queued (tests, shutdown)."""
+        while True:
+            self.check()
+            pending = [w for w in self._workers.values() if w.busy or w.jobs]
+            if not pending:
+                return
+            await asyncio.sleep(0.001)
+
+    async def close(self) -> None:
+        for worker in self._workers.values():
+            if worker.task is not None:
+                worker.task.cancel()
+        await asyncio.gather(
+            *(w.task for w in self._workers.values() if w.task is not None),
+            return_exceptions=True,
+        )
+
+    def _submit(self, closed: list[ClosedWindow]) -> None:
         for cw in closed:
-            await self.runtime.process_window(cw.window)
-        if closed:
-            self.emitter.flush()  # raises EmitError: nothing below runs, nothing is committed
-            for cw in closed:
-                for partition, offset in cw.offsets:
-                    self.offsets.done("transcript-chunks", partition, offset)
+            w = cw.window
+            self._worker(w.org_id, w.meeting_id).put(_Job(windows=[cw]))
+
+    def _worker(self, org_id: UUID, meeting_id: UUID) -> _Worker:
+        key = (org_id, meeting_id)
+        worker = self._workers.get(key)
+        if worker is None or (worker.task is not None and worker.task.done()):
+            worker = _Worker()
+            self._workers[key] = worker
+            worker.task = asyncio.create_task(self._run_worker(key, worker))
+        return worker
+
+    async def _run_worker(self, key: tuple[UUID, UUID], worker: _Worker) -> None:
+        while True:
+            if not worker.jobs:
+                worker.wake.clear()
+                await worker.wake.wait()
+                continue
+            job = worker.jobs.popleft()
+            worker.busy = True
+            try:
+                ended = False
+                if job.windows:
+                    # catch up: every window already waiting behind this one runs with it
+                    while worker.jobs and worker.jobs[0].windows:
+                        job.windows.extend(worker.jobs.popleft().windows)
+                    await self._run_windows(job.windows)
+                elif job.room is not None:
+                    ended = await self._apply_room(key, job.room)
+            finally:
+                worker.busy = False
+            if ended and not worker.jobs:
+                return  # the meeting is over; a later message starts a fresh task
+
+    async def _apply_room(
+        self, key: tuple[UUID, UUID], room: tuple[str, object, str, int, int]
+    ) -> bool:
+        org_id, meeting_id = key
+        event, participant, topic, partition, offset = room
+        await self.runtime.on_room_event(org_id, meeting_id, event, participant)
+        ended = event == "left" and not self.runtime.roster(org_id, meeting_id)
+        if ended:
+            await self._run_windows(self.windower.close_meeting(org_id, meeting_id))
+            await self.runtime.end_meeting(org_id, meeting_id)
+        self.offsets.done(topic, partition, offset)
+        return ended
+
+    async def _run_windows(self, closed: list[ClosedWindow]) -> None:
+        if not closed:
+            return
+        merged = merge_windows(closed)
+        if len(closed) > 1:
+            logger.info(
+                "meeting %s fell behind: %d windows merged into %s",
+                merged.window.meeting_id,
+                len(closed),
+                merged.window.window_id,
+            )
+        await self.runtime.process_window(merged.window)
+        # every produced message acknowledged before any offset is released; EmitError ends
+        # this meeting's task and `check()` stops the poll loop before it commits
+        await asyncio.to_thread(self.emitter.flush)
+        for partition, offset in merged.offsets:
+            self.offsets.done("transcript-chunks", partition, offset)
 
 
 async def run() -> None:  # pragma: no cover - the confluent-kafka harness
@@ -198,6 +336,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         deps_from_env as proactive_from_env,
     )
     from services.agent_runtime_service.emitter import Emitter
+    from services.agent_runtime_service.memory import MeetingLedger
     from services.agent_runtime_service.policy import AgentPolicyClient
     from services.agent_runtime_service.proactive.loop import (
         TOPICS as PROACTIVE_TOPICS,
@@ -290,6 +429,8 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
             meeting=MeetingDeps(agenda=agenda, redis=redis),
         ),
         max_concurrency=int(os.environ.get("AGENT_MAX_CONCURRENCY", "8")),
+        # polish: memory inside the meeting, nexus:{org_id}:meeting-ledger:{meeting_id}
+        ledger=MeetingLedger(redis),
     )
     stop = asyncio.Event()
     background: list[asyncio.Task[None]] = []
@@ -330,7 +471,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         background.append(
             asyncio.create_task(run_proactive_loop(proactive_consumer, codec, proactive_loop, stop))
         )
-    loop = Loop(runtime, emitter, Windower(idle_s=float(os.environ.get("WINDOW_IDLE_S", "15"))))
+    loop = Loop(runtime, emitter, Windower(WindowSettings.from_env()))
     consumer = Consumer(
         {
             "bootstrap.servers": brokers,
@@ -346,7 +487,8 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
             for task in background:
                 if task.done() and not task.cancelled() and task.exception() is not None:
                     raise RuntimeError("a background consumer loop died") from task.exception()
-            msg = await asyncio.to_thread(consumer.poll, 1.0)
+            # short poll: the wall-clock window rules (a 1.5 s quiet turn end) run on each tick
+            msg = await asyncio.to_thread(consumer.poll, 0.25)
             if msg is not None and not msg.error():
                 topic, partition, offset = msg.topic(), msg.partition(), msg.offset()
                 raw = msg.value()
@@ -369,6 +511,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
                 )
                 committed.update(due)
     finally:
+        await loop.close()
         stop.set()
         for task in background:
             task.cancel()
