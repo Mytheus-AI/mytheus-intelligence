@@ -265,6 +265,19 @@ async def test_confirmed_action_writes_produced_and_assigned_to(consumer, conn):
     assert await _count(conn, org2, "(:Person {org_id: $org_id})") == 0
 
 
+async def test_a_personal_task_with_the_nil_meeting_writes_no_meeting(consumer, conn):
+    """A confirmed action created outside any meeting carries the nil uuid as `meeting_id`:
+    the Action and its ASSIGNED_TO edge, no Meeting node and no PRODUCED edge, never a DLQ."""
+    org, a, user = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    nil = uuid.UUID(int=0)
+    assert await _feed(consumer, "actions", action_value(org, a, nil, user)) == "applied"
+    assert await _count(conn, org, "(:Meeting {org_id: $org_id})") == 0
+    assert await _count(conn, org, "(:Action {org_id: $org_id})-[:PRODUCED]->(:Meeting)") == 0
+    assigned = "(:Action {org_id: $org_id})-[:ASSIGNED_TO {org_id: $org_id}]->(:Person)"
+    assert await _count(conn, org, assigned) == 1
+    assert await _graph_events(org) == [("ASSIGNED_TO", "edge_created")]
+
+
 async def test_a_join_writes_attended_only_for_a_user_identity(consumer, conn):
     org, m, user = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     assert (

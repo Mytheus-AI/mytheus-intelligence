@@ -16,6 +16,10 @@ Shape of every write:
   the prior node; the prior's own event fills it in later and keeps its `superseded` status.
 
 Each function returns the `GraphFact`s it wrote, which the consumer turns into `graph-events`.
+
+A personal task (created outside any meeting) arrives on `actions` with the nil uuid as its
+`meeting_id`. It means "no meeting": the `Action` node and its `ASSIGNED_TO` edge are written,
+no `Meeting` node and no `PRODUCED` edge (`ConfirmedAction.meeting_id` is None).
 """
 
 from __future__ import annotations
@@ -30,6 +34,11 @@ from libs.shared.age import AgeConnection, AgeQueryRejected, run_cypher
 from services.knowledge_graph_service.graph import _ORG_LOCK, NODE_KEYS
 
 GraphEventType = Literal["edge_created", "lineage_updated"]
+NIL_MEETING = UUID(int=0)  # "no meeting": a personal task created outside any meeting
+
+
+def meeting_or_none(meeting_id: UUID | None) -> UUID | None:
+    return None if meeting_id is None or meeting_id == NIL_MEETING else meeting_id
 
 
 @dataclass(frozen=True)
@@ -56,7 +65,7 @@ class ConfirmedDecision:
 @dataclass(frozen=True)
 class ConfirmedAction:
     action_id: UUID
-    meeting_id: UUID
+    meeting_id: UUID | None  # None: a personal task, no meeting produced it
     content: str
     confidence: float
     confirmed_at: str
@@ -91,6 +100,14 @@ _ACTION = (
     "SET a.status = 'confirmed', a.confidence = $confidence, a.content = $content, "
     "a.meeting_id = $meeting_id, a.due_date = $due_date, a.confirmed_at = $confirmed_at "
     "MERGE (a)-[:PRODUCED {org_id: $org_id}]->(m) "
+    "RETURN a"
+)
+
+# A personal task: the same Action node, no Meeting and no PRODUCED edge.
+_ACTION_NO_MEETING = (
+    "MERGE (a:Action {org_id: $org_id, action_id: $action_id}) "
+    "SET a.status = 'confirmed', a.confidence = $confidence, a.content = $content, "
+    "a.due_date = $due_date, a.confirmed_at = $confirmed_at "
     "RETURN a"
 )
 
@@ -158,22 +175,21 @@ async def apply_decision(
 async def apply_action(
     conn: AgeConnection, org_id: UUID, action: ConfirmedAction
 ) -> list[GraphFact]:
-    aid, mid = str(action.action_id), str(action.meeting_id)
-    facts = [GraphFact("edge_created", "PRODUCED", aid, mid)]
+    aid = str(action.action_id)
+    meeting = meeting_or_none(action.meeting_id)
+    params: dict[str, Any] = {
+        "action_id": aid,
+        "content": action.content,
+        "confidence": float(action.confidence),
+        "due_date": action.due_date,
+        "confirmed_at": action.confirmed_at,
+    }
+    facts: list[GraphFact] = []
+    if meeting is not None:
+        params["meeting_id"] = str(meeting)
+        facts.append(GraphFact("edge_created", "PRODUCED", aid, str(meeting)))
     async with org_transaction(conn, org_id):
-        await _write(
-            conn,
-            org_id,
-            _ACTION,
-            {
-                "action_id": aid,
-                "meeting_id": mid,
-                "content": action.content,
-                "confidence": float(action.confidence),
-                "due_date": action.due_date,
-                "confirmed_at": action.confirmed_at,
-            },
-        )
+        await _write(conn, org_id, _ACTION if meeting is not None else _ACTION_NO_MEETING, params)
         if action.assignee_id is not None:
             uid = str(action.assignee_id)
             await _write(conn, org_id, _ASSIGNED_TO, {"action_id": aid, "assignee_id": uid})

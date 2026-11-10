@@ -349,6 +349,11 @@ def parse_action(value: Mapping[str, Any]) -> ConfirmedAction | None:
     content = value.get("content")
     if org is None or action is None or meeting is None or not isinstance(content, str):
         return None
+    if meeting == UUID(int=0):
+        # A personal task, created outside any meeting: its alerts would have no meeting to be
+        # delivered into (core-api refuses an agent result without a real meeting), so the
+        # workload and dependency checks skip it rather than emit a record that dead-letters.
+        return None
     due = value.get("due_date")
     return ConfirmedAction(
         org_id=org,
