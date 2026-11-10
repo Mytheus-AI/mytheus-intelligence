@@ -1033,9 +1033,11 @@ async def test_a_result_the_registry_cannot_encode_is_dropped_not_crash_looped()
 def test_the_prompts_load_render_and_are_registered():
     loader = PromptLoader(PROMPTS_DIR)
     gate = loader.load("context_gap_gate", loader.resolve("context_gap_gate", ORG))
-    assert "Participant 1: x" in gate.render_user(window="Participant 1: x")
+    assert "Participant 1: x" in gate.render_user(window="Participant 1: x", ground_rules="")
     synth = loader.load("context_gap_agent", loader.resolve("context_gap_agent", ORG))
-    rendered = synth.render_user(query="q1", window="You: hi", passages="[1] p")
+    rendered = synth.render_user(
+        query="q1", window="You: hi", passages="[1] p", company="", ground_rules=""
+    )
     assert "q1" in rendered and "You: hi" in rendered and "[1] p" in rendered
 
 
@@ -1045,7 +1047,7 @@ async def test_the_emitted_record_matches_the_contract_shape():
     p = bob.payload
     assert set(p) == {"gap", "collaborations", "fill", "prompt", "model_tier"}
     assert p["gap"] == {"query": QUERY, "query_class": "decision_lineage"}
-    assert p["prompt"] == "context_gap_agent@v1" and p["model_tier"] == "extract"
+    assert p["prompt"] == "context_gap_agent@v2" and p["model_tier"] == "extract"
     for c in p["collaborations"]:
         assert set(c) == {
             "id",

@@ -368,10 +368,11 @@ def test_v2_gates_render_focus_and_say_how_to_score_it(key: str):
 
 def test_the_registry_advances_both_gates():
     """ADR-0038 advanced both gates to v2; ADR-0039 to v3 (the never-record line), which with no
-    company brain and a live participant renders exactly v2 (`tests/test_company_brain.py`)."""
+    company brain and a live participant renders exactly v2 (`tests/test_company_brain.py`); the
+    polish plan to v4 (the same user message, a system prompt past the 512-token cache minimum)."""
     loader = PromptLoader(PROMPTS_DIR)
-    assert loader.resolve("personal_listener_gate", ORG) == "v3"
-    assert loader.resolve("question_gate", ORG) == "v3"
+    assert loader.resolve("personal_listener_gate", ORG) == "v4"
+    assert loader.resolve("question_gate", ORG) == "v4"
 
 
 class _ProfileAwareGate(_LLM):

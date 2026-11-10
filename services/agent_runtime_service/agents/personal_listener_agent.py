@@ -60,11 +60,16 @@ from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
 from libs.shared.prompts import Prompt
+from libs.shared.router import EXTRACT_MAX_TOKENS, EXTRACTION_EFFORT
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
 from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
+from services.agent_runtime_service.names import speaker_labels
+from services.agent_runtime_service.policy import DEFAULT as DEFAULT_THRESHOLDS
+from services.agent_runtime_service.policy import (
+    Thresholds,
+    thresholds_for,
+)
 
-SURFACE_ABOVE = 0.7
-SILENT_FROM = 0.4
 GATE_KEY = "personal_listener_gate"
 _NUMBER = re.compile(r"(?<![\d.])(?:0(?:\.\d+)?|1(?:\.0+)?|\.\d+)(?![\d.])")
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*([0-9]*\.?[0-9]+)\s*$", re.IGNORECASE)
@@ -141,12 +146,11 @@ def parse_record(text: str) -> tuple[float, str, list[dict[str, Any]]]:
     return _clamp(float(match.group(1))), note, commitments
 
 
-def band(confidence: float) -> Literal["surfaced", "silent", "dropped"]:
-    if confidence > SURFACE_ABOVE:
-        return "surfaced"
-    if confidence >= SILENT_FROM:
-        return "silent"
-    return "dropped"
+def band(
+    confidence: float, thresholds: Thresholds = DEFAULT_THRESHOLDS
+) -> Literal["surfaced", "silent", "dropped"]:
+    """The doc 08 band, with the tenant's thresholds when given (`policy.py`, ADR-0030 D3)."""
+    return thresholds.band(confidence)
 
 
 def _clamp(x: float) -> float:
@@ -154,17 +158,14 @@ def _clamp(x: float) -> float:
 
 
 def render_window(window: TranscriptWindow, user_id: UUID) -> str:
-    """The participant is "You"; everyone else is numbered in order of first speaking."""
+    """The participant is "You"; everyone else keeps their meeting-wide "Participant N" label
+    (`names.speaker_labels`; numbered in order of first speaking for a window built outside the
+    runtime)."""
     me = str(user_id)
-    labels: dict[str, str] = {}
-    lines = []
-    for turn in window.turns:
-        if turn.speaker_id == me:
-            label = "You"
-        else:
-            label = labels.setdefault(turn.speaker_id, f"Participant {len(labels) + 1}")
-        lines.append(f"{label}: {turn.text}")
-    return "\n".join(lines)
+    labels = speaker_labels(window, exclude=me)
+    return "\n".join(
+        f"{'You' if t.speaker_id == me else labels[t.speaker_id]}: {t.text}" for t in window.turns
+    )
 
 
 def render_profile(context: dict[str, Any]) -> str:
@@ -271,8 +272,9 @@ class _GatedStream:
     v3 `COMMITMENTS: [...]` line right after it is never forwarded: it is data for core-api, not
     part of the note the participant reads live."""
 
-    def __init__(self, stream: StreamFn) -> None:
+    def __init__(self, stream: StreamFn, thresholds: Thresholds = DEFAULT_THRESHOLDS) -> None:
         self._stream = stream
+        self._thresholds = thresholds
         self._buffer = ""
         self._decided = False
         self._open = False
@@ -291,7 +293,10 @@ class _GatedStream:
         first, _, rest = self._buffer.partition("\n")
         self._decided = True
         match = _CONFIDENCE.match(first)
-        self._open = match is not None and band(_clamp(float(match.group(1)))) == "surfaced"
+        self._open = (
+            match is not None
+            and band(_clamp(float(match.group(1))), self._thresholds) == "surfaced"
+        )
         if self._open and rest:
             await self._forward(rest)
 
@@ -352,7 +357,7 @@ class PersonalListenerAgent(BaseAgent):
             out = await self.router.complete(
                 tier="triage",
                 system=self.gate_prompt.system,
-                user=self.gate_prompt.render_user(
+                **self.gate_prompt.user_parts(
                     **gate_values(s.context), window=render_window(s.chunk, s.user_id)
                 ),
                 org_id=s.org_id,
@@ -364,23 +369,25 @@ class PersonalListenerAgent(BaseAgent):
 
         async def extract(s: AgentState) -> dict[str, Any]:
             assert self.prompt is not None and s.org_id is not None
-            gated = _GatedStream(s.stream) if s.stream is not None else None
+            limits = thresholds_for(s.context, self.name)
+            gated = _GatedStream(s.stream, limits) if s.stream is not None else None
             out = await self.router.complete(
                 tier="extract",
                 system=self.prompt.system,
-                user=self.prompt.render_user(
+                **self.prompt.user_parts(
                     **persona_values(s.context), window=render_window(s.chunk, s.user_id)
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,
-                max_tokens=400,
+                max_tokens=EXTRACT_MAX_TOKENS,
+                effort=EXTRACTION_EFFORT,
                 on_delta=gated,
                 prompt_ref=self.prompt.ref,
             )
             if gated is not None:
                 await gated.finish()
             confidence, note, commitments = parse_record(out.text)
-            verdict = band(confidence) if note else "dropped"
+            verdict = band(confidence, limits) if note else "dropped"
             if verdict == "dropped":
                 return {"confidence": confidence}
             payload: dict[str, Any] = {

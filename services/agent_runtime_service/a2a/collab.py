@@ -79,12 +79,13 @@ def payload(
     collaborations: list[dict[str, Any]],
     fill: dict[str, Any] | None,
     model_tier: str | None,
+    prompt: str = PROMPT_REF,
 ) -> dict[str, Any]:
     return {
         "gap": {"query": query, "query_class": query_class},
         "collaborations": collaborations,
         "fill": fill,
-        "prompt": PROMPT_REF,
+        "prompt": prompt,
         "model_tier": model_tier,
     }
 

@@ -198,6 +198,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         deps_from_env as proactive_from_env,
     )
     from services.agent_runtime_service.emitter import Emitter
+    from services.agent_runtime_service.policy import AgentPolicyClient
     from services.agent_runtime_service.proactive.loop import (
         TOPICS as PROACTIVE_TOPICS,
     )
@@ -263,6 +264,10 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     # PEP + user contexts to authorize topic watchers
     proactive.redis, proactive.agenda, proactive.pep = redis, agenda, pep
     proactive.user_context = contexts.get
+    # Polish: one threshold source (core-api's agent_confidence_overrides, cached) and the
+    # company brain for the checks the proactive loop triggers (never record).
+    agent_policy = AgentPolicyClient()
+    proactive.org_context, proactive.policy = org_contexts.get, agent_policy.overrides
 
     async def proxied(org_id: UUID, meeting_id: UUID) -> list[UUID]:
         if agenda is None:
@@ -274,6 +279,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         user_context=contexts.get,
         org_context=org_contexts.get,
         proxies=proxied if agenda is not None else None,
+        policy=agent_policy.overrides,
         agents=registered_agents(
             loader,
             router,

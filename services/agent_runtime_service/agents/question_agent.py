@@ -48,7 +48,7 @@ from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
 from libs.shared.prompts import Prompt, PromptLoader
-from libs.shared.router import TIER_NAMES, LiteLLMRouter
+from libs.shared.router import EXTRACT_MAX_TOKENS, SYNTHESIS_EFFORT, TIER_NAMES, LiteLLMRouter
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
 from services.agent_runtime_service.agents.candidates import (
     CANDIDATE_NS,
@@ -65,6 +65,8 @@ from services.agent_runtime_service.agents.personal_listener_agent import (
     persona_values,
     render_window,
 )
+from services.agent_runtime_service.policy import DEFAULT as DEFAULT_THRESHOLDS
+from services.agent_runtime_service.policy import Thresholds, thresholds_for
 
 GATE_KEY = "question_gate"
 MIN_TURNS = 2
@@ -145,9 +147,15 @@ class QuestionAgent(BaseAgent):
         return result
 
     def suggestions(
-        self, text: str, window: TranscriptWindow, user_id: UUID, passages: list[Passage]
+        self,
+        text: str,
+        window: TranscriptWindow,
+        user_id: UUID,
+        passages: list[Passage],
+        thresholds: Thresholds = DEFAULT_THRESHOLDS,
     ) -> list[dict[str, Any]]:
-        """Parse, validate, band and id the model's suggestions; dropped ones are left out."""
+        """Parse, validate, band (with the tenant's thresholds) and id the model's suggestions;
+        dropped ones are left out."""
         kept: list[dict[str, Any]] = []
         for index, raw in enumerate(parse_candidates(text, key="suggestions")[:MAX_SUGGESTIONS]):
             if not isinstance(raw, dict):
@@ -156,7 +164,7 @@ class QuestionAgent(BaseAgent):
             priority = parse_priority(raw.get("priority"))
             if question is None or confidence is None or priority is None:
                 continue
-            verdict = band(confidence)
+            verdict = band(confidence, thresholds)
             if verdict == "dropped":
                 continue
             kept.append(
@@ -194,7 +202,7 @@ class QuestionAgent(BaseAgent):
             out = await self.router.complete(
                 tier="triage",
                 system=self.gate_prompt.system,
-                user=self.gate_prompt.render_user(
+                **self.gate_prompt.user_parts(
                     **gate_values(s.context), window=render_window(s.chunk, s.user_id)
                 ),
                 org_id=s.org_id,
@@ -221,17 +229,20 @@ class QuestionAgent(BaseAgent):
             out = await self.router.complete(
                 tier="extract",
                 system=self.prompt.system,
-                user=self.prompt.render_user(
+                **self.prompt.user_parts(
                     **persona_values(s.context),
                     window=render_window(s.chunk, s.user_id),
                     context=render_passages(passages),
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,
-                max_tokens=500,
+                max_tokens=EXTRACT_MAX_TOKENS,
+                effort=SYNTHESIS_EFFORT,
                 prompt_ref=self.prompt.ref,
             )
-            kept = self.suggestions(out.text, s.chunk, s.user_id, passages)
+            kept = self.suggestions(
+                out.text, s.chunk, s.user_id, passages, thresholds_for(s.context, self.name)
+            )
             if not kept:
                 return {"confidence": 0.0}
             top = max(kept, key=lambda c: float(c["confidence"]))

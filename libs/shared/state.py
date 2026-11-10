@@ -36,6 +36,11 @@ class TranscriptWindow:
     start_ms: int
     end_ms: int
     turns: list[Turn] = field(default_factory=list)
+    # speaker id -> "Participant N", assigned by the runtime on a speaker's first appearance in
+    # the meeting and kept for the whole meeting, so the model sees the same label for the same
+    # person in every window (`services/agent_runtime_service/names.py`). Empty for a window
+    # built outside the runtime: the renderers then number speakers in order of first speaking.
+    labels: dict[str, str] = field(default_factory=dict)
 
     @property
     def chunk_ids(self) -> list[str]:

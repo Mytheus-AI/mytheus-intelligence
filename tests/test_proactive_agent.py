@@ -286,7 +286,7 @@ async def test_a_contradicting_lineage_ancestor_raises_one_red_alert_per_recipie
     assert result.content == result.payload["alert"]["title"]
     alert = result.payload["alert"]
     assert set(result.payload) == {"alert", "prompt", "model_tier"}
-    assert result.payload["prompt"] == "proactive_conflict@v1"
+    assert result.payload["prompt"] == "proactive_conflict@v2"
     assert result.payload["model_tier"] == "sonnet"
     assert set(alert) == {
         "id",
@@ -546,7 +546,7 @@ async def test_missing_stakeholder_fires_once_per_meeting_and_person_through_the
         assert rec["agent"] == "ProactiveAgent" and rec["kind"] == "alert"
         assert alert["alert_type"] == "missing_stakeholder" and alert["priority"] == 3
         assert alert["subject"] == {"kind": "meeting", "id": str(MEETING)}
-        assert payload["prompt"] == "proactive_stakeholder@v1" and payload["model_tier"] == "haiku"
+        assert payload["prompt"] == "proactive_stakeholder@v2" and payload["model_tier"] == "haiku"
         missing = alert["related"][0]["id"]
         assert rec["window_id"] == f"proactive:missing_stakeholder:{MEETING}:{missing}"
         assert rec["header"]["idempotency_key"].startswith(
@@ -714,7 +714,7 @@ def test_the_agent_is_registered_and_its_prompts_load():
     assert "ProactiveAgent" in names
     for key in ("proactive_conflict", "proactive_stakeholder"):
         prompt = loader.load(key, loader.resolve(key, ORG))
-        assert prompt.version == "v1" and prompt.user_template
+        assert prompt.version == "v2" and prompt.user_template  # polish: never record
 
 
 # --- review fixes: privacy per recipient, silent-band dedupe, URLs --------------------------

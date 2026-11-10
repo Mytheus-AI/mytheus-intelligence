@@ -181,7 +181,9 @@ async def test_the_gate_routes_haiku_and_the_proposal_routes_sonnet():
     assert llm.models() == [HAIKU, SONNET]
     # a gate's few tokens must not be spent on thinking (it returned empty text: score 0)
     assert llm.calls[0]["thinking"] == {"type": "disabled"}
-    assert "thinking" not in llm.calls[1]
+    # the proposal is synthesis: adaptive thinking at effort medium (polish: model settings)
+    assert llm.calls[1]["thinking"] == {"type": "adaptive"}
+    assert llm.calls[1]["output_config"] == {"effort": "medium"}
     assert [u["model_tier"] for u in sink.usage_calls] == ["haiku", "sonnet"]
     assert all(u["user_id"] == ALICE for u in sink.usage_calls)
     assert result is not None and result.kind == "suggestion"
@@ -542,7 +544,7 @@ async def test_one_instance_per_participant_and_each_result_is_its_owners():
 def test_the_prompts_load_render_and_are_registered():
     loader = PromptLoader(PROMPTS_DIR)
     registry = json.loads((Path(PROMPTS_DIR) / "registry.json").read_text("utf-8"))
-    assert registry["defaults"]["question_gate"] == "v3"  # ADR-0038 D10, then ADR-0039
+    assert registry["defaults"]["question_gate"] == "v4"  # ADR-0038 D10, ADR-0039, polish
     assert registry["defaults"]["question_agent"] == "v3"
     for key, version in (
         ("question_gate", "v1"),

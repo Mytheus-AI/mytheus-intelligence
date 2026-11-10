@@ -263,20 +263,44 @@ def test_the_block_caps_the_glossary_and_cannot_be_closed_from_inside():
     assert sum(1 for line in block.splitlines() if line.startswith("- T")) == 60
 
 
-NO_BRAIN: dict[str, str] = {"window": "You: hi", "context": "(none)", "today": "Monday"}
+NO_BRAIN: dict[str, str] = {
+    "window": "You: hi",
+    "context": "(none)",
+    "today": "Monday",
+    "query": "q",
+    "passages": "[1] p",
+    "decision": "d",
+    "candidates": "[1] c",
+    "topics": "billing",
+    "question": "q?",
+}
 
 PAIRS = [
     ("personal_listener", "v2", "v3"),
-    ("personal_listener_gate", "v2", "v3"),
+    # the polish plan padded the gates past the 512-token cache minimum (system prompt only):
+    ("personal_listener_gate", "v2", "v4"),
     ("question_agent", "v2", "v3"),
-    ("question_gate", "v2", "v3"),
+    ("question_gate", "v2", "v4"),
     ("action_agent", "v1", "v2"),
-    ("action_gate", "v1", "v2"),
+    ("action_gate", "v1", "v3"),
     ("meeting_agent", "v1", "v2"),
+]
+# Polish plan, never record everywhere: the prompts ADR-0039 left out now take the ground rules
+# (and the company block where they write text); with no brain they render exactly as before.
+POLISH_PAIRS = [
+    ("decision_gate", "v1", "v2"),
+    ("decision_agent", "v1", "v2"),
+    ("context_gap_gate", "v1", "v2"),
+    ("context_gap_agent", "v1", "v2"),
+    ("proactive_conflict", "v1", "v2"),
+    ("proactive_stakeholder", "v1", "v2"),
+    ("proactive_already_decided_gate", "v1", "v2"),
+    ("proactive_already_decided", "v1", "v2"),
+    ("proactive_topic_watch", "v1", "v2"),
 ]
 
 
-@pytest.mark.parametrize("key,old,new", PAIRS)
+@pytest.mark.parametrize("key,old,new", PAIRS + POLISH_PAIRS)
 def test_with_no_brain_the_new_version_renders_exactly_the_old_user_message(
     key: str, old: str, new: str
 ):
@@ -318,6 +342,17 @@ def test_the_brain_lives_in_the_user_message_never_the_cached_system_prompt(
         assert "<company_context>" not in rendered
     assert "Never record" in prompt.system and "{" not in prompt.system.replace('{"', "")
     assert "Acme" not in prompt.system
+
+
+@pytest.mark.parametrize("key,old,new", POLISH_PAIRS)
+def test_every_polish_prompt_carries_the_never_record_rule(key: str, old: str, new: str):
+    prompt = PromptLoader(PROMPTS_DIR).load(key, new)
+    rendered = prompt.render_user(**NO_BRAIN, **company_values({"org": BRAIN}), owners="")
+    assert "Never record (company ground rule): acquisition talks; salaries" in rendered
+    assert "Never record" in prompt.system and "Acme" not in prompt.system
+    # the line is part of the cached prefix the router sends behind its own breakpoint
+    prefix, _rest = prompt.render_parts(**NO_BRAIN, **company_values({"org": BRAIN}), owners="")
+    assert "Never record (company ground rule)" in prefix
 
 
 # --- 3. C2 never record through the agents -----------------------------------------------------
@@ -946,7 +981,7 @@ async def test_already_decided_alerts_only_the_participants_whose_own_search_fin
     assert result.window_id == f"proactive:already_decided:{MEETING}:{DECISION}"
     assert len(llm.of(REOPEN_MARKER)) == 1 and len(llm.of(MATCH_MARKER)) == 1
     assert "haiku" in llm.of(REOPEN_MARKER)[0]["model"]
-    assert "Never record" in llm.of(REOPEN_MARKER)[0]["messages"][1]["content"]
+    assert "Never record" in str(llm.of(REOPEN_MARKER)[0]["messages"][1]["content"])
     # once per (meeting, decision, participant), across windows and replays
     assert await agent.check_already_decided(TALK, CTX) == []
     assert await redis.exists(once_key(ORG, "already_decided", MEETING, DECISION, ALICE))
@@ -1056,8 +1091,8 @@ async def test_topic_watch_falls_back_to_one_triage_check_and_bands_it():
     [alert] = await agent.check_topic_watch(talk, CTX)
     assert alert.to == [WATCHER] and alert.confidence == 0.8
     [call] = llm.of(WATCH_MARKER)
-    assert "haiku" in call["model"] and "1. Project Kite" in call["messages"][1]["content"]
-    assert alert.model_tier == "haiku" and alert.prompt == "proactive_topic_watch@v1"
+    assert "haiku" in call["model"] and "1. Project Kite" in str(call["messages"][1]["content"])
+    assert alert.model_tier == "haiku" and alert.prompt == "proactive_topic_watch@v2"
     weak = ProLLM(REOPENS, MATCH, {"topics": [{"topic": 1, "score": 0.6}]})
     agent2, redis2, _ = proactive(weak)
     [silent] = await agent2.check_topic_watch(talk, CTX)
