@@ -1,10 +1,12 @@
-"""The embedding-service consumer entrypoint: embed-on-ingest (`consumer.py`) and confirmed
-decisions (`decision_consumer.py`), each wired to real Postgres (`mytheus_ai_app`), Redis,
-Qdrant and the Schema Registry, running `BaseConsumer.run_forever` against real Redpanda.
+"""The embedding-service consumer entrypoint: embed-on-ingest (`consumer.py`), confirmed
+decisions (`decision_consumer.py`) and admin data erasure (`erasure_consumer.py`; the first two
+run as their erasure-aware subclasses from that module), each wired to real Postgres
+(`mytheus_ai_app`), Redis, Qdrant and the Schema Registry, running `BaseConsumer.run_forever`
+against real Redpanda.
 
 Each consumer runs on its own thread with its OWN clients: `run_forever` binds async clients to
 its thread's event loop. The BGE model is loaded once per process and shared. `EMBED_CONSUMERS`
-(default `embed-on-ingest,embed-decisions`) limits which ones start.
+(default `embed-on-ingest,embed-decisions,erasure`) limits which ones start.
 
 Run: `python -m services.embedding_service.worker`
 """
@@ -24,8 +26,11 @@ from libs.shared.avro_codec import AvroCodec
 from libs.shared.consumer import BaseConsumer
 from libs.shared.index_guard import guard_from_env
 from libs.shared.qdrant import write_client
-from services.embedding_service.consumer import EmbeddingConsumer
-from services.embedding_service.decision_consumer import DecisionEmbeddingConsumer
+from services.embedding_service.erasure_consumer import (
+    ErasureAwareDecisionEmbeddingConsumer,
+    ErasureAwareEmbeddingConsumer,
+    VectorErasureConsumer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +57,9 @@ def main() -> None:
     brokers = os.environ.get("REDPANDA_BROKERS", "localhost:9092")
     wanted = {
         c.strip()
-        for c in os.environ.get("EMBED_CONSUMERS", "embed-on-ingest,embed-decisions").split(",")
+        for c in os.environ.get("EMBED_CONSUMERS", "embed-on-ingest,embed-decisions,erasure").split(
+            ","
+        )
         if c.strip()
     }
     consumers: list[BaseConsumer] = []
@@ -60,9 +67,11 @@ def main() -> None:
         deps = _deps()
         # never record + confidential meetings (libs/shared/index_guard.py)
         guard = guard_from_env("embedding-service", deps["redis"])
-        consumers.append(EmbeddingConsumer(guard=guard, **deps))
+        consumers.append(ErasureAwareEmbeddingConsumer(guard=guard, **deps))
     if "embed-decisions" in wanted:
-        consumers.append(DecisionEmbeddingConsumer(**_deps()))
+        consumers.append(ErasureAwareDecisionEmbeddingConsumer(**_deps()))
+    if "erasure" in wanted:
+        consumers.append(VectorErasureConsumer(**_deps()))
     if not consumers:
         raise SystemExit("EMBED_CONSUMERS names no known consumer")
 
