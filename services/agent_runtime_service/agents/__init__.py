@@ -3,7 +3,9 @@ instance per participant (or per meeting) with its own lifecycle.
 
 Plan 7-9: `PersonalListenerAgent` (P7, one per participant), `DecisionAgent` and `ActionAgent`
 (P8, one per meeting, candidates only), `QuestionAgent` (P9, one per participant, ADR-0034),
-`ContextGapAgent` (P10, one per meeting, one result per requester, ADR-0013). Proactive is P11.
+`ContextGapAgent` (P10, one per meeting, one result per requester, ADR-0013), `ProactiveAgent`
+(P11, one per meeting for the per-window missing-stakeholder check; its decision/action checks run
+from `proactive/loop.py`).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from services.agent_runtime_service.agents.question_agent import QuestionAgent
 
 if TYPE_CHECKING:
     from services.agent_runtime_service.agents.context_gap_agent import ContextGapDeps
+    from services.agent_runtime_service.agents.proactive_agent import ProactiveDeps
 
 
 def registered_agents(
@@ -29,6 +32,7 @@ def registered_agents(
     router: LiteLLMRouter,
     grounder: Grounder | None = None,
     context_gap: ContextGapDeps | None = None,
+    proactive: ProactiveDeps | None = None,
 ) -> list[Callable[[], BaseAgent]]:
     """`grounder` defaults to the env-configured one (None unless QUESTION_RAG_GROUNDING=1).
     `context_gap` defaults to RAG only from env (silent without `RAG_CALLER_TOKEN`); the
@@ -39,13 +43,21 @@ def registered_agents(
         ContextGapAgent,
         deps_from_env,
     )
+    from services.agent_runtime_service.agents.proactive_agent import (
+        ProactiveAgent,
+    )
+    from services.agent_runtime_service.agents.proactive_agent import (
+        deps_from_env as proactive_from_env,
+    )
 
     grounding = grounder if grounder is not None else grounder_from_env()
     gap = context_gap if context_gap is not None else deps_from_env()
+    pro = proactive if proactive is not None else proactive_from_env()
     return [
         lambda: PersonalListenerAgent(loader, router),
         lambda: DecisionAgent(loader, router),
         lambda: ActionAgent(loader, router),
         lambda: QuestionAgent(loader, router, grounder=grounding),
         lambda: ContextGapAgent(loader, router, deps=gap),
+        lambda: ProactiveAgent(loader, router, deps=pro),
     ]
