@@ -17,6 +17,12 @@ loop without committing, so the process restarts from the last safe offset.
 
 Windows are processed one at a time on this loop. Within a window, users run concurrently.
 That is enough for this project's scale; partitions are the unit of horizontal scale.
+
+Agent-to-agent (P10, `a2a/bus.py`) runs beside this loop on the same event loop: the responder
+on `agent-requests` (group `agent-runtime-a2a`) and this instance's response router on
+`agent-responses` (group `agent-runtime-resp-{hostname}`). Every `poll` runs in a worker thread
+so a waiting `ContextGapAgent` (which awaits responses inside `process_window`) is never starved.
+Without `AGENT_IDENTITY_SECRET` neither starts and ContextGapAgent runs RAG-only.
 """
 
 from __future__ import annotations
@@ -151,8 +157,26 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from libs.shared.pii import EgressRedactor
     from libs.shared.prompts import PromptLoader
     from libs.shared.router import LiteLLMRouter
-    from libs.shared.user_context import UserContextClient
+    from libs.shared.user_context import PdpClient, UserContextClient
+    from services.agent_runtime_service.a2a.bus import (
+        REQUESTS_TOPIC,
+        RESPONSES_TOPIC,
+        A2AClient,
+        Responder,
+        ResponseRouter,
+        consumer_configs,
+        run_request_loop,
+        run_response_loop,
+    )
+    from services.agent_runtime_service.a2a.identity import signer_from_env
+    from services.agent_runtime_service.a2a.pep import Pep
+    from services.agent_runtime_service.a2a.related import related_from_env
     from services.agent_runtime_service.agents import registered_agents
+    from services.agent_runtime_service.agents.context_gap_agent import (
+        ContextGapDeps,
+        ContextGapSettings,
+        rag_from_env,
+    )
     from services.agent_runtime_service.emitter import Emitter
 
     logging.basicConfig(level=logging.INFO)
@@ -173,12 +197,63 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     )
     loader = PromptLoader(PROMPTS_DIR)
     contexts = UserContextClient()
+    pdp = PdpClient()
+    settings = ContextGapSettings.from_env()
+    signer = signer_from_env()
+    # A separate producer for the deadline-bound A2A traffic: no batching delay, and its
+    # delivery errors never fail a window commit (the window emitter has its own error list).
+    a2a_emitter = Emitter(
+        Producer(
+            {
+                "bootstrap.servers": brokers,
+                "acks": "all",
+                "enable.idempotence": True,
+                "linger.ms": 0,
+            }
+        ),
+        codec,
+        on_error=lambda err: logger.warning("a2a delivery failed: %s", err),
+    )
+    responses = ResponseRouter()
+    pep = Pep(redis, pdp)
+    rag = rag_from_env(settings.deadline_ms / 1000)
+    gap = ContextGapDeps(
+        rag=rag,
+        a2a=A2AClient(a2a_emitter, responses, signer) if signer is not None else None,
+        pep=pep,
+        related=related_from_env(),
+        user_context=contexts.get,
+    )
     runtime = AgentRuntime(
         sink=emitter,
         user_context=contexts.get,
-        agents=registered_agents(loader, router),
+        agents=registered_agents(loader, router, context_gap=gap),
         max_concurrency=int(os.environ.get("AGENT_MAX_CONCURRENCY", "8")),
     )
+    stop = asyncio.Event()
+    background: list[asyncio.Task[None]] = []
+    a2a_consumers: list[Any] = []
+    if signer is not None:
+        configs = consumer_configs(brokers)
+        requests_consumer = Consumer(configs["requests"])
+        requests_consumer.subscribe([REQUESTS_TOPIC])
+        responses_consumer = Consumer(configs["responses"])
+        responses_consumer.subscribe([RESPONSES_TOPIC])
+        a2a_consumers = [requests_consumer, responses_consumer]
+        responder = Responder(
+            signer=signer,
+            pep=pep,
+            rag=rag,
+            user_context=contexts.get,
+            emitter=a2a_emitter,
+            redis=redis,
+        )
+        background = [
+            asyncio.create_task(run_request_loop(requests_consumer, codec, responder, stop)),
+            asyncio.create_task(run_response_loop(responses_consumer, codec, responses, stop)),
+        ]
+    else:
+        logger.warning("AGENT_IDENTITY_SECRET unset: agent-to-agent off, ContextGapAgent RAG-only")
     loop = Loop(runtime, emitter, Windower(idle_s=float(os.environ.get("WINDOW_IDLE_S", "15"))))
     consumer = Consumer(
         {
@@ -192,7 +267,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     committed: dict[tuple[str, int], int] = {}
     try:
         while True:
-            msg = consumer.poll(1.0)
+            msg = await asyncio.to_thread(consumer.poll, 1.0)
             if msg is not None and not msg.error():
                 topic, partition, offset = msg.topic(), msg.partition(), msg.offset()
                 raw = msg.value()
@@ -215,8 +290,15 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
                 )
                 committed.update(due)
     finally:
+        stop.set()
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
+        for c in a2a_consumers:
+            c.close()
         consumer.close()
         await contexts.close()
+        await pdp.close()
 
 
 if __name__ == "__main__":  # pragma: no cover
