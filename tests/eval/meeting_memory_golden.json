@@ -1,0 +1,236 @@
+{
+ "about": "Golden set for the in-meeting memory of DecisionAgent / ActionAgent (decision_agent@v3, action_agent@v3; polish program). Each case is one short stretch with the meeting's earlier stretches and the cards already raised (label, text, status: open | settled | dismissed). expected.outcome: update (the answer must update the labelled card, keywords on its content), new (a new card that matches the keywords, nothing updated), nothing_new (no new card; at most a silent repeat that reconcile drops), none (nothing at all: the card was dismissed or settled). Labels are the maintainer's judgement, written before any model was run.",
+ "reference_date": "2026-11-09",
+ "cases": [
+  {
+   "id": "date-moved",
+   "agent": "decision",
+   "earlier": [
+    "Participant 1: Okay, so we ship the beta on December 2nd. Everyone fine with that?",
+    "Participant 2: Yes."
+   ],
+   "ledger": [
+    {
+     "label": "D1",
+     "text": "Ship the beta on 2 December",
+     "status": "open"
+    }
+   ],
+   "window": "Participant 2: Actually QA just told me they need one more week.\nParticipant 1: Then let's move the beta to December 9th, final answer.",
+   "expected": {
+    "outcome": "update",
+    "label": "D1",
+    "keywords": [
+     "beta",
+     "9"
+    ]
+   }
+  },
+  {
+   "id": "restated",
+   "agent": "decision",
+   "earlier": [
+    "Participant 1: We go with Postgres for the ledger service."
+   ],
+   "ledger": [
+    {
+     "label": "D1",
+     "text": "Use Postgres for the ledger service",
+     "status": "open"
+    }
+   ],
+   "window": "Participant 2: Just so the notes are clear, it's Postgres for the ledger.\nParticipant 1: Right, Postgres.",
+   "expected": {
+    "outcome": "nothing_new"
+   }
+  },
+  {
+   "id": "dismissed-returns",
+   "agent": "decision",
+   "earlier": [
+    "Participant 1: Maybe we cut the widget."
+   ],
+   "ledger": [
+    {
+     "label": "D1",
+     "text": "Cut the iOS widget from v1",
+     "status": "dismissed"
+    }
+   ],
+   "window": "Participant 2: So the widget, we're cutting it, yes?\nParticipant 1: I think we said that, sure.",
+   "expected": {
+    "outcome": "none"
+   }
+  },
+  {
+   "id": "settled-returns",
+   "agent": "decision",
+   "earlier": [],
+   "ledger": [
+    {
+     "label": "D1",
+     "text": "Price the pro plan at 49 dollars a month",
+     "status": "settled"
+    }
+   ],
+   "window": "Participant 1: And pro stays at forty-nine a month like we agreed.\nParticipant 2: Yep.",
+   "expected": {
+    "outcome": "none"
+   }
+  },
+  {
+   "id": "new-beside-open",
+   "agent": "decision",
+   "earlier": [
+    "Participant 1: Beta is December 2nd."
+   ],
+   "ledger": [
+    {
+     "label": "D1",
+     "text": "Ship the beta on 2 December",
+     "status": "open"
+    }
+   ],
+   "window": "Participant 2: Separate topic: support hours. Let's go with nine to six, Monday to Friday.\nParticipant 1: Agreed, nine to six it is.",
+   "expected": {
+    "outcome": "new",
+    "keywords": [
+     "support",
+     "nine|9"
+    ]
+   }
+  },
+  {
+   "id": "reference-earlier",
+   "agent": "decision",
+   "earlier": [
+    "Participant 1: Option A is the annual discount, option B is the free month."
+   ],
+   "ledger": [],
+   "window": "Participant 2: I prefer the first one.\nParticipant 1: Okay, we're going with option A then. Decided.",
+   "expected": {
+    "outcome": "new",
+    "keywords": [
+     "annual|option a"
+    ]
+   }
+  },
+  {
+   "id": "owner-added",
+   "agent": "action",
+   "earlier": [
+    "Participant 1: Someone needs to send the pricing deck to Acme."
+   ],
+   "ledger": [
+    {
+     "label": "A1",
+     "text": "Send the pricing deck to Acme",
+     "status": "open"
+    }
+   ],
+   "window": "Participant 2: I'll take the Acme deck, I can get it out by Friday.",
+   "expected": {
+    "outcome": "update",
+    "label": "A1",
+    "keywords": [
+     "deck",
+     "acme"
+    ]
+   }
+  },
+  {
+   "id": "repeat-task",
+   "agent": "action",
+   "earlier": [
+    "Participant 2: I'll write the release notes."
+   ],
+   "ledger": [
+    {
+     "label": "A1",
+     "text": "Write the release notes",
+     "status": "open"
+    }
+   ],
+   "window": "Participant 1: And you've got the release notes, right?\nParticipant 2: Yes, release notes are mine.",
+   "expected": {
+    "outcome": "nothing_new"
+   }
+  },
+  {
+   "id": "dismissed-task",
+   "agent": "action",
+   "earlier": [],
+   "ledger": [
+    {
+     "label": "A1",
+     "text": "Set up a weekly sync with design",
+     "status": "dismissed"
+    }
+   ],
+   "window": "Participant 1: Should we do a weekly design sync?\nParticipant 2: We could, I'll set one up I guess.",
+   "expected": {
+    "outcome": "none"
+   }
+  },
+  {
+   "id": "done-task",
+   "agent": "action",
+   "earlier": [],
+   "ledger": [
+    {
+     "label": "A1",
+     "text": "Book the venue for the offsite",
+     "status": "settled"
+    }
+   ],
+   "window": "Participant 1: Venue for the offsite, that's booked as a task already, right?\nParticipant 2: Yes, I'm on it.",
+   "expected": {
+    "outcome": "none"
+   }
+  },
+  {
+   "id": "new-task",
+   "agent": "action",
+   "earlier": [
+    "Participant 2: Release notes are mine."
+   ],
+   "ledger": [
+    {
+     "label": "A1",
+     "text": "Write the release notes",
+     "status": "open"
+    }
+   ],
+   "window": "Participant 1: Can you also update the status page before launch?\nParticipant 2: Sure, I'll update the status page tomorrow.",
+   "expected": {
+    "outcome": "new",
+    "keywords": [
+     "status page"
+    ]
+   }
+  },
+  {
+   "id": "deadline-changed",
+   "agent": "action",
+   "earlier": [
+    "Participant 2: I'll get the contract to legal by Friday."
+   ],
+   "ledger": [
+    {
+     "label": "A1",
+     "text": "Send the contract to legal by Friday",
+     "status": "open"
+    }
+   ],
+   "window": "Participant 2: Small change, legal is out Friday, so I'll get the contract to them Thursday instead.",
+   "expected": {
+    "outcome": "update",
+    "label": "A1",
+    "keywords": [
+     "contract",
+     "legal"
+    ]
+   }
+  }
+ ]
+}

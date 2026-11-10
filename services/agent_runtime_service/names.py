@@ -219,6 +219,10 @@ def _note(p: Postprocess, r: AgentResult, payload: dict[str, Any]) -> Handled:
     content = "\n".join(lines).strip()
     if not content:
         return None
+    if p.policy.hits(payload.get("quote"), payload.get("why")):
+        # the note's moment stays (an id and a time); words naming the topic never leave
+        payload.pop("quote", None)
+        payload.pop("why", None)
     if isinstance(payload.get("commitments"), list):
         kept = [c for c in payload["commitments"] if not p.policy.hits(*_texts(c))]
         if kept:

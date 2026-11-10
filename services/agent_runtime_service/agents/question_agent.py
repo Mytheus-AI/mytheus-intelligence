@@ -76,6 +76,18 @@ DEFAULT_COOLDOWN_WINDOWS = 1
 GROUNDING_QUERY_CHARS = 500
 
 
+DEFAULT_MIN_SPAN_MS = 20_000
+
+
+def question_min_span_ms() -> int:
+    """Polish (calm): suggestions run on at least this much meeting time (`QUESTION_MIN_SPAN_MS`,
+    default 20 s) of the event-driven windows, or sooner on a cue."""
+    try:
+        return max(0, int(os.environ.get("QUESTION_MIN_SPAN_MS", DEFAULT_MIN_SPAN_MS)))
+    except ValueError:
+        return DEFAULT_MIN_SPAN_MS
+
+
 def cooldown_windows() -> int:
     try:
         return max(0, int(os.environ.get("QUESTION_COOLDOWN_WINDOWS", DEFAULT_COOLDOWN_WINDOWS)))
@@ -123,6 +135,10 @@ class QuestionAgent(BaseAgent):
     kind: ClassVar[str] = "suggestion"
 
     gate_prompt: Prompt | None = None
+
+    @property
+    def min_span_ms(self) -> int:
+        return question_min_span_ms()
 
     def __init__(
         self, loader: PromptLoader, router: LiteLLMRouter, *, grounder: Grounder | None = None

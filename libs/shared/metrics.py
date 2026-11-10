@@ -7,6 +7,9 @@ Cardinality and privacy rules (do not relax):
   - HTTP series are labelled by the matched ROUTE TEMPLATE (``/api/v1/meetings/{meeting_id}``),
     never the raw path. Unmatched paths collapse to ``unmatched``.
   - No ``org_id``, ``user_id`` or any other tenant/person identifier is ever a label value.
+    One named exception: ``mytheus_agent_time_to_card_seconds{agent,org_id}`` (polish program,
+    the per-workspace speech-to-card dashboard). Its org_id series are bounded by the number of
+    workspaces in live meetings; no person identifier is ever a label.
   - Consumer series are labelled by group/topic/outcome only.
 """
 
