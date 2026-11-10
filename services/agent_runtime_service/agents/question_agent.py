@@ -23,8 +23,11 @@ the participant this instance belongs to:
    `uuid5(CANDIDATE_NS, f"QuestionAgent:{window_id}:{user_id}:{index}")` (ADR-0034 D3).
 
 What the model sees: the participant as "You", everyone else as "Participant N", and a profile of
-role / skills / bio. No ids, names or email addresses; the router redacts PII on top. Every model
-call goes through the router, so it is budget-gated and metered on `usage-events`.
+role / skills / bio; from `question_agent@v2` (ADR-0038 D10) the proposal also gets the same
+"Listen especially for" / "Ignore" lines and voice block as PersonalListenerAgent. The gate
+(`question_gate@v1`), its threshold, the cooldown and the bands are unchanged. No ids, names or
+email addresses; the router redacts PII on top. Every model call goes through the router, so it
+is budget-gated and metered on `usage-events`.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ from services.agent_runtime_service.agents.candidates import (
 from services.agent_runtime_service.agents.grounding import Grounder, Passage, ground
 from services.agent_runtime_service.agents.personal_listener_agent import (
     band,
+    persona_values,
     render_profile,
     render_window,
 )
@@ -210,7 +214,7 @@ class QuestionAgent(BaseAgent):
                 tier="extract",
                 system=self.prompt.system,
                 user=self.prompt.render_user(
-                    profile=render_profile(s.context),
+                    **persona_values(s.context),
                     window=render_window(s.chunk, s.user_id),
                     context=render_passages(passages),
                 ),

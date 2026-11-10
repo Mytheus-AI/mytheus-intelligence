@@ -212,8 +212,8 @@ async def test_question_agent_meets_the_baseline(monkeypatch):
     m = score(windows)
     report = {
         "agent": "QuestionAgent",
-        "prompt": "question_agent@v1",
-        "gate_prompt": "question_gate@v1",
+        "prompt": agent.prompt.ref if agent.prompt else "",
+        "gate_prompt": agent.gate_prompt.ref if agent.gate_prompt else "",
         "tokens": sink.tokens,
         "calls": len(sink.tiers),
         **m,
