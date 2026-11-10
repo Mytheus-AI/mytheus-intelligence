@@ -315,7 +315,8 @@ async def test_throttle_forces_haiku_and_ok_routes_extract_to_sonnet():
     assert llm.calls[-1]["model"] == "anthropic/claude-sonnet-5-5"
     assert all("opus" not in c["model"] for c in llm.calls)
     assert [u["model_tier"] for u in sink.usage_calls] == ["haiku", "sonnet"]
-    assert sink.usage_calls[-1]["tokens"] == 120
+    # budget units (libs/shared/cost.py): 100 Sonnet input + 20 output x 5 = 200
+    assert sink.usage_calls[-1]["tokens"] == 200
     system = llm.calls[-1]["messages"][0]["content"][0]
     assert system["cache_control"] == {"type": "ephemeral"}
 
@@ -362,7 +363,8 @@ async def test_streaming_hands_each_delta_on_and_meters_once():
         on_delta=on_delta,
     )
     assert out.text == "Ship it." and deltas == [(0, "Ship "), (1, "it.")]
-    assert len(sink.usage_calls) == 1 and sink.usage_calls[0]["tokens"] == 55
+    # budget units: 50 Sonnet input + 5 output x 5 = 75
+    assert len(sink.usage_calls) == 1 and sink.usage_calls[0]["tokens"] == 75
 
 
 async def test_pii_is_redacted_before_egress_unless_the_tenant_turned_it_off():
