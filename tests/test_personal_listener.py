@@ -281,18 +281,21 @@ def test_the_shipped_prompts_are_registered_and_render():
             company="",
             ground_rules="",
             attendance="",
+            person_memory="",
+            guidance="",
+            memory_focus="",
         )
         assert "Role: x" in rendered and "You: hi" in rendered
 
     assert json.loads((Path(PROMPTS_DIR) / "registry.json").read_text())["defaults"] == {
-        "personal_listener": "v3",
-        "personal_listener_gate": "v4",
+        "personal_listener": "v4",
+        "personal_listener_gate": "v5",
         "decision_gate": "v2",
-        "decision_agent": "v3",
+        "decision_agent": "v5",
         "action_gate": "v3",
-        "action_agent": "v3",
+        "action_agent": "v5",
         "question_gate": "v4",
-        "question_agent": "v3",
+        "question_agent": "v4",
         "context_gap_gate": "v2",
         "context_gap_agent": "v2",
         "proactive_conflict": "v2",

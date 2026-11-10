@@ -247,7 +247,7 @@ async def test_the_decision_agent_sees_the_memory_and_answers_an_update():
     (cand,) = result.payload["candidates"]
     assert cand["id"] == D1 and cand["updates_candidate_id"] == D1
     assert cand["quote"] == "let's ship the beta on the 2nd" and cand["moment_id"] == "m1"
-    assert result.payload["prompt"] == "decision_agent@v3"
+    assert result.payload["prompt"] == "decision_agent@v5"  # v3 memory + wave-2 guidance
 
 
 # --- 3. moments -------------------------------------------------------------------------------

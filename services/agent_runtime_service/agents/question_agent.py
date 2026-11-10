@@ -65,6 +65,8 @@ from services.agent_runtime_service.agents.personal_listener_agent import (
     persona_values,
     render_window,
 )
+from services.agent_runtime_service.guidance import guidance_values
+from services.agent_runtime_service.person_memory import memory_values
 from services.agent_runtime_service.policy import DEFAULT as DEFAULT_THRESHOLDS
 from services.agent_runtime_service.policy import Thresholds, thresholds_for
 
@@ -247,6 +249,10 @@ class QuestionAgent(BaseAgent):
                 system=self.prompt.system,
                 **self.prompt.user_parts(
                     **persona_values(s.context),
+                    # polish wave 2: memory across meetings and the person's own feedback
+                    # examples (both "" when there is nothing; older templates ignore them)
+                    **memory_values(s.context),
+                    **guidance_values(self.name, s.context),
                     window=render_window(s.chunk, s.user_id),
                     context=render_passages(passages),
                 ),

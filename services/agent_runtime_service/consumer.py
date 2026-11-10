@@ -26,6 +26,10 @@ on `agent-requests` (group `agent-runtime-a2a`) and this instance's response rou
 so a waiting `ContextGapAgent` (which awaits responses inside `process_window`) is never starved.
 Without `AGENT_IDENTITY_SECRET` neither starts and ContextGapAgent runs RAG-only.
 
+Polish wave 2: the `agent-feedback` listener (`feedback.py`, group
+`agent-runtime-feedback-{hostname}`, `LEARNING_FEEDBACK=0` leaves it unstarted) runs beside it as
+well; it only drops the learning caches, so it never blocks or commits anything of the window loop.
+
 ProactiveAgent (P11, `proactive/loop.py`) runs beside it too: `decisions` + `actions` in group
 `agent-runtime-proactive`, with its own producer. If that loop dies (an unacknowledged alert),
 the process exits without committing, like the window loop, and restarts from the last safe
@@ -336,6 +340,12 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         deps_from_env as proactive_from_env,
     )
     from services.agent_runtime_service.emitter import Emitter
+    from services.agent_runtime_service.feedback import TOPIC as FEEDBACK_TOPIC
+    from services.agent_runtime_service.feedback import FeedbackListener, run_feedback_loop
+    from services.agent_runtime_service.feedback import (
+        consumer_config as feedback_consumer_config,
+    )
+    from services.agent_runtime_service.learning import LearningClient
     from services.agent_runtime_service.memory import MeetingLedger
     from services.agent_runtime_service.policy import AgentPolicyClient
     from services.agent_runtime_service.proactive.loop import (
@@ -407,6 +417,9 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     # company brain for the checks the proactive loop triggers (never record).
     agent_policy = AgentPolicyClient()
     proactive.org_context, proactive.policy = org_contexts.get, agent_policy.overrides
+    # Polish wave 2: per-person thresholds, guidance examples and memory across meetings, from
+    # core-api (cached; an agent-feedback event drops the caches, see below).
+    learning = LearningClient(policy=agent_policy)
 
     async def proxied(org_id: UUID, meeting_id: UUID) -> list[UUID]:
         if agenda is None:
@@ -419,6 +432,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         org_context=org_contexts.get,
         proxies=proxied if agenda is not None else None,
         policy=agent_policy.overrides,
+        learning=learning,
         agents=registered_agents(
             loader,
             router,
@@ -470,6 +484,16 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         )
         background.append(
             asyncio.create_task(run_proactive_loop(proactive_consumer, codec, proactive_loop, stop))
+        )
+    if os.environ.get("LEARNING_FEEDBACK", "1") != "0":
+        # Every instance hears every feedback event (its own group) and drops what it cached.
+        feedback_consumer = Consumer(feedback_consumer_config(brokers))
+        feedback_consumer.subscribe([FEEDBACK_TOPIC])
+        a2a_consumers.append(feedback_consumer)
+        background.append(
+            asyncio.create_task(
+                run_feedback_loop(feedback_consumer, codec, FeedbackListener(learning), stop)
+            )
         )
     loop = Loop(runtime, emitter, Windower(WindowSettings.from_env()))
     consumer = Consumer(

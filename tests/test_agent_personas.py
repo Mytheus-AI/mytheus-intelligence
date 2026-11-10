@@ -292,7 +292,9 @@ async def test_personal_listener_sends_the_persona_to_the_note_call_only():
     agent = PersonalListenerAgent(PromptLoader(PROMPTS_DIR), _router(llm))
     await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=ME)
     result = await agent.process(_state(PERSONA))
-    assert result is not None and result.payload["prompt"] == "personal_listener@v3"  # ADR-0039
+    assert (
+        result is not None and result.payload["prompt"] == "personal_listener@v4"
+    )  # polish wave 2
     assert result.payload["surfaced"] is True  # bands unchanged
     gate_user, note_user = llm.user(0), llm.user(1)
     assert "Listen especially for: billing migration" in gate_user and "Ignore: hiring" in gate_user
@@ -334,7 +336,7 @@ async def test_question_agent_sends_the_persona_to_the_proposal_call_only():
     agent = QuestionAgent(PromptLoader(PROMPTS_DIR), _router(llm))
     await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=ME)
     result = await agent.process(_state(PERSONA))
-    assert result is not None and result.payload["prompt"] == "question_agent@v3"  # ADR-0039
+    assert result is not None and result.payload["prompt"] == "question_agent@v4"  # polish wave 2
     assert result.payload["suggestions"][0]["surfaced"] is True
     assert "Ignore: hiring" in llm.user(0) and "Ignore: hiring" in llm.user(1)
     assert "Voice:" not in llm.user(0)
@@ -371,7 +373,7 @@ def test_the_registry_advances_both_gates():
     company brain and a live participant renders exactly v2 (`tests/test_company_brain.py`); the
     polish plan to v4 (the same user message, a system prompt past the 512-token cache minimum)."""
     loader = PromptLoader(PROMPTS_DIR)
-    assert loader.resolve("personal_listener_gate", ORG) == "v4"
+    assert loader.resolve("personal_listener_gate", ORG) == "v5"  # polish wave 2: memory focus
     assert loader.resolve("question_gate", ORG) == "v4"
 
 
