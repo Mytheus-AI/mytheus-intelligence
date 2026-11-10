@@ -31,6 +31,21 @@ in the user message, so the system prompt stays one stable, cached prefix for ev
 voice block): a window about a listen-for topic is not cut for being outside the role, and an
 ignored topic scores low. Its threshold, the gating logic and the bands are unchanged.
 `agent_name` is never put in a prompt.
+
+ADR-0039 (`personal_listener@v3`, `personal_listener_gate@v3`):
+- C1: the extraction's user message starts with the company block (description, up to 60 glossary
+  terms, active goals; `agents/company.py`), from `context["org"]`, which the runtime adds.
+- C2: both calls see the "Never record" line; the gate scores a window mainly about one of those
+  topics 0, so no note is written (a model instruction, not a guarantee).
+- C3: the extraction answers a `COMMITMENTS: [...]` line after the confidence line: the promises
+  "You" made, `{content, due_hint}`, at most 5. They ride in the record's
+  `payload.commitments` (core-api's consumer writes `commitments` rows, private to the record's
+  user) only when there is at least one, so a record without promises is unchanged. The line is
+  never streamed.
+- C6: a participant whose attendance is `agent` (`context["attendance"] == "agent"`, set by the
+  runtime) gets an "Attendance" line in the profile so the note is a catch-up; they never speak,
+  so their commitments are always empty, whatever the model says.
+With no company brain, a live participant and no promises, v3 renders exactly v2's user messages.
 """
 
 from __future__ import annotations
@@ -46,12 +61,17 @@ from langgraph.graph import END, StateGraph
 from libs.shared.base_agent import BaseAgent
 from libs.shared.prompts import Prompt
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
+from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
 
 SURFACE_ABOVE = 0.7
 SILENT_FROM = 0.4
 GATE_KEY = "personal_listener_gate"
 _NUMBER = re.compile(r"(?<![\d.])(?:0(?:\.\d+)?|1(?:\.0+)?|\.\d+)(?![\d.])")
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*([0-9]*\.?[0-9]+)\s*$", re.IGNORECASE)
+COMMITMENTS_PREFIX = "COMMITMENTS:"
+MAX_COMMITMENTS = 5  # ADR-0039 C3
+MAX_COMMITMENT = 500  # B6: content up to 500
+MAX_DUE_HINT = 100  # B6: due_hint up to 100
 
 
 def relevance_threshold() -> float:
@@ -71,14 +91,54 @@ def parse_relevance(text: str) -> float:
 
 def parse_note(text: str) -> tuple[float, str]:
     """`CONFIDENCE: x` then the note. A missing or malformed header is confidence 0."""
+    confidence, note, _ = parse_record(text)
+    return confidence, note
+
+
+def _clip(text: str, limit: int) -> str:
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "…"
+
+
+def parse_commitments(line: str) -> list[dict[str, Any]]:
+    """The JSON list after `COMMITMENTS:`; malformed entries are dropped one by one, never
+    raises. Each kept entry is exactly `{"content": str, "due_hint": str | None}`."""
+    try:
+        raw = json.loads(line.strip()[len(COMMITMENTS_PREFIX) :].strip() or "[]")
+    except ValueError:
+        return []
+    out: list[dict[str, Any]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        due = item.get("due_hint")
+        entry = {
+            "content": _clip(content, MAX_COMMITMENT),
+            "due_hint": _clip(due, MAX_DUE_HINT) if isinstance(due, str) and due.strip() else None,
+        }
+        if entry not in out:
+            out.append(entry)
+    return out[:MAX_COMMITMENTS]
+
+
+def parse_record(text: str) -> tuple[float, str, list[dict[str, Any]]]:
+    """`CONFIDENCE: x`, an optional `COMMITMENTS: [...]` line (v3), then the note. A missing or
+    malformed confidence header is confidence 0 and nothing else."""
     first, _, rest = text.strip().partition("\n")
     match = _CONFIDENCE.match(first)
     if match is None:
-        return 0.0, ""
-    note = rest.strip()
-    if note.upper() == "NONE":
-        note = ""
-    return _clamp(float(match.group(1))), note
+        return 0.0, "", []
+    commitments: list[dict[str, Any]] = []
+    body = rest.strip()
+    second, _, after = body.partition("\n")
+    if second.strip().upper().startswith(COMMITMENTS_PREFIX):
+        commitments = parse_commitments(second.strip())
+        body = after.strip()
+    note = "" if body.upper() == "NONE" else body
+    return _clamp(float(match.group(1))), note, commitments
 
 
 def band(confidence: float) -> Literal["surfaced", "silent", "dropped"]:
@@ -170,26 +230,46 @@ def render_voice(context: dict[str, Any]) -> str:
     return f"\n{chr(10).join(parts)}\n" if parts else ""
 
 
+def render_attendance(context: dict[str, Any]) -> str:
+    """ADR-0039 C6: the profile's attendance line for a participant who sent their agent; ""
+    for everyone else (a live participant renders exactly what v2 did)."""
+    if context.get("attendance") != "agent":
+        return ""
+    return "\nAttendance: not in this meeting; they sent their agent instead"
+
+
 def gate_values(context: dict[str, Any]) -> dict[str, str]:
     """The pre-gate's `{profile}` and `{focus}` values: the working profile with its "Listen
     especially for" / "Ignore" lines, never the voice block (wording is not relevance). A v1 gate
-    template ignores `{focus}`; with both lists empty v2 renders exactly what v1 does."""
-    return {"profile": render_profile(context), "focus": render_focus(context)}
+    template ignores `{focus}`; with both lists empty v2 renders exactly what v1 does. From v3
+    (ADR-0039) also `{ground_rules}` (the never-record line) and `{attendance}`, both "" by
+    default; older templates ignore them."""
+    return {
+        "profile": render_profile(context),
+        "focus": render_focus(context),
+        "attendance": render_attendance(context),
+        **gate_ground_rules(context),
+    }
 
 
 def persona_values(context: dict[str, Any]) -> dict[str, str]:
     """The `{profile}`, `{focus}` and `{voice}` template values. A v1 template only names
     `{profile}` (role / skills / bio, unchanged) and ignores the other two, so a tenant pinned
-    to v1 renders exactly what it did before ADR-0038."""
+    to v1 renders exactly what it did before ADR-0038. From v3 (ADR-0039) also `{company}`,
+    `{ground_rules}` and `{attendance}`, each "" for an org with no brain and a live participant."""
     return {
         "profile": render_profile(context),
         "focus": render_focus(context),
         "voice": render_voice(context),
+        "attendance": render_attendance(context),
+        **company_values(context),
     }
 
 
 class _GatedStream:
-    """Holds deltas until the confidence line is known, then forwards only a surfaced note."""
+    """Holds deltas until the confidence line is known, then forwards only a surfaced note. The
+    v3 `COMMITMENTS: [...]` line right after it is never forwarded: it is data for core-api, not
+    part of the note the participant reads live."""
 
     def __init__(self, stream: StreamFn) -> None:
         self._stream = stream
@@ -197,11 +277,13 @@ class _GatedStream:
         self._decided = False
         self._open = False
         self._seq = 0
+        self._pending = ""  # after the confidence line, until the commitments line is ruled out
+        self._header_done = False
 
     async def __call__(self, _seq: int, text: str) -> None:
         if self._decided:
             if self._open:
-                await self._send(text)
+                await self._forward(text)
             return
         self._buffer += text
         if "\n" not in self._buffer:
@@ -211,7 +293,26 @@ class _GatedStream:
         match = _CONFIDENCE.match(first)
         self._open = match is not None and band(_clamp(float(match.group(1)))) == "surfaced"
         if self._open and rest:
-            await self._send(rest.lstrip("\n"))
+            await self._forward(rest)
+
+    async def _forward(self, text: str) -> None:
+        if self._header_done:
+            await self._send(text)
+            return
+        self._pending += text
+        head = self._pending.lstrip("\n")
+        if not head:
+            return
+        upper = head.upper()
+        if len(head) < len(COMMITMENTS_PREFIX) and COMMITMENTS_PREFIX.startswith(upper):
+            return  # could still become the commitments line
+        if upper.startswith(COMMITMENTS_PREFIX):
+            if "\n" not in head:
+                return
+            head = head.partition("\n")[2]
+        self._header_done = True
+        self._pending = ""
+        await self._send(head.lstrip("\n"))
 
     async def _send(self, text: str) -> None:
         if not text:
@@ -220,14 +321,20 @@ class _GatedStream:
         self._seq += 1
 
     async def finish(self) -> None:
-        if self._open:
-            await self._stream(self._seq, "", True)
+        if not self._open:
+            return
+        head = self._pending.lstrip("\n")
+        if not self._header_done and head and not head.upper().startswith(COMMITMENTS_PREFIX):
+            if not COMMITMENTS_PREFIX.startswith(head.upper()):
+                await self._send(head)
+        await self._stream(self._seq, "", True)
 
 
 class PersonalListenerAgent(BaseAgent):
     name: ClassVar[str] = "PersonalListenerAgent"
     prompt_key: ClassVar[str] = "personal_listener"
     scope: ClassVar[Literal["participant", "meeting"]] = "participant"
+    serves_proxies: ClassVar[bool] = True  # ADR-0039 C6: runs for attendance `agent` too
 
     gate_prompt: Prompt | None = None
 
@@ -272,10 +379,18 @@ class PersonalListenerAgent(BaseAgent):
             )
             if gated is not None:
                 await gated.finish()
-            confidence, note = parse_note(out.text)
+            confidence, note, commitments = parse_record(out.text)
             verdict = band(confidence) if note else "dropped"
             if verdict == "dropped":
                 return {"confidence": confidence}
+            payload: dict[str, Any] = {
+                "surfaced": verdict == "surfaced",
+                "prompt": self.prompt.ref,
+                "model_tier": out.tier,
+            }
+            # C3: only promises "You" made; a proxied participant never speaks (C6)
+            if commitments and s.context.get("attendance") != "agent":
+                payload["commitments"] = commitments
             return {
                 "confidence": confidence,
                 "result": AgentResult(
@@ -284,11 +399,7 @@ class PersonalListenerAgent(BaseAgent):
                     relevance_score=s.relevance_score or 0.0,
                     confidence=confidence,
                     source_chunk_ids=s.chunk.chunk_ids,
-                    payload={
-                        "surfaced": verdict == "surfaced",
-                        "prompt": self.prompt.ref,
-                        "model_tier": out.tier,
-                    },
+                    payload=payload,
                 ),
             }
 

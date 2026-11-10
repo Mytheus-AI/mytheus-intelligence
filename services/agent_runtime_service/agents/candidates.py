@@ -20,6 +20,12 @@ What the model sees: the window with every speaker as "Participant N" (numbered 
 first speaking). No user id, name or email is put in the request; the router redacts PII from
 the user message on top. People the model names come back as those labels and are mapped to the
 window's speaker ids here; only UUID speaker ids are passed through. These agents never stream.
+
+ADR-0039 C1 / C2: the gate gets `{ground_rules}` (the never-record line, so a window mainly about
+one of those topics scores 0 and no extraction is paid for) and the extraction `{company}` and
+`{ground_rules}` (`agents/company.py`), from the context the runtime passes (`context["org"]`).
+A template that does not name them ignores them, so `DecisionAgent` (whose prompts are not part
+of ADR-0039) renders exactly what it did.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from libs.shared.base_agent import BaseAgent
 from libs.shared.prompts import Prompt
 from libs.shared.router import TIER_NAMES
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
+from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
 from services.agent_runtime_service.agents.personal_listener_agent import band
 
 logger = logging.getLogger(__name__)
@@ -176,8 +183,14 @@ class CandidateAgent(BaseAgent):
             self.gate_key, self._loader.resolve(self.gate_key, self.org_id)
         )
 
-    def user_values(self) -> dict[str, str]:
-        """Extra values for the extraction prompt's user template (beyond `window`)."""
+    def user_values(self, context: dict[str, Any] | None = None) -> dict[str, str]:
+        """Extra values for the extraction prompt's user template (beyond `window`): the company
+        block and the never-record line (ADR-0039), "" for an org without a brain."""
+        return company_values(context)
+
+    def extra(self, raw: dict[str, Any], context: dict[str, Any] | None) -> dict[str, Any]:
+        """Optional fields of one candidate that need the participant context (ActionAgent's
+        `suggested_owner_user_id`). Added only when non-empty."""
         return {}
 
     @abstractmethod
@@ -185,7 +198,9 @@ class CandidateAgent(BaseAgent):
         """The agent-specific contract fields of one candidate, or None if it is malformed.
         `content`, `confidence`, `id` and `surfaced` are added by the caller."""
 
-    def candidates(self, text: str, window: TranscriptWindow) -> list[dict[str, Any]]:
+    def candidates(
+        self, text: str, window: TranscriptWindow, context: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """Parse, validate, band and id the model's candidates. Dropped ones are left out; the id
         index is the candidate's position in the model's list, so ids never shift."""
         _, labels = render_window(window)
@@ -209,6 +224,7 @@ class CandidateAgent(BaseAgent):
                     "confidence": confidence,
                     "surfaced": verdict == "surfaced",
                     **fields,
+                    **self.extra(raw, context),
                 }
             )
         return kept
@@ -222,7 +238,9 @@ class CandidateAgent(BaseAgent):
             out = await self.router.complete(
                 tier="triage",
                 system=self.gate_prompt.system,
-                user=self.gate_prompt.render_user(window=transcript),
+                user=self.gate_prompt.render_user(
+                    window=transcript, **gate_ground_rules(s.context)
+                ),
                 org_id=s.org_id,
                 user_id=s.user_id,
                 max_tokens=20,
@@ -236,13 +254,13 @@ class CandidateAgent(BaseAgent):
             out = await self.router.complete(
                 tier="extract",
                 system=self.prompt.system,
-                user=self.prompt.render_user(window=transcript, **self.user_values()),
+                user=self.prompt.render_user(window=transcript, **self.user_values(s.context)),
                 org_id=s.org_id,
                 user_id=s.user_id,
                 max_tokens=self.extract_max_tokens,
                 prompt_ref=self.prompt.ref,
             )
-            kept = self.candidates(out.text, s.chunk)
+            kept = self.candidates(out.text, s.chunk, s.context)
             if not kept:
                 return {"confidence": 0.0}
             top = max(kept, key=lambda c: float(c["confidence"]))

@@ -185,7 +185,7 @@ async def test_the_gate_routes_haiku_and_the_proposal_routes_sonnet():
     assert [u["model_tier"] for u in sink.usage_calls] == ["haiku", "sonnet"]
     assert all(u["user_id"] == ALICE for u in sink.usage_calls)
     assert result is not None and result.kind == "suggestion"
-    assert result.payload["prompt"] == "question_agent@v2"
+    assert result.payload["prompt"] == "question_agent@v3"  # ADR-0039
     assert result.payload["model_tier"] == "sonnet"
     assert result.payload["grounded"] is False
     assert result.source_chunk_ids == ["c1", "c2"]
@@ -542,17 +542,20 @@ async def test_one_instance_per_participant_and_each_result_is_its_owners():
 def test_the_prompts_load_render_and_are_registered():
     loader = PromptLoader(PROMPTS_DIR)
     registry = json.loads((Path(PROMPTS_DIR) / "registry.json").read_text("utf-8"))
-    assert registry["defaults"]["question_gate"] == "v2"  # ADR-0038 D10
-    assert registry["defaults"]["question_agent"] == "v2"
+    assert registry["defaults"]["question_gate"] == "v3"  # ADR-0038 D10, then ADR-0039
+    assert registry["defaults"]["question_agent"] == "v3"
     for key, version in (
         ("question_gate", "v1"),
         ("question_gate", "v2"),
+        ("question_gate", "v3"),
         ("question_agent", "v1"),
         ("question_agent", "v2"),
+        ("question_agent", "v3"),
     ):
         prompt = loader.load(key, version)
         values = {"profile": "Role: x", "focus": "", "voice": "", "window": "You: hi"}
+        values |= {"company": "", "ground_rules": "", "attendance": ""}
         rendered = prompt.render_user(**values, context="(none)")
         assert "Role: x" in rendered and "You: hi" in rendered
-    for version in ("v1", "v2"):
+    for version in ("v1", "v2", "v3"):
         assert '{"suggestions": []}' in loader.load("question_agent", version).system

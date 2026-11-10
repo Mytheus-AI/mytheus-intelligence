@@ -10,6 +10,12 @@ Per candidate the model returns `content`, `assignee` (a "Participant N" label o
 injectable clock, so tests are deterministic. A `due_date` that is not a valid ISO date is
 null; an `assignee` that is not a UUID speaker of the window is null. The `actions` event and
 the AGE `ASSIGNED_TO` edge happen only when a user confirms in core-api.
+
+ADR-0039 C4 (`action_agent@v2`): the user message lists the org's `topic_owners` as `T1. billing`
+(never the owner's id or name). A candidate may answer `"topic": "T2"`; when that names a listed
+topic, the candidate gains `suggested_owner_user_id` (the topic's owner). core-api stores it as
+the candidate's assignee suggestion, or passes it through to the UI. Nothing else changes: the
+model's `assignee` (a speaker in the window) stays as it was.
 """
 
 from __future__ import annotations
@@ -21,6 +27,13 @@ from typing import Any, ClassVar, Literal
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import LiteLLMRouter
 from services.agent_runtime_service.agents.candidates import CandidateAgent, resolve_label
+from services.agent_runtime_service.agents.company import (
+    company_of,
+    company_values,
+    owner_for,
+    owner_topics,
+    render_owners,
+)
 
 MAX_DEPENDS_ON = 5
 _WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -64,9 +77,17 @@ class ActionAgent(CandidateAgent):
         super().__init__(loader, router)
         self._today = today
 
-    def user_values(self) -> dict[str, str]:
+    def user_values(self, context: dict[str, Any] | None = None) -> dict[str, str]:
         today = self._today()
-        return {"today": f"{_WEEKDAYS[today.weekday()]} {today.isoformat()}"}
+        return {
+            "today": f"{_WEEKDAYS[today.weekday()]} {today.isoformat()}",
+            "owners": render_owners(owner_topics(company_of(context))),
+            **company_values(context),
+        }
+
+    def extra(self, raw: dict[str, Any], context: dict[str, Any] | None) -> dict[str, Any]:
+        owner = owner_for(raw.get("topic"), owner_topics(company_of(context)))
+        return {"suggested_owner_user_id": str(owner)} if owner is not None else {}
 
     def shape(self, raw: dict[str, Any], labels: dict[str, str]) -> dict[str, Any] | None:
         return {

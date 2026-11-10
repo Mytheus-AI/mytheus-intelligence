@@ -29,6 +29,13 @@ role / skills / bio; from `question_agent@v2` (ADR-0038 D10) the proposal also g
 bands are unchanged. No ids, names or
 email addresses; the router redacts PII on top. Every model call goes through the router, so it
 is budget-gated and metered on `usage-events`.
+
+ADR-0039 (`question_agent@v3`, `question_gate@v3`): the proposal's user message starts with the
+company block (description, vocabulary, active goals) and the "Never record" line, the gate gets
+the line only; a window mainly about a never-record topic scores 0 at the gate and the proposal
+never asks about one (C1, C2). With no company brain both render exactly what v2 did. The runtime
+never runs this agent for a participant whose attendance is `agent` (C6): they are not there to
+ask anything.
 """
 
 from __future__ import annotations
