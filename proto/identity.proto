@@ -32,6 +32,12 @@ message UserContext {
   repeated string team_ids = 9;
   string department_id = 10;
   int64 cache_expires_at = 11;  // unix ms; cached at nexus:{org_id}:user_ctx:{user_id} 5-min TTL
+  // ADR-0038 D4: working profile and agent persona (no avatar seed: no agent needs it)
+  repeated string listen_for    = 12;  // at most 15, each 1-100 chars
+  repeated string ignore_topics = 13;  // same limits
+  string agent_name         = 14;  // display label only; "" = the UI default
+  string agent_personality  = 15;  // "balanced" | "concise" | "detailed" | "direct" | "friendly"
+  string agent_instructions = 16;  // up to 500 chars of the person's own text; "" = none
 }
 
 message AuthorizeRequest {

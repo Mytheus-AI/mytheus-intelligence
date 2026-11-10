@@ -45,6 +45,13 @@ FIELDS: dict[str, list[tuple[str, int, int, bool]]] = {
         ("team_ids", 9, _F.TYPE_STRING, True),
         ("department_id", 10, _F.TYPE_STRING, False),
         ("cache_expires_at", 11, _F.TYPE_INT64, False),
+        # ADR-0038 D4: the working profile and the agent persona (no avatar seed: no agent
+        # needs it). An older identity server leaves them unset: empty lists and strings.
+        ("listen_for", 12, _F.TYPE_STRING, True),
+        ("ignore_topics", 13, _F.TYPE_STRING, True),
+        ("agent_name", 14, _F.TYPE_STRING, False),
+        ("agent_personality", 15, _F.TYPE_STRING, False),
+        ("agent_instructions", 16, _F.TYPE_STRING, False),
     ],
     "AuthorizeRequest": [
         ("org_id", 1, _F.TYPE_STRING, False),
@@ -121,6 +128,13 @@ class UserContextClient:
             "department_id": reply.department_id,
             # The RBAC tier is the A2A grantee_role (ADR-0013). Never rendered into a prompt.
             "rbac_tier": reply.rbac_tier,
+            # ADR-0038 D4, same keys as the backend's get_user_context dict. Rendered into
+            # PersonalListener / Question prompts (D10); agent_name is a display label only.
+            "listen_for": list(reply.listen_for),
+            "ignore_topics": list(reply.ignore_topics),
+            "agent_name": reply.agent_name,
+            "agent_personality": reply.agent_personality,
+            "agent_instructions": reply.agent_instructions,
         }
 
     async def close(self) -> None:
