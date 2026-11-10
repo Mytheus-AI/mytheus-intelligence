@@ -19,6 +19,14 @@ duplicates. This is proven for real against Qdrant in `tests/test_embedding_cons
 `meeting_id` field — the Qdrant payload table in `system.md` §10 lists it as optional
 (`meeting_id?`) precisely because document ingests are not always meeting-scoped; this
 consumer therefore never reads `evt.body["meeting_id"]` for the document-chunks branch.
+
+Never record and confidential meetings (polish plan, `libs/shared/index_guard.py`). With a
+`guard`, every transcript chunk is vetted before it is embedded: a chunk in a never-record window
+is acked with zero points and never embedded, and when a chunk is the first to name a
+never-record topic the points already stored for its window are deleted
+(`qdrant.delete_window`). A chunk of a confidential meeting carries `confidential: true` in its
+payload, which the org-wide search path excludes; participant-scoped retrieval still finds it.
+Documents are not meeting talk and are not vetted here.
 """
 
 from __future__ import annotations
@@ -31,8 +39,14 @@ from qdrant_client.models import PointStruct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.shared.consumer import BaseConsumer, ConsumedEvent
+from libs.shared.index_guard import IndexGuard
 from libs.shared.metrics import observe_embedding_batch
-from libs.shared.qdrant import LOGICAL_DOCUMENT_CHUNKS, LOGICAL_TRANSCRIPT_CHUNKS, upsert
+from libs.shared.qdrant import (
+    LOGICAL_DOCUMENT_CHUNKS,
+    LOGICAL_TRANSCRIPT_CHUNKS,
+    delete_window,
+    upsert,
+)
 from services.embedding_service.model import embed_batch
 from services.embedding_service.splitter import split_600_60
 
@@ -52,9 +66,12 @@ class EmbeddingConsumer(BaseConsumer):
     topics = ["transcript-chunks", "document-chunks"]
     producer_name = "embedding-service"
 
-    def __init__(self, *, qdrant: AsyncQdrantClient, **kwargs: Any) -> None:
+    def __init__(
+        self, *, qdrant: AsyncQdrantClient, guard: IndexGuard | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self._qdrant = qdrant
+        self._guard = guard
 
     async def apply(self, evt: ConsumedEvent, session: AsyncSession) -> None:
         org_id = evt.org_id
@@ -74,6 +91,18 @@ class EmbeddingConsumer(BaseConsumer):
                 "is_final": evt.body["is_final"],
             }
             text = evt.body["text"]
+            if self._guard is not None:
+                verdict = await self._guard.check(
+                    org_id, uuid.UUID(meeting_id), int(evt.body["start_ms"]), text
+                )
+                if verdict.purge is not None:
+                    await delete_window(
+                        self._qdrant, logical, org_id, uuid.UUID(meeting_id), *verdict.purge
+                    )
+                if verdict.skip:
+                    text = ""  # nothing is embedded; acked with zero points below
+                else:
+                    payload_base["confidential"] = verdict.confidential
         else:  # document-chunks
             logical = LOGICAL_DOCUMENT_CHUNKS
             document_id = str(evt.body["document_id"])

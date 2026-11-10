@@ -82,6 +82,7 @@ would be deduped away downstream (a recorded deviation from the contract's liter
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import logging
 import os
@@ -95,12 +96,20 @@ from uuid import UUID, uuid5
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.index_guard import RouterClassifier
 from libs.shared.kg_client import KgClient, KgNode, KgUnavailable, kg_client_from_env
+from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import EMPTY, CompanyContext
 from libs.shared.plan_features import PlanFeaturesClient
 from libs.shared.prompts import Prompt, PromptLoader
 from libs.shared.rag_client import HttpRagClient, RagClient, RagPassage
-from libs.shared.router import TIER_NAMES, BudgetBlocked, LiteLLMRouter
+from libs.shared.router import (
+    EXTRACT_MAX_TOKENS,
+    SYNTHESIS_EFFORT,
+    TIER_NAMES,
+    BudgetBlocked,
+    LiteLLMRouter,
+)
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
 from libs.shared.tenancy import parse_org_id
 from services.agent_runtime_service.a2a.pep import Pep, grantee_role, resolve_scope
@@ -119,6 +128,8 @@ from services.agent_runtime_service.agents.company import (
 )
 from services.agent_runtime_service.agents.context_gap_agent import parse_object
 from services.agent_runtime_service.agents.personal_listener_agent import band
+from services.agent_runtime_service.policy import DEFAULT as DEFAULT_THRESHOLDS
+from services.agent_runtime_service.policy import Thresholds, thresholds, thresholds_for
 from services.agent_runtime_service.proactive.core import (
     ActionContext,
     CoreContext,
@@ -266,6 +277,11 @@ class ProactiveDeps:
     agenda: AgendaSource | None = None
     pep: Pep | None = None
     user_context: Any = None  # async (org_id, user_id) -> dict | None
+    # Polish (never record, one threshold source) for the checks the loop triggers, which have
+    # no window contexts: the company brain (`OrgContextClient.get`) and core-api's
+    # `agent_confidence_overrides` (`AgentPolicyClient.overrides`). Absent: EMPTY / defaults.
+    org_context: Any = None  # async (org_id) -> CompanyContext
+    policy: Any = None  # async (org_id) -> {agent: {surface, silent}}
 
 
 def deps_from_env() -> ProactiveDeps:
@@ -332,6 +348,11 @@ def parse_action(value: Mapping[str, Any]) -> ConfirmedAction | None:
     action, meeting = as_uuid(value.get("action_id")), as_uuid(value.get("meeting_id"))
     content = value.get("content")
     if org is None or action is None or meeting is None or not isinstance(content, str):
+        return None
+    if meeting == UUID(int=0):
+        # A personal task, created outside any meeting: its alerts would have no meeting to be
+        # delivered into (core-api refuses an agent result without a real meeting), so the
+        # workload and dependency checks skip it rather than emit a record that dead-letters.
         return None
     due = value.get("due_date")
     return ConfirmedAction(
@@ -416,6 +437,7 @@ class Alert:
     source_chunk_ids: list[str] = field(default_factory=list)
     views: dict[UUID, View] = field(default_factory=dict)  # per-recipient overrides
     extra: dict[str, Any] = field(default_factory=dict)  # ADR-0039 C7 keys beside the usual ones
+    thresholds: Thresholds = DEFAULT_THRESHOLDS  # the tenant's (ADR-0030 D3)
 
     @property
     def window_id(self) -> str:
@@ -423,7 +445,7 @@ class Alert:
 
     @property
     def surfaced(self) -> bool:
-        return band(self.confidence) == "surfaced"
+        return band(self.confidence, self.thresholds) == "surfaced"
 
     def view(self, recipient: UUID) -> View:
         return self.views.get(recipient) or View(
@@ -456,7 +478,7 @@ class Alert:
 
     def results(self) -> list[tuple[UUID, AgentResult]]:
         """One `alert` result per recipient. Nothing for a dropped (< 0.4) confidence."""
-        if band(self.confidence) == "dropped":
+        if band(self.confidence, self.thresholds) == "dropped":
             return []
         return [
             (
@@ -584,6 +606,41 @@ class ProactiveAgent(BaseAgent):
         except Exception:  # noqa: BLE001 - unknown budget: suspended (fail closed)
             return False
 
+    async def _company(self, org_id: UUID) -> CompanyContext:
+        fetch = self._deps.org_context
+        if fetch is None:
+            return EMPTY
+        try:
+            org = await fetch(org_id)
+        except Exception:  # noqa: BLE001 - no company context: the prompts render as before
+            return EMPTY
+        return org if isinstance(org, CompanyContext) else EMPTY
+
+    async def _thresholds(self, org_id: UUID) -> Thresholds:
+        fetch = self._deps.policy
+        if fetch is None:
+            return DEFAULT_THRESHOLDS
+        try:
+            return thresholds(await fetch(org_id), AGENT)
+        except Exception:  # noqa: BLE001 - the defaults, as core-api without overrides
+            return DEFAULT_THRESHOLDS
+
+    async def _never(self, org_id: UUID, never: NeverRecordPolicy, *texts: str | None) -> bool:
+        """The loop checks have no window and some make no model call (workload, dependency),
+        so the never-record test is theirs to make: a topic said outright, or, when a text only
+        shares a word with one, the indexers' triage check (`never_record_check@v1`). A check
+        that cannot run counts as never-record: no alert is the fail-closed answer."""
+        if never.hits(*texts):
+            return True
+        ambiguous = [t for t in texts if t and never.ambiguous(t)]
+        if not ambiguous:
+            return False
+        try:
+            about = await RouterClassifier(self.router).about(org_id, " ".join(ambiguous), never)
+        except Exception:  # noqa: BLE001 - unknown: no alert
+            about = None
+        return about is not False
+
     def _prompt(self, key: str, org_id: UUID) -> Prompt:
         return self._loader.load(key, self._loader.resolve(key, org_id))
 
@@ -617,20 +674,28 @@ class ProactiveAgent(BaseAgent):
     async def check_decision(self, d: ConfirmedDecision) -> list[Alert]:
         if not await self.active(d.org_id):
             return []
-        priors = await self.conflict_candidates(d)
+        org = await self._company(d.org_id)
+        never = NeverRecordPolicy.from_org(org)
+        if await self._never(d.org_id, never, d.content, d.rationale):
+            return []  # ADR-0039 C2: a never-record decision raises nothing anywhere
+        priors = [p for p in await self.conflict_candidates(d) if not never.hits(p.text)]
         if not priors:
             return []
+        limits = await self._thresholds(d.org_id)
         prompt = self._prompt(CONFLICT_KEY, d.org_id)
         try:
             out = await self.router.complete(
                 tier="extract",
                 system=prompt.system,
-                user=prompt.render_user(
-                    decision=clip(render_decision(d), 1200), candidates=render_priors(priors)
+                **prompt.user_parts(
+                    decision=clip(render_decision(d), 1200),
+                    candidates=render_priors(priors),
+                    **company_values({"org": org}),
                 ),
                 org_id=d.org_id,
                 user_id=None,  # background check: metered to the tenant
-                max_tokens=400,
+                max_tokens=EXTRACT_MAX_TOKENS,
+                effort=SYNTHESIS_EFFORT,
                 prompt_ref=prompt.ref,
             )
         except BudgetBlocked:
@@ -639,7 +704,7 @@ class ProactiveAgent(BaseAgent):
         if not conflicts:
             return []
         index, confidence, rationale = conflicts[0]
-        if band(confidence) == "dropped":
+        if band(confidence, limits) == "dropped" or never.hits(rationale):
             return []
         prior = priors[index]
         people = await self._participants(d.org_id, d.meeting_id)
@@ -692,6 +757,7 @@ class ProactiveAgent(BaseAgent):
                 prompt=prompt.ref,
                 model_tier=TIER_NAMES.get(out.tier, out.tier),
                 views={u: redacted for u in to if u not in seen},
+                thresholds=limits,
             )
         ]
 
@@ -750,8 +816,12 @@ class ProactiveAgent(BaseAgent):
             ctx = None
         if ctx is None:
             return []
+        never = NeverRecordPolicy.from_org(await self._company(a.org_id))
+        if await self._never(a.org_id, never, a.content, *(d.content for d in ctx.depends_on)):
+            return []  # ADR-0039 C2
+        limits = await self._thresholds(a.org_id)
         alerts = [self._workload(a, ctx), self._dependency(a, ctx)]
-        return [x for x in alerts if x is not None]
+        return [dataclasses.replace(x, thresholds=limits) for x in alerts if x is not None]
 
     def _workload(self, a: ConfirmedAction, ctx: ActionContext) -> Alert | None:
         threshold = self._settings.workload_threshold
@@ -834,8 +904,10 @@ class ProactiveAgent(BaseAgent):
             out = await self.router.complete(
                 tier="triage",
                 system=self.gate_prompt.system,
-                user=self.gate_prompt.render_user(
-                    topics=", ".join(self._deps.topics), window=labelled_window(s.chunk)[0]
+                **self.gate_prompt.user_parts(
+                    topics=", ".join(self._deps.topics),
+                    window=labelled_window(s.chunk)[0],
+                    **gate_ground_rules(s.context),
                 ),
                 org_id=s.org_id,
                 user_id=None,  # shared by every participant: metered to the tenant
@@ -859,19 +931,28 @@ class ProactiveAgent(BaseAgent):
         if window.org_id != self.org_id:
             raise ValueError(f"{self.name}: window org_id does not match the spawned agent")
         found = await asyncio.gather(
-            self.check_window(window, set(contexts)),
+            self.check_window(window, set(contexts), contexts),
             self.check_already_decided(window, contexts),
             self.check_topic_watch(window, contexts),
         )
         return [r for alerts in found for a in alerts for r in a.results()]
 
-    async def check_window(self, window: TranscriptWindow, roster: set[UUID]) -> list[Alert]:
+    async def check_window(
+        self,
+        window: TranscriptWindow,
+        roster: set[UUID],
+        contexts: dict[UUID, dict[str, Any] | None] | None = None,
+    ) -> list[Alert]:
         deps = self._deps
         if deps.kg is None or deps.core is None or not deps.topics or not roster:
             return []  # nothing to find stakeholders with: skip before paying for the gate
+        org = _org(contexts or {})
+        if _never_window(window, org):
+            return []  # ADR-0039 C2: a never-record window raises nothing, and pays nothing
         if not await self.active(window.org_id):
             return []
-        topic, score = await self._gate(window)
+        limits = _limits(contexts or {})
+        topic, score = await self._gate(window, org)
         if not topic or score < self._settings.gate_threshold:
             return []
         try:
@@ -912,7 +993,7 @@ class ProactiveAgent(BaseAgent):
             (u for u in counts if u not in self._alerted), key=lambda u: (-counts[u], str(u))
         )
         assert self.gate_prompt is not None
-        surfaced = band(score) == "surfaced"
+        surfaced = band(score, limits) == "surfaced"
         alerts: list[Alert] = []
         for person in ranked:
             if len(alerts) >= MAX_STAKEHOLDERS:
@@ -950,6 +1031,7 @@ class ProactiveAgent(BaseAgent):
                     model_tier=TIER_NAMES["triage"],
                     source_chunk_ids=window.chunk_ids,
                     views=views,
+                    thresholds=limits,
                 )
             )
         return alerts
@@ -997,13 +1079,15 @@ class ProactiveAgent(BaseAgent):
         """ADR-0039 C7 `topic_watch` (module function `check_topic_watch`)."""
         return await check_topic_watch(self, window, contexts)
 
-    async def _gate(self, window: TranscriptWindow) -> tuple[str, float]:
+    async def _gate(
+        self, window: TranscriptWindow, org: CompanyContext = EMPTY
+    ) -> tuple[str, float]:
         assert self._graph is not None and self.prompt is not None
         state = AgentState(
             meeting_id=window.meeting_id,
             user_id=window.meeting_id,
             chunk=window,
-            context={},
+            context={"org": org},
             org_id=window.org_id,
             agent_id=self.agent_id,
             prompt_version=self.prompt.version,
@@ -1135,6 +1219,17 @@ def _org(contexts: dict[UUID, dict[str, Any] | None]) -> CompanyContext:
     return next((company_of(c) for c in contexts.values() if c), EMPTY)
 
 
+def _limits(contexts: dict[UUID, dict[str, Any] | None]) -> Thresholds:
+    """The tenant's thresholds for this agent, from any context the runtime filled."""
+    return thresholds_for(next((c for c in contexts.values() if c), None), AGENT)
+
+
+def _never_window(window: TranscriptWindow, org: CompanyContext) -> bool:
+    """The window names a never-record topic (or an alias) outright."""
+    never = NeverRecordPolicy.from_org(org)
+    return any(never.hits(t.text) for t in window.turns)
+
+
 async def _triage(
     agent: ProactiveAgent, key: str, org_id: UUID, max_tokens: int, **values: str
 ) -> tuple[str, str]:
@@ -1143,7 +1238,7 @@ async def _triage(
     out = await agent.router.complete(
         tier="triage",
         system=prompt.system,
-        user=prompt.render_user(**values),
+        **prompt.user_parts(**values),
         org_id=org_id,
         user_id=None,  # shared by every participant: metered to the tenant
         max_tokens=max_tokens,
@@ -1173,6 +1268,10 @@ async def check_already_decided(
     if window_words(window) < MIN_WINDOW_WORDS or not await agent.active(window.org_id):
         return []
     org = _org(contexts)
+    if _never_window(window, org):
+        return []  # ADR-0039 C2
+    never = NeverRecordPolicy.from_org(org)
+    limits = _limits(contexts)
     transcript = labelled_window(window)[0]
     try:
         text, _ref = await _triage(
@@ -1187,7 +1286,7 @@ async def check_already_decided(
         agent.blocked = True
         return []
     question, score = parse_reopen(text)
-    if not question or score < agent._settings.gate_threshold:
+    if not question or score < agent._settings.gate_threshold or never.hits(question):
         return []
 
     search = deps.decisions
@@ -1208,7 +1307,9 @@ async def check_already_decided(
                 continue
             if p.decision_id not in best or p.score > best[p.decision_id].score:
                 best[p.decision_id] = p
-    candidates = sorted(best.values(), key=lambda p: -p.score)[:MAX_CANDIDATES]
+    candidates = sorted(
+        (p for p in best.values() if not never.hits(p.text)), key=lambda p: -p.score
+    )[:MAX_CANDIDATES]
     if not candidates:
         return []
     prompt = agent._prompt(ALREADY_DECIDED_KEY, window.org_id)
@@ -1216,16 +1317,18 @@ async def check_already_decided(
         out = await agent.router.complete(
             tier="extract",
             system=prompt.system,
-            user=prompt.render_user(
+            **prompt.user_parts(
                 question=question,
                 window=transcript,
                 candidates="\n".join(
                     f"[{i + 1}] {clip(p.text, 600)}" for i, p in enumerate(candidates)
                 ),
+                **company_values({"org": org}),
             ),
             org_id=window.org_id,
             user_id=None,
-            max_tokens=300,
+            max_tokens=EXTRACT_MAX_TOKENS,
+            effort=SYNTHESIS_EFFORT,
             prompt_ref=prompt.ref,
         )
     except BudgetBlocked:
@@ -1287,6 +1390,7 @@ async def check_already_decided(
                 prompt=prompt.ref,
                 model_tier=TIER_NAMES.get(out.tier, out.tier),
                 source_chunk_ids=window.chunk_ids,
+                thresholds=limits,
                 extra={
                     "decision_id": str(decision_id),
                     "decision_content": content,
@@ -1309,8 +1413,9 @@ async def check_topic_watch(
     if deps.pep is None or deps.user_context is None or window_words(window) < MIN_WINDOW_WORDS:
         return []
     text = " ".join(t.text for t in window.turns)
-    if said_turn(window, list(org.never_record_topics)) is not None:
+    if said_turn(window, list(org.never_record_topics)) is not None or _never_window(window, org):
         return []  # a never-record topic was said: nothing from this window leaves the meeting
+    limits = _limits(contexts)
     if not await agent.active(window.org_id):
         return []
     try:
@@ -1376,8 +1481,8 @@ async def check_topic_watch(
         if h not in matched or sent >= MAX_RECIPIENTS:
             continue
         confidence, said = matched[h]
-        surfaced = band(confidence) == "surfaced"
-        if band(confidence) == "dropped":
+        surfaced = band(confidence, limits) == "surfaced"
+        if band(confidence, limits) == "dropped":
             continue
         to: list[UUID] = []
         for watcher in sorted({x.user_id for x in watches if topic_hash(x.topic) == h}, key=str):
@@ -1434,6 +1539,7 @@ async def check_topic_watch(
                 prompt=prompt_ref if confidence != EXACT_MATCH_CONFIDENCE else "",
                 model_tier=tier if confidence != EXACT_MATCH_CONFIDENCE else "none",
                 source_chunk_ids=window.chunk_ids,
+                thresholds=limits,
                 extra={
                     "topic": topic,
                     "meeting_id": str(window.meeting_id),

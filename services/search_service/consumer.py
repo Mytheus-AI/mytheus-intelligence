@@ -60,16 +60,27 @@ trusted).
 
 from __future__ import annotations
 
+from typing import Any
+from uuid import UUID
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from libs.shared.consumer import BaseConsumer, ConsumedEvent
+from libs.shared.index_guard import IndexGuard
 
 _INSERT = text("""
     INSERT INTO intelligence.transcript_chunk_search
-        (org_id, meeting_id, chunk_id, speaker_id, start_ms, end_ms, text)
-    VALUES (:org_id, :meeting_id, :chunk_id, :speaker_id, :start_ms, :end_ms, :text)
+        (org_id, meeting_id, chunk_id, speaker_id, start_ms, end_ms, text, confidential)
+    VALUES (:org_id, :meeting_id, :chunk_id, :speaker_id, :start_ms, :end_ms, :text,
+            :confidential)
     ON CONFLICT (org_id, chunk_id) DO NOTHING
+    """)
+# The never-record purge: what this meeting's window already put in the index.
+_PURGE = text("""
+    DELETE FROM intelligence.transcript_chunk_search
+    WHERE org_id = :org_id AND meeting_id = :meeting_id
+      AND start_ms >= :start_ms AND start_ms < :end_ms
     """)
 
 
@@ -82,6 +93,10 @@ class TranscriptChunkSearchConsumer(BaseConsumer):
     # task ever adds one (e.g. a search-index-refreshed observability event).
     producer_name = "search-service"
 
+    def __init__(self, *, guard: IndexGuard | None = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._guard = guard
+
     async def apply(self, evt: ConsumedEvent, session: AsyncSession) -> None:
         body = evt.body
 
@@ -93,6 +108,28 @@ class TranscriptChunkSearchConsumer(BaseConsumer):
             # Do not index text flagged as redacted. See module docstring.
             return
 
+        confidential = False
+        if self._guard is not None:
+            # Never record and confidential meetings: `libs/shared/index_guard.py`.
+            meeting = UUID(str(body["meeting_id"]))
+            verdict = await self._guard.check(
+                evt.org_id, meeting, int(body["start_ms"]), str(body["text"])
+            )
+            if verdict.purge is not None:
+                start, end = verdict.purge
+                await session.execute(
+                    _PURGE,
+                    {
+                        "org_id": str(evt.org_id),
+                        "meeting_id": str(meeting),
+                        "start_ms": start,
+                        "end_ms": end,
+                    },
+                )
+            if verdict.skip:
+                return
+            confidential = verdict.confidential
+
         await session.execute(
             _INSERT,
             {
@@ -103,6 +140,7 @@ class TranscriptChunkSearchConsumer(BaseConsumer):
                 "start_ms": body["start_ms"],
                 "end_ms": body["end_ms"],
                 "text": body["text"],
+                "confidential": confidential,
             },
         )
         # No `emit_outbox` call: nothing downstream consumes a "search index updated" fact

@@ -34,6 +34,7 @@ from services.knowledge_graph_service.confirmed import (
     ConfirmedDecision,
     apply_action,
     apply_decision,
+    meeting_or_none,
     purge_org,
 )
 from services.knowledge_graph_service.connection import age_connection
@@ -61,7 +62,7 @@ def parse_row(row: dict[str, Any]) -> ConfirmedDecision | ConfirmedAction:
     if row.get("kind") == "action":
         return ConfirmedAction(
             action_id=UUID(str(row["action_id"])),
-            meeting_id=UUID(str(row["meeting_id"])),
+            meeting_id=meeting_or_none(_opt_uuid(row.get("meeting_id"))),
             content=str(row["content"]),
             confidence=float(row["confidence"]),
             confirmed_at=str(row["confirmed_at"]),

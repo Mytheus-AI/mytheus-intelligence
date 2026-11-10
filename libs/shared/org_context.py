@@ -213,8 +213,15 @@ def from_message(reply: Any) -> CompanyContext:
     )
 
 
+class OrgContextUnavailable(Exception):
+    """`get_strict`: the company brain could not be read (the caller must not guess)."""
+
+
 class OrgContextClient:
-    """`get(org_id)` never raises and never returns None: a failure is `EMPTY`."""
+    """`get(org_id)` never raises and never returns None: a failure is `EMPTY`.
+    `get_strict(org_id)` raises `OrgContextUnavailable` instead, for a caller that must not
+    treat "unknown" as "no never-record topics" (the indexing consumers retry rather than
+    index a window they cannot vet)."""
 
     def __init__(
         self,
@@ -236,8 +243,8 @@ class OrgContextClient:
         self._clock = clock
         self._channel: grpc.aio.Channel | None = None
         self._stub = call  # tests inject the unary call
-        self._cache: dict[UUID, tuple[float, CompanyContext]] = {}
-        self._inflight: dict[UUID, asyncio.Future[CompanyContext]] = {}
+        self._cache: dict[UUID, tuple[float, CompanyContext, bool]] = {}
+        self._inflight: dict[UUID, asyncio.Future[tuple[CompanyContext, bool]]] = {}
 
     def _call(self) -> Any:
         if self._stub is not None:
@@ -251,9 +258,18 @@ class OrgContextClient:
         )
 
     async def get(self, org_id: UUID) -> CompanyContext:
+        return (await self._get(org_id, strict=False))[0]
+
+    async def get_strict(self, org_id: UUID) -> CompanyContext:
+        ctx, ok = await self._get(org_id, strict=True)
+        if not ok:
+            raise OrgContextUnavailable(str(org_id))
+        return ctx
+
+    async def _get(self, org_id: UUID, *, strict: bool) -> tuple[CompanyContext, bool]:
         hit = self._cache.get(org_id)
-        if hit is not None and self._clock() < hit[0]:
-            return hit[1]
+        if hit is not None and self._clock() < hit[0] and (hit[2] or not strict):
+            return hit[1], hit[2]
         flight = self._inflight.get(org_id)
         if flight is None:
             flight = asyncio.ensure_future(self._fetch(org_id))
@@ -261,24 +277,24 @@ class OrgContextClient:
             flight.add_done_callback(lambda _f: self._inflight.pop(org_id, None))
         return await asyncio.shield(flight)
 
-    async def _fetch(self, org_id: UUID) -> CompanyContext:
+    async def _fetch(self, org_id: UUID) -> tuple[CompanyContext, bool]:
         try:
             reply = await self._call()(
                 GetOrgContextRequest(),
                 metadata=(("org-id", str(org_id)),),
                 timeout=self._timeout,
             )
-            ctx = from_message(reply)
+            ctx, ok = from_message(reply), True
             ttl = self._ttl
         except grpc.RpcError as exc:
             logger.warning("get_org_context failed org=%s: %s (no company context)", org_id, exc)
-            ctx, ttl = EMPTY, min(self._ttl, FAILURE_TTL_S)
+            ctx, ok, ttl = EMPTY, False, min(self._ttl, FAILURE_TTL_S)
         except Exception:  # noqa: BLE001 - a bad reply must not stop a window
             logger.exception("get_org_context reply unusable org=%s (no company context)", org_id)
-            ctx, ttl = EMPTY, min(self._ttl, FAILURE_TTL_S)
+            ctx, ok, ttl = EMPTY, False, min(self._ttl, FAILURE_TTL_S)
         if ttl > 0:
-            self._cache[org_id] = (self._clock() + ttl, ctx)
-        return ctx
+            self._cache[org_id] = (self._clock() + ttl, ctx, ok)
+        return ctx, ok
 
     async def close(self) -> None:
         if self._channel is not None:

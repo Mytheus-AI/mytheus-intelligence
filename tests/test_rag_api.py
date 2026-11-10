@@ -98,6 +98,26 @@ def test_anything_else_is_401(api, headers):
     assert svc.calls == []
 
 
+def test_bff_asks_as_the_signed_in_user_with_its_own_secret(monkeypatch):
+    """`bff` (POST /api/v1/ask, the MCP ask tool) is an allowed caller with its own secret; it
+    asks as one user, exactly like an agent asks as one participant."""
+    bff_secret = "f" * 40
+    monkeypatch.setenv(
+        rag_main.CALLER_TOKENS_ENV, f"agent-runtime-service={SECRET},bff={bff_secret}"
+    )
+    svc = Recording()
+    client = TestClient(rag_main.build_app(svc))  # type: ignore[arg-type]
+    ok = client.post(
+        "/api/rag/query", json={"query": "launch"}, headers=_agent(service="bff", secret=bff_secret)
+    )
+    assert ok.status_code == 200 and svc.calls[0][0] == Caller(org_id=ORG, user_id=USER)
+    wrong = client.post(
+        "/api/rag/query", json={"query": "launch"}, headers=_agent(service="bff", secret=SECRET)
+    )
+    assert wrong.status_code == 401  # the agent's secret is not bff's
+    assert "bff" in rag_main.ALLOWED_CALLERS
+
+
 def test_scope_outage_is_503_not_an_empty_answer(monkeypatch):
     monkeypatch.setenv(rag_main.CALLER_TOKENS_ENV, f"agent-runtime-service={SECRET}")
     client = TestClient(rag_main.build_app(Recording(fail=True)))  # type: ignore[arg-type]

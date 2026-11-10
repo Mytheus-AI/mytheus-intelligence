@@ -26,6 +26,15 @@ gets a pass of the agents that serve proxies (`serves_proxies`, PersonalListener
 window, with `"attendance": "agent"` in their context (C6). They are not added to the roster: they
 never count as present for meeting-scope agents, ContextGap requesters or the meeting's end.
 
+Polish (stable names, one threshold source, never record). Each meeting keeps one label registry
+(`names.assign_labels`): a speaker is "Participant N" from their first appearance to the end of
+the meeting, in every agent's prompt. With `policy` (core-api's `agent_confidence_overrides`,
+cached), every context carries the tenant's thresholds so each agent bands `surfaced` exactly as
+core-api does. A window that names one of the org's never-record topics (or a glossary alias),
+and the window after it, run no agent at all. Every result and every streamed delta passes
+`names.Postprocess` on its way out: labels become display names (from the contexts fetched
+here), and anything naming a never-record topic is dropped.
+
 Roster and agents are in memory. That is safe for the same reason the open windows are: a
 meeting's events all arrive on one partition of this consumer group.
 """
@@ -40,8 +49,11 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import CompanyContext
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
+from services.agent_runtime_service.names import Namer, Postprocess, assign_labels
+from services.agent_runtime_service.policy import CONTEXT_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +61,7 @@ AgentFactory = Callable[[], BaseAgent]
 ContextFn = Callable[[UUID, UUID], Awaitable[dict[str, Any] | None]]
 OrgContextFn = Callable[[UUID], Awaitable[CompanyContext]]
 ProxiesFn = Callable[[UUID, UUID], Awaitable[list[UUID]]]
+PolicyFn = Callable[[UUID], Awaitable[dict[str, dict[str, float]]]]
 
 
 class Sink(Protocol):
@@ -77,6 +90,8 @@ class _Meeting:
     roster: set[UUID] = field(default_factory=set)
     agents: dict[tuple[str, UUID], BaseAgent] = field(default_factory=dict)
     blocked_notified: set[UUID] = field(default_factory=set)
+    labels: dict[str, str] = field(default_factory=dict)  # speaker id -> "Participant N"
+    quiet_until_ms: int = -1  # never record: windows starting before this run no agent
 
 
 class AgentRuntime:
@@ -89,12 +104,14 @@ class AgentRuntime:
         max_concurrency: int = 8,
         org_context: OrgContextFn | None = None,
         proxies: ProxiesFn | None = None,
+        policy: PolicyFn | None = None,
     ) -> None:
         self._sink = sink
         self._context = user_context
         self._factories = agents
         self._org_context = org_context
         self._proxies = proxies
+        self._policy = policy
         self._meetings: dict[tuple[UUID, UUID], _Meeting] = {}
         self._sem = asyncio.Semaphore(max_concurrency)
 
@@ -135,30 +152,46 @@ class AgentRuntime:
             m.agents[key] = probe
         return m.agents[key]
 
-    def _stream_for(self, window: TranscriptWindow, user_id: UUID) -> StreamFn:
+    def _stream_for(self, window: TranscriptWindow, user_id: UUID, post: Postprocess) -> StreamFn:
         async def stream(seq: int, text: str, done: bool) -> None:
             await self._sink.delta(window=window, user_id=user_id, seq=seq, text=text, done=done)
 
-        return stream
+        return post.stream(stream)
 
     async def process_window(self, window: TranscriptWindow) -> int:
         """Run every agent on one closed window. Returns the number of results emitted."""
         m = self._meeting(window.org_id, window.meeting_id)
+        assign_labels(m.labels, window)
         m.roster.update(u for u in map(as_user_id, window.speaker_ids) if u is not None)
         users = sorted(m.roster, key=str)
         proxied = [u for u in await self._proxied(window) if u not in m.roster]
-        org, *found = await asyncio.gather(
-            self._org(window), *(self._ctx(window, u) for u in [*users, *proxied])
+        org, overrides, *found = await asyncio.gather(
+            self._org(window),
+            self._overrides(window),
+            *(self._ctx(window, u) for u in [*users, *proxied]),
         )
+        never = NeverRecordPolicy.from_org(org)
+        if any(never.hits(t.text) for t in window.turns):
+            # A never-record topic was named in this window: nothing of it, or of the next
+            # window (the talk around a topic rarely names it in every sentence), reaches any
+            # agent, so no model is called and nothing is emitted (the indexers skip the same
+            # windows, libs/shared/index_guard.py).
+            m.quiet_until_ms = window.end_ms + (window.end_ms - window.start_ms)
+        if window.start_ms < m.quiet_until_ms:
+            logger.info("window %s is never-record; no agent runs", window.window_id)
+            return 0
         everyone = dict(zip([*users, *proxied], found, strict=True))
+        extra: dict[str, Any] = {CONTEXT_KEY: overrides}
         if org is not None:
-            everyone = {u: (None if c is None else {**c, "org": org}) for u, c in everyone.items()}
+            extra["org"] = org
+        everyone = {u: (None if c is None else {**c, **extra}) for u, c in everyone.items()}
+        post = Postprocess(Namer.build(m.labels, everyone), never)
         contexts = {u: everyone[u] for u in users}
-        jobs = [self._run_user(m, window, u, contexts[u]) for u in users]
+        jobs = [self._run_user(m, window, u, contexts[u], post) for u in users]
         jobs.extend(
-            self._run_user(m, window, u, _as_proxy(everyone[u]), proxy=True) for u in proxied
+            self._run_user(m, window, u, _as_proxy(everyone[u]), post, proxy=True) for u in proxied
         )
-        jobs.append(self._run_multi(m, window, contexts))
+        jobs.append(self._run_multi(m, window, contexts, post))
         counts = await asyncio.gather(*jobs)
         return sum(counts)
 
@@ -170,6 +203,15 @@ class AgentRuntime:
         except Exception:  # noqa: BLE001 - no company context: prompts render as before
             logger.warning("org context unavailable org=%s; window runs without it", window.org_id)
             return None
+
+    async def _overrides(self, window: TranscriptWindow) -> dict[str, dict[str, float]]:
+        if self._policy is None:
+            return {}
+        try:
+            return await self._policy(window.org_id)
+        except Exception:  # noqa: BLE001 - the default thresholds, as core-api without overrides
+            logger.warning("agent policy unavailable org=%s; default thresholds", window.org_id)
+            return {}
 
     async def _proxied(self, window: TranscriptWindow) -> list[UUID]:
         if self._proxies is None:
@@ -186,7 +228,11 @@ class AgentRuntime:
             return await self._context(window.org_id, user_id)
 
     async def _run_multi(
-        self, m: _Meeting, window: TranscriptWindow, contexts: dict[UUID, dict[str, Any] | None]
+        self,
+        m: _Meeting,
+        window: TranscriptWindow,
+        contexts: dict[UUID, dict[str, Any] | None],
+        post: Postprocess,
     ) -> int:
         """Meeting-scope agents that emit one result per participant (`multi_user`, P10's
         `ContextGapAgent`): run once per window with every participant's context. Not under
@@ -208,7 +254,10 @@ class AgentRuntime:
                     "agent %s failed on window %s; skipped", agent.name, window.window_id
                 )
                 continue
-            for user_id, result in results:
+            for user_id, raw in results:
+                result = post.result(raw)
+                if result is None:
+                    continue  # nothing of it may leave the tier (never record)
                 try:
                     await self._sink.result(
                         window=window, user_id=user_id, agent=agent.name, result=result
@@ -232,6 +281,7 @@ class AgentRuntime:
         window: TranscriptWindow,
         user_id: UUID,
         context: dict[str, Any] | None,
+        post: Postprocess,
         *,
         proxy: bool = False,
     ) -> int:
@@ -252,7 +302,7 @@ class AgentRuntime:
                 chunk=window,
                 context=context,
                 org_id=window.org_id,
-                stream=self._stream_for(window, user_id),
+                stream=self._stream_for(window, user_id, post),
             )
             async with self._sem:
                 try:
@@ -280,6 +330,8 @@ class AgentRuntime:
                     title="AI budget exhausted",
                     body="Live notes are paused for this meeting. Captions continue.",
                 )
+            if result is not None:
+                result = post.result(result)
             if result is not None:
                 await self._sink.result(
                     window=window, user_id=user_id, agent=agent.name, result=result

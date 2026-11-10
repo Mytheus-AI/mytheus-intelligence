@@ -7,7 +7,11 @@ Two callers:
   the user from its `sub`, which core-api resolves to `users.id` in the scope call;
 - an agent (`agent-runtime-service`, for `QuestionAgent` grounding) with its service
   credentials (`MYTHEUS_RAG_CALLER_TOKENS`) and `X-Mytheus-User`: the participant it asks for.
-  Scope is per user, so an agent sees exactly that participant's meetings.
+  Scope is per user, so an agent sees exactly that participant's meetings;
+- `bff`, asking on a signed-in user's behalf (`POST /api/v1/ask` and the MCP ask tool), with
+  the same service-credential shape: `X-Mytheus-Service: bff`, its secret from
+  `MYTHEUS_RAG_CALLER_TOKENS` (`bff=<secret>`), and `X-Mytheus-User` = that user's `users.id`.
+  Scope is still that one user's.
 
 Downstream, rag-service calls core-api, search-service, embedding-service, reranker-service and
 knowledge-graph-service as itself (`RAG_SERVICE_TOKEN`), and reads Qdrant with the read-only key.
@@ -45,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 CALLER_TOKENS_ENV = "MYTHEUS_RAG_CALLER_TOKENS"
-ALLOWED_CALLERS = frozenset({"agent-runtime-service"})
+ALLOWED_CALLERS = frozenset({"agent-runtime-service", "bff"})
 USER_HEADER = "x-mytheus-user"
 
 

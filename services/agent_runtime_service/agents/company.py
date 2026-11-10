@@ -25,6 +25,7 @@ import re
 from typing import Any
 from uuid import UUID
 
+from libs.shared.never_record import topic_terms
 from libs.shared.org_context import EMPTY, CompanyContext, Goal, TopicOwner
 
 MAX_GLOSSARY = 60  # C1
@@ -83,12 +84,19 @@ def render_company(org: CompanyContext) -> str:
 
 
 def render_ground_rules(org: CompanyContext) -> str:
-    """The C2 line, ending in a blank line; "" when the org set no never-record topics."""
-    topics = [_clean(t, 80) for t in org.never_record_topics]
-    topics = [t for t in topics if t]
-    if not topics:
+    """The C2 line, ending in a blank line; "" when the org set no never-record topics. A topic
+    that is a glossary term (or one of its aliases) lists the other names it is said by, so a
+    gate that never sees the vocabulary still recognises "Falcon" for "Project Falcon"."""
+    parts: list[str] = []
+    for raw in org.never_record_topics:
+        topic = _clean(raw, 80)
+        if not topic:
+            continue
+        others = [_clean(t, 80) for t in topic_terms(raw, org)[1:]][:5]
+        parts.append(f"{topic} (also said as {', '.join(others)})" if others else topic)
+    if not parts:
         return ""
-    return f"Never record (company ground rule): {'; '.join(topics)}\n\n"
+    return f"Never record (company ground rule): {'; '.join(parts)}\n\n"
 
 
 def company_values(context: dict[str, Any] | None) -> dict[str, str]:

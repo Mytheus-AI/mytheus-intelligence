@@ -195,8 +195,12 @@ async def test_the_gate_routes_haiku_and_extraction_routes_sonnet(cls, script):
     assert llm.models() == [HAIKU, SONNET]
     assert [u["model_tier"] for u in sink.usage_calls] == ["haiku", "sonnet"]
     assert result.payload["model_tier"] == "sonnet"
-    version = "v2" if cls is ActionAgent else "v1"  # ADR-0039 advanced the action prompts
-    assert result.payload["prompt"] == f"{cls.prompt_key}@{version}"
+    # ADR-0039 advanced the action prompts, the polish plan the decision ones (never record)
+    assert result.payload["prompt"] == f"{cls.prompt_key}@v2"
+    # extraction: adaptive thinking at effort low, with room for it (polish: model settings)
+    extract = llm.calls[1]
+    assert extract["thinking"] == {"type": "adaptive"}
+    assert extract["output_config"] == {"effort": "low"} and extract["max_tokens"] == 8192
     assert result.kind == cls.kind
     assert result.relevance_score == 0.9
     assert result.source_chunk_ids == ["c1", "c2"]
@@ -496,10 +500,10 @@ def test_the_shipped_prompts_are_registered_and_render():
         window="x", today="Monday 2026-11-09"
     )
     registry = json.loads((Path(PROMPTS_DIR) / "registry.json").read_text())["defaults"]
-    for key in ("decision_gate", "decision_agent"):
-        assert registry[key] == "v1"
-    for key in ("action_gate", "action_agent"):  # ADR-0039 C1, C2, C4
+    for key in ("decision_gate", "decision_agent"):  # polish: never record everywhere
         assert registry[key] == "v2"
+    assert registry["action_agent"] == "v2"  # ADR-0039 C1, C2, C4
+    assert registry["action_gate"] == "v3"  # polish: past the 512-token cache minimum
 
 
 async def test_spawn_fails_closed_without_org_id():

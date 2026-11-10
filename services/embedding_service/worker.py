@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from libs.shared.avro_codec import AvroCodec
 from libs.shared.consumer import BaseConsumer
+from libs.shared.index_guard import guard_from_env
 from libs.shared.qdrant import write_client
 from services.embedding_service.consumer import EmbeddingConsumer
 from services.embedding_service.decision_consumer import DecisionEmbeddingConsumer
@@ -56,7 +57,10 @@ def main() -> None:
     }
     consumers: list[BaseConsumer] = []
     if "embed-on-ingest" in wanted:
-        consumers.append(EmbeddingConsumer(**_deps()))
+        deps = _deps()
+        # never record + confidential meetings (libs/shared/index_guard.py)
+        guard = guard_from_env("embedding-service", deps["redis"])
+        consumers.append(EmbeddingConsumer(guard=guard, **deps))
     if "embed-decisions" in wanted:
         consumers.append(DecisionEmbeddingConsumer(**_deps()))
     if not consumers:

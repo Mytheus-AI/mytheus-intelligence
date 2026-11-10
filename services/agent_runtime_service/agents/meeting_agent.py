@@ -86,7 +86,7 @@ from services.agent_runtime_service.agents.candidates import (
 from services.agent_runtime_service.agents.candidates import render_window as labelled_window
 from services.agent_runtime_service.agents.company import company_of, company_values, goal_labels
 from services.agent_runtime_service.agents.context_gap_agent import parse_object
-from services.agent_runtime_service.agents.personal_listener_agent import SURFACE_ABOVE
+from services.agent_runtime_service.policy import SURFACE_ABOVE
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +295,7 @@ class MeetingAgent(BaseAgent):
             out = await self.router.complete(
                 tier="triage",
                 system=self.prompt.system,
-                user=self.prompt.render_user(**s.context),
+                **self.prompt.user_parts(**s.context),
                 org_id=s.org_id,
                 user_id=s.user_id,  # metered to the host
                 max_tokens=400,

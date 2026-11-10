@@ -67,6 +67,10 @@ async def fts_search(
     if meeting_ids is not None:
         sql += " AND meeting_id = ANY(CAST(:meeting_ids AS uuid[]))"
         params["meeting_ids"] = [str(m) for m in meeting_ids]
+    else:
+        # Org-wide (no participant allowlist): never a confidential meeting's chunk. Those are
+        # reachable only through rag-service's participant scope (libs/shared/index_guard.py).
+        sql += " AND NOT confidential"
     if speaker_ids:
         sql += " AND speaker_id = ANY(CAST(:speaker_ids AS text[]))"
         params["speaker_ids"] = list(speaker_ids)

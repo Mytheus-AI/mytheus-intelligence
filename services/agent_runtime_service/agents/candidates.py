@@ -43,10 +43,12 @@ from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
 from libs.shared.prompts import Prompt
-from libs.shared.router import TIER_NAMES
+from libs.shared.router import EXTRACT_MAX_TOKENS, EXTRACTION_EFFORT, TIER_NAMES, Effort
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
 from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
 from services.agent_runtime_service.agents.personal_listener_agent import band
+from services.agent_runtime_service.names import speaker_labels
+from services.agent_runtime_service.policy import thresholds_for
 
 logger = logging.getLogger(__name__)
 
@@ -119,13 +121,11 @@ def text_of(raw: dict[str, Any], key: str) -> str | None:
 
 
 def render_window(window: TranscriptWindow) -> tuple[str, dict[str, str]]:
-    """Every speaker as "Participant N" in order of first speaking. Returns the transcript and
-    the label -> speaker id map used to resolve the model's answer."""
-    by_speaker: dict[str, str] = {}
-    lines = []
-    for turn in window.turns:
-        label = by_speaker.setdefault(turn.speaker_id, f"Participant {len(by_speaker) + 1}")
-        lines.append(f"{label}: {turn.text}")
+    """Every speaker as their meeting-wide "Participant N" label (`names.speaker_labels`; in
+    order of first speaking for a window built outside the runtime). Returns the transcript and
+    the label -> speaker id map (this window's speakers only) used to resolve the answer."""
+    by_speaker = speaker_labels(window)
+    lines = [f"{by_speaker[t.speaker_id]}: {t.text}" for t in window.turns]
     return "\n".join(lines), {label: speaker for speaker, label in by_speaker.items()}
 
 
@@ -172,7 +172,8 @@ class CandidateAgent(BaseAgent):
     gate_key: ClassVar[str]
     threshold_env: ClassVar[str]
     kind: ClassVar[str]
-    extract_max_tokens: ClassVar[int] = 1000
+    extract_max_tokens: ClassVar[int] = EXTRACT_MAX_TOKENS  # room for thinking (polish)
+    effort: ClassVar[Effort] = EXTRACTION_EFFORT  # extraction: low
 
     gate_prompt: Prompt | None = None
 
@@ -204,6 +205,7 @@ class CandidateAgent(BaseAgent):
         """Parse, validate, band and id the model's candidates. Dropped ones are left out; the id
         index is the candidate's position in the model's list, so ids never shift."""
         _, labels = render_window(window)
+        limits = thresholds_for(context, self.name)
         kept: list[dict[str, Any]] = []
         for index, raw in enumerate(parse_candidates(text)):
             if not isinstance(raw, dict):
@@ -211,7 +213,7 @@ class CandidateAgent(BaseAgent):
             content, confidence = text_of(raw, "content"), confidence_of(raw)
             if content is None or confidence is None:
                 continue
-            verdict = band(confidence)
+            verdict = band(confidence, limits)
             if verdict == "dropped":
                 continue
             fields = self.shape(raw, labels)
@@ -238,9 +240,7 @@ class CandidateAgent(BaseAgent):
             out = await self.router.complete(
                 tier="triage",
                 system=self.gate_prompt.system,
-                user=self.gate_prompt.render_user(
-                    window=transcript, **gate_ground_rules(s.context)
-                ),
+                **self.gate_prompt.user_parts(window=transcript, **gate_ground_rules(s.context)),
                 org_id=s.org_id,
                 user_id=s.user_id,
                 max_tokens=20,
@@ -254,10 +254,11 @@ class CandidateAgent(BaseAgent):
             out = await self.router.complete(
                 tier="extract",
                 system=self.prompt.system,
-                user=self.prompt.render_user(window=transcript, **self.user_values(s.context)),
+                **self.prompt.user_parts(window=transcript, **self.user_values(s.context)),
                 org_id=s.org_id,
                 user_id=s.user_id,
                 max_tokens=self.extract_max_tokens,
+                effort=self.effort,
                 prompt_ref=self.prompt.ref,
             )
             kept = self.candidates(out.text, s.chunk, s.context)

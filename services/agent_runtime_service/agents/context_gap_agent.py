@@ -58,9 +58,16 @@ from uuid import UUID
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.never_record import NeverRecordPolicy
+from libs.shared.org_context import EMPTY, CompanyContext
 from libs.shared.prompts import Prompt, PromptLoader
 from libs.shared.rag_client import HttpRagClient, RagClient
-from libs.shared.router import BudgetBlocked, LiteLLMRouter
+from libs.shared.router import (
+    EXTRACT_MAX_TOKENS,
+    SYNTHESIS_EFFORT,
+    BudgetBlocked,
+    LiteLLMRouter,
+)
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow, Turn
 from services.agent_runtime_service.a2a import collab
 from services.agent_runtime_service.a2a.bus import A2AClient, ScoredPassage, from_rag
@@ -75,8 +82,14 @@ from services.agent_runtime_service.a2a.pep import (
 from services.agent_runtime_service.a2a.related import RelatedAttendeesClient
 from services.agent_runtime_service.agents.candidates import confidence_of, text_of
 from services.agent_runtime_service.agents.candidates import render_window as labelled_window
+from services.agent_runtime_service.agents.company import (
+    company_of,
+    company_values,
+    gate_ground_rules,
+)
 from services.agent_runtime_service.agents.grounding import valid_citation
 from services.agent_runtime_service.agents.personal_listener_agent import band, render_window
+from services.agent_runtime_service.policy import thresholds_for
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +200,7 @@ class GateVerdict:
     query: str
     score: float
     speaker: UUID | None  # the referencing turn's speaker, when it is a user
+    reference: str = ""  # the referencing turn's text (never-record check before any request)
 
     def passed(self, threshold: float) -> bool:
         return self.is_gap and bool(self.query) and self.score >= threshold
@@ -305,7 +319,9 @@ class ContextGapAgent(BaseAgent):
             out = await self.router.complete(
                 tier="triage",
                 system=self.gate_prompt.system,
-                user=self.gate_prompt.render_user(window=labelled_window(s.chunk)[0]),
+                **self.gate_prompt.user_parts(
+                    window=labelled_window(s.chunk)[0], **gate_ground_rules(s.context)
+                ),
                 org_id=s.org_id,
                 user_id=None,  # shared by every participant: metered to the tenant
                 max_tokens=120,
@@ -336,10 +352,15 @@ class ContextGapAgent(BaseAgent):
         people = {u: c for u, c in contexts.items() if c is not None}
         if not people:
             return []
-        verdict = await self.assess(window)
+        org = next((company_of(c) for c in people.values()), EMPTY)
+        verdict = await self.assess(window, org)
         if verdict is None or not verdict.passed(self._settings.gate_threshold):
             return []
         query, score, speaker = verdict.query, verdict.score, verdict.speaker
+        if NeverRecordPolicy.from_org(org).hits(query, verdict.reference):
+            # A never-record topic is never asked about: no peer, related-meeting or RAG request
+            # carries it out of this meeting (ADR-0039 C2), and nothing is emitted.
+            return []
 
         query_class = classify_query(query)
         own = await self._own(window.org_id, list(people), query, query_class)
@@ -360,9 +381,12 @@ class ContextGapAgent(BaseAgent):
             self._quiet_until = self._windows_seen + COOLDOWN_WINDOWS
         return emitted
 
-    async def assess(self, window: TranscriptWindow) -> GateVerdict | None:
-        """The detector, then the shared gate. None when nothing references prior context or
-        the tenant is blocked (no model call either way)."""
+    async def assess(
+        self, window: TranscriptWindow, org: CompanyContext = EMPTY
+    ) -> GateVerdict | None:
+        """The detector, then the shared gate (with the org's never-record line, ADR-0039 C2).
+        None when nothing references prior context or the tenant is blocked (no model call
+        either way)."""
         assert self._graph is not None and self.prompt is not None
         hit = detect(window)
         if hit is None:
@@ -372,7 +396,7 @@ class ContextGapAgent(BaseAgent):
             meeting_id=window.meeting_id,
             user_id=speaker or window.meeting_id,
             chunk=window,
-            context={},
+            context={"org": org},
             org_id=window.org_id,
             agent_id=self.agent_id,
             prompt_version=self.prompt.version,
@@ -390,6 +414,7 @@ class ContextGapAgent(BaseAgent):
             query=str(gate.get("query") or ""),
             score=float(score),
             speaker=speaker,
+            reference=hit.text,
         )
 
     async def _throttled(self, org_id: UUID) -> bool:
@@ -511,7 +536,9 @@ class ContextGapAgent(BaseAgent):
         numbered = collab.number(entries, window.window_id, requester)
         fill, tier = (None, None)
         if winner is not None:
-            fill, tier = await self._synthesize(window, requester, query, winner, numbered)
+            fill, tier = await self._synthesize(
+                window, requester, query, winner, numbered, people.get(requester)
+            )
         return AgentResult(
             kind=self.kind,
             content=fill["content"] if fill else "",
@@ -524,6 +551,7 @@ class ContextGapAgent(BaseAgent):
                 collaborations=numbered,
                 fill=fill,
                 model_tier=tier,
+                prompt=self.prompt.ref if self.prompt is not None else collab.PROMPT_REF,
             ),
         )
 
@@ -620,20 +648,24 @@ class ContextGapAgent(BaseAgent):
         query: str,
         winner: Winner,
         numbered: list[dict[str, Any]],
+        context: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any] | None, str | None]:
         assert self.prompt is not None
+        limits = thresholds_for(context, self.name)
         try:
             out = await self.router.complete(
                 tier="extract",
                 system=self.prompt.system,
-                user=self.prompt.render_user(
+                **self.prompt.user_parts(
                     query=query,
                     window=render_window(window, requester),
                     passages=render_passages(winner.passages),
+                    **company_values(context),
                 ),
                 org_id=window.org_id,
                 user_id=requester,
-                max_tokens=400,
+                max_tokens=EXTRACT_MAX_TOKENS,
+                effort=SYNTHESIS_EFFORT,
                 prompt_ref=self.prompt.ref,
             )
         except BudgetBlocked:
@@ -641,7 +673,7 @@ class ContextGapAgent(BaseAgent):
             return None, None
         obj = parse_object(out.text) or {}
         content, confidence = text_of(obj, "content"), confidence_of(obj)
-        if content is None or confidence is None or band(confidence) == "dropped":
+        if content is None or confidence is None or band(confidence, limits) == "dropped":
             return None, out.tier
         citations = cited(obj.get("sources"), winner.passages)
         if not citations:
@@ -650,7 +682,7 @@ class ContextGapAgent(BaseAgent):
             "id": numbered[winner.index]["id"],
             "content": clip_content(content),
             "confidence": confidence,
-            "surfaced": band(confidence) == "surfaced",
+            "surfaced": band(confidence, limits) == "surfaced",
             "rationale": text_of(obj, "rationale") or "",
             "hop": winner.hop,
             "responder": winner.responder,

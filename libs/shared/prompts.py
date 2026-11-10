@@ -13,18 +13,33 @@ default. Rolling back is deleting the pin; nothing is redeployed except this fil
 A template is split on a line holding only `---user---`: everything above is the system
 prompt (stable, so Anthropic prompt caching applies to it), everything below is the per-call
 user message, rendered with `str.format_map`.
+
+`render_parts` splits the user message for prompt caching: the leading run of org-stable
+placeholders (`CACHED_KEYS`: the company block, the never-record line, the topic owners) is
+the cached prefix the router sends behind its own breakpoint; the rest is per call. A template
+that does not start with them has no prefix and renders exactly what `render_user` does.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 from uuid import UUID
 
 USER_MARKER = "---user---"
+CACHED_KEYS = ("company", "ground_rules", "owners")  # org-stable: the same for every window
+_LEADING = re.compile(r"\{(\w+)\}")
+
+
+class UserParts(TypedDict):
+    """`router.complete(**prompt.user_parts(...))`: the user message split for caching."""
+
+    user: str
+    cached_prefix: str
 
 
 @dataclass(frozen=True)
@@ -40,6 +55,19 @@ class Prompt:
 
     def render_user(self, **values: Any) -> str:
         return self.user_template.format_map(values)
+
+    def render_parts(self, **values: Any) -> tuple[str, str]:
+        """(cached prefix, per-call rest); `prefix + rest == render_user(**values)`."""
+        template, pos, keys = self.user_template, 0, []
+        while (m := _LEADING.match(template, pos)) and m.group(1) in CACHED_KEYS:
+            keys.append(m.group(1))
+            pos = m.end()
+        prefix = "".join(str(values.get(k, "")) for k in keys)
+        return prefix, template[pos:].format_map(values)
+
+    def user_parts(self, **values: Any) -> UserParts:
+        prefix, rest = self.render_parts(**values)
+        return {"user": rest, "cached_prefix": prefix}
 
 
 class PromptLoader:

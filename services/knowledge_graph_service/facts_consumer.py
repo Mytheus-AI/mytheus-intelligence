@@ -43,6 +43,7 @@ from services.knowledge_graph_service.confirmed import (
     apply_action,
     apply_attended,
     apply_decision,
+    meeting_or_none,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,7 +108,8 @@ def action_from(evt: ConsumedEvent) -> ConfirmedAction:
     b = evt.body
     return ConfirmedAction(
         action_id=_required_uuid(b, "action_id"),
-        meeting_id=_required_uuid(b, "meeting_id"),
+        # the nil uuid is a personal task created outside any meeting: no PRODUCED edge
+        meeting_id=meeting_or_none(_required_uuid(b, "meeting_id")),
         content=str(b["content"]),
         confidence=float(b["confidence"]),
         confirmed_at=occurred_at_iso(evt.header),
