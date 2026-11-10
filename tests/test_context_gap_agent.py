@@ -190,8 +190,13 @@ def window(
     return TranscriptWindow(ORG, MEETING, window_id, 0, 30_000, turns)
 
 
-STRONG = [rag_passage("In July the team chose the enterprise tier; finance signed off.", 0.92)]
-WEAK = [rag_passage("Vendor call notes, pricing mentioned briefly.", 0.2)]
+# QUERY is a decision_lineage query, so only `decision` passages may answer it.
+STRONG = [
+    rag_passage(
+        "In July the team chose the enterprise tier; finance signed off.", 0.92, kind="decision"
+    )
+]
+WEAK = [rag_passage("Vendor call notes, pricing mentioned briefly.", 0.2, kind="decision")]
 
 
 async def make(
@@ -376,7 +381,7 @@ async def test_a_peer_answer_before_the_deadline_wins():
     winner = next(c for c in bob.payload["collaborations"] if c["id"] == fill["id"])
     assert winner["success"] is True and winner["correlation_id"]
     assert winner["target_scope"] == "same_team" and winner["query_class"] == "decision_lineage"
-    assert fill["citations"][0]["kind"] == "transcript" and "chunk_id" in fill["citations"][0]
+    assert fill["citations"][0]["kind"] == "decision" and "decision_id" in fill["citations"][0]
     # the responder retrieved AS Alice, never as Bob
     responder_calls = [c for c in rag.calls if c["user_id"] == ALICE]
     assert responder_calls and all(c["org_id"] == ORG for c in rag.calls)
@@ -384,7 +389,14 @@ async def test_a_peer_answer_before_the_deadline_wins():
     assert req["header"]["org_id"] == str(ORG)
     assert req["header"]["idempotency_key"] == f"areq:{req['correlation_id']}"
     assert req["responder_target"].startswith("user:")
-    assert bus.signer.verify(req["requester_agent_id"]).org_id == ORG
+    ident = bus.signer.verify_request(
+        req["requester_agent_id"],
+        correlation_id=req["correlation_id"],
+        responder_target=req["responder_target"],
+        deadline_us=req["deadline"],
+        query=req["query"],
+    )
+    assert ident is not None and ident.org_id == ORG
     keys = {p.key for p in bus.producer.produced if p.topic == "agent-requests"}
     assert keys == {str(ORG)}  # partitioned by org
 
@@ -590,14 +602,25 @@ def request_value(
     target: str | None = None,
     deadline_s: float | None = None,
     agent_id: str | None = None,
+    query: str = QUERY,
 ) -> dict[str, Any]:
     cid = str(uuid.uuid4())
+    target = target or f"user:{ALICE}"
+    deadline = int((deadline_s or time.time() + 2) * 1_000_000)
+    signed = bus.signer.mint_request(
+        org,
+        requester,
+        correlation_id=cid,
+        responder_target=target,
+        deadline_us=deadline,
+        query=query,
+    )
     return {
         "header": {"org_id": str(header_org or org), "idempotency_key": f"areq:{cid}"},
-        "requester_agent_id": agent_id or bus.signer.mint(org, requester),
-        "responder_target": target or f"user:{ALICE}",
-        "query": QUERY,
-        "deadline": int((deadline_s or time.time() + 2) * 1_000_000),
+        "requester_agent_id": agent_id or signed,
+        "responder_target": target,
+        "query": query,
+        "deadline": deadline,
         "correlation_id": cid,
     }
 
@@ -613,12 +636,20 @@ def responder_bus(**kw: Any) -> Loopback:
 
 async def test_a_bad_signature_is_dead_lettered_and_only_logged():
     bus = responder_bus()
-    good = bus.signer.mint(ORG, BOB)
+    good = request_value(bus)["requester_agent_id"]
     for forged in (good[:-1] + ("0" if good[-1] != "0" else "1"), "cga:x:y:z", "", None):
         value = request_value(bus, agent_id=forged or "nope")
         assert await bus.responder.handle(value, raw=b"raw") == "dlq_bad_signature"
     other = IdentitySigner("another-secret-0123456789abcdef-xyz")
-    value = request_value(bus, agent_id=other.mint(ORG, BOB))
+    value = request_value(bus)
+    value["requester_agent_id"] = other.mint_request(
+        ORG,
+        BOB,
+        correlation_id=value["correlation_id"],
+        responder_target=value["responder_target"],
+        deadline_us=value["deadline"],
+        query=value["query"],
+    )
     assert await bus.responder.handle(value) == "dlq_bad_signature"
     dlq = bus.producer.on(DLQ_TOPIC)
     assert len(dlq) == 5 and all(d["failure_class"] == "BAD_SIGNATURE" for d in dlq)
@@ -667,7 +698,8 @@ async def test_the_responder_re_authorizes_and_a_deny_is_answered_and_logged():
     [resp] = bus.producer.on("agent-responses")
     assert resp["success"] is False and json.loads(resp["result"]) == {"error": "authz_denied"}
     assert resp["correlation_id"] == value["correlation_id"]
-    assert bus.signer.verify(resp["responder_agent_id"]).user_id == ALICE
+    ident = bus.signer.verify_response(resp["responder_agent_id"], value["correlation_id"])
+    assert ident is not None and ident.user_id == ALICE
     [res] = bus.producer.on("agent-results")
     entry = json.loads(res["payload_json"])["collaborations"][0]
     assert entry["result"] == "authz_denied" and entry["target_scope"] == "same_team"
@@ -695,8 +727,8 @@ async def test_the_responder_retrieves_as_the_responder_and_returns_the_top_thre
         (p["score"] for p in body["passages"]), reverse=True
     )
     citation = body["passages"][0]["citation"]
-    assert set(citation) == {"kind", "id", "meeting_id"} and citation["kind"] == "transcript"
-    assert parse_answer(resp["result"])[0].citation["chunk_id"] == citation["id"]
+    assert set(citation) == {"kind", "id", "meeting_id"} and citation["kind"] == "decision"
+    assert parse_answer(resp["result"])[0].citation["decision_id"] == citation["id"]
 
 
 async def test_nothing_found_is_no_answer():
@@ -842,7 +874,12 @@ async def test_a_response_after_the_deadline_is_ignored():
     )
     bus.hop_delay = 0.2
     outcome = await bus.client.ask(
-        org_id=ORG, requester=BOB, responder=ALICE, query=QUERY, deadline_s=time.time() + 0.1
+        org_id=ORG,
+        requester=BOB,
+        responder=ALICE,
+        query=QUERY,
+        query_class="decision_lineage",
+        deadline_s=time.time() + 0.1,
     )
     assert outcome.result == "deadline_miss" and bus.router.pending == 0
     await bus.drain()  # the late response arrives and resolves nothing
@@ -851,17 +888,37 @@ async def test_a_response_after_the_deadline_is_ignored():
 # --- 10. identity, related client, runtime ---------------------------------------------------
 
 
-def test_identity_mint_and_verify():
+def test_identity_is_signed_per_message():
     signer = IdentitySigner(SECRET)
-    agent_id = signer.mint(ORG, BOB)
+    fields = {
+        "correlation_id": "c-1",
+        "responder_target": f"user:{ALICE}",
+        "deadline_us": 1_800_000_000_000_000,
+        "query": QUERY,
+    }
+    agent_id = signer.mint_request(ORG, BOB, **fields)
     org_s, user_s, sig = agent_id.split(":")[1:]
     assert agent_id.startswith("cga:") and (org_s, user_s) == (str(ORG), str(BOB))
     assert len(sig) == 32
-    ident = signer.verify(agent_id)
+    ident = signer.verify_request(agent_id, **fields)
     assert ident is not None and (ident.org_id, ident.user_id) == (ORG, BOB)
-    assert signer.verify(agent_id.upper()) is None
-    assert signer.verify(agent_id.replace(str(ORG), str(OTHER_ORG))) is None  # a moved id
-    assert IdentitySigner(SECRET + "x").verify(agent_id) is None
+    # any field changed, or the id moved onto another request, breaks it
+    for field, other in (
+        ("correlation_id", "c-2"),
+        ("responder_target", f"user:{CARA}"),
+        ("deadline_us", fields["deadline_us"] + 1),
+        ("query", QUERY + " and salaries"),
+    ):
+        assert signer.verify_request(agent_id, **{**fields, field: other}) is None, field
+    assert signer.verify_request(agent_id.upper(), **fields) is None
+    assert signer.verify_request(agent_id.replace(str(ORG), str(OTHER_ORG)), **fields) is None
+    assert IdentitySigner(SECRET + "x").verify_request(agent_id, **fields) is None
+    # a response id is bound to its correlation id, and is not a request id
+    resp = signer.mint_response(ORG, ALICE, "c-1")
+    assert signer.verify_response(resp, "c-1") == signer.verify_response(resp, "c-1")
+    assert signer.verify_response(resp, "c-1") is not None
+    assert signer.verify_response(resp, "c-2") is None
+    assert signer.verify_request(resp, **fields) is None
     with pytest.raises(ValueError):
         IdentitySigner("too-short")
     assert parse_target(f"user:{BOB}") == BOB
@@ -1077,3 +1134,237 @@ async def test_the_pdp_client_speaks_the_identity_authorize_rpc():
     down = uc.PdpClient(f"127.0.0.1:{port}", timeout_s=0.3)
     assert await down.authorize(ORG, "admin", "action_status", "org") is None
     await down.close()
+
+
+# --- review fixes: query_class enforced, per-request signatures, replay, DLQ, revoke race ---
+
+
+MIXED = [
+    rag_passage("Transcript: we talked pricing.", 0.95, kind="transcript"),
+    rag_passage("Decision: enterprise tier chosen.", 0.9, kind="decision"),
+    rag_passage("Action: Bob sends the order form.", 0.85, kind="action"),
+    rag_passage("Document: vendor pricing sheet.", 0.8, kind="document"),
+]
+
+
+@pytest.mark.parametrize(
+    ("query", "kinds"),
+    [
+        ("why we chose the enterprise tier", {"decision"}),
+        ("who owns the order form task", {"action"}),
+        ("analytics vendor onboarding discussion", {"transcript", "document"}),
+    ],
+)
+async def test_the_responder_returns_only_the_kinds_the_query_class_allows(query: str, kinds):
+    bus = Loopback(
+        org_contexts={ORG: CONTEXTS}, rag=ScriptedRag({ALICE: MIXED}), pdp=FakePdp(allow_all())
+    )
+    assert await bus.responder.handle(request_value(bus, query=query)) == "answered"
+    [resp] = bus.producer.on("agent-responses")
+    returned = {p["citation"]["kind"] for p in json.loads(resp["result"])["passages"]}
+    assert returned == kinds
+
+
+async def test_a_class_with_nothing_of_its_kind_is_no_answer():
+    only_transcript = [rag_passage("We talked pricing.", 0.95, kind="transcript")]
+    bus = Loopback(
+        org_contexts={ORG: CONTEXTS},
+        rag=ScriptedRag({ALICE: only_transcript}),
+        pdp=FakePdp(allow_all()),
+    )
+    assert await bus.responder.handle(request_value(bus)) == "no_answer"  # decision query
+
+
+def test_the_requester_drops_off_class_passages_from_an_answer():
+    from services.agent_runtime_service.a2a.pep import allowed_kinds
+
+    body = answer_json(MIXED)
+    assert {p.citation["kind"] for p in parse_answer(body)} == {"transcript", "decision", "action"}
+    assert [p.citation["kind"] for p in parse_answer(body, allowed_kinds("decision_lineage"))] == [
+        "decision"
+    ]
+    assert parse_answer(body, allowed_kinds("not-a-class")) == []
+
+
+async def test_the_requesters_own_rag_hop_is_bounded_by_the_class_too():
+    off_class = [rag_passage("Transcript: we talked pricing.", 0.95, kind="transcript")]
+    llm = ScriptedLLM()
+    agent, _bus, _sink, _rag = await make(
+        llm, by_user={u: off_class for u in CONTEXTS}, grants=set()
+    )
+    out = await run(agent)  # a decision query: transcript passages are neither "have" nor fill
+    assert out and all(hops(r)[-1] == ("rag", "rag", "rag_miss") for r in out.values())
+    assert llm.fills == []
+
+
+async def test_a_tampered_request_fails_its_signature():
+    bus = responder_bus()
+    for field, other in (
+        ("query", "board compensation for the exec team"),
+        ("responder_target", f"user:{CARA}"),
+        ("deadline", None),
+        ("correlation_id", str(uuid.uuid4())),
+    ):
+        value = request_value(bus)
+        value[field] = value["deadline"] + 1 if field == "deadline" else other
+        assert await bus.responder.handle(value) == "dlq_bad_signature", field
+    assert bus.producer.on("agent-responses") == [] and bus.pdp.calls == []
+
+
+async def test_a_deadline_more_than_5s_ahead_is_refused():
+    bus = responder_bus()
+    value = request_value(bus, deadline_s=time.time() + 30)
+    assert await bus.responder.handle(value) == "dlq_bad_deadline"
+    [dlq] = bus.producer.on(DLQ_TOPIC)
+    assert dlq["failure_class"] == "BAD_DEADLINE"
+    assert bus.producer.on("agent-responses") == []
+    assert bus.responder._rag.calls == []  # type: ignore[union-attr]
+
+
+async def test_an_exact_replay_is_served_once():
+    from services.agent_runtime_service.a2a.bus import dedupe_key
+
+    bus = responder_bus()
+    value = request_value(bus)
+    assert await bus.responder.handle(value) == "answered"
+    assert await bus.responder.handle(dict(value)) == "duplicate"
+    assert len(bus.producer.on("agent-responses")) == 1
+    assert len(bus.responder._rag.calls) == 1  # type: ignore[union-attr]
+    key = dedupe_key(ORG, value["correlation_id"])
+    assert key == f"nexus:{ORG}:dedupe:agent-requests:agent-runtime-a2a:{value['correlation_id']}"
+    assert 55 <= await bus.redis.ttl(key) <= 60
+
+
+async def test_without_the_dedupe_store_nothing_is_served():
+    class Down:
+        async def set(self, *_a: Any, **_k: Any) -> Any:
+            raise ConnectionError
+
+        async def get(self, *_a: Any) -> Any:
+            raise ConnectionError
+
+    bus = responder_bus()
+    bus.responder._redis = Down()
+    assert await bus.responder.handle(request_value(bus)) == "dedupe_unavailable"
+    assert bus.producer.on("agent-responses") == []
+
+
+async def test_a_response_signed_for_another_request_is_ignored():
+    bus = Loopback(
+        org_contexts={ORG: CONTEXTS}, rag=ScriptedRag({ALICE: STRONG}), pdp=FakePdp(allow_all())
+    )
+    router = bus.router
+    fut = router.expect("c1", bus.signer.mint_response(ORG, ALICE, "c1"))
+    stolen = bus.signer.mint_response(ORG, ALICE, "c0")  # a real id from another response
+    assert router.resolve({"correlation_id": "c1", "responder_agent_id": stolen}) is False
+    assert not fut.done()
+
+
+async def test_dead_letters_never_flush_and_bad_signatures_are_rate_limited():
+    bus = responder_bus()
+    bus.responder._bad_signatures._per_s = 5
+    outcomes = [
+        await bus.responder.handle(request_value(bus, agent_id="cga:junk"), raw=b"x")
+        for _ in range(50)
+    ]
+    dlq = bus.producer.on(DLQ_TOPIC)
+    assert 5 <= len(dlq) <= 10  # one second, or a second boundary crossed once
+    assert outcomes.count("dropped_bad_signature") == 50 - len(dlq)
+    assert bus.producer.flushes == 0  # nothing on the event loop ever waits on the broker
+
+
+def test_the_rate_limit_resets_every_second():
+    from services.agent_runtime_service.a2a.bus import RateLimit
+
+    now = [100.0]
+    limit = RateLimit(2, clock=lambda: now[0])
+    assert [limit.allow() for _ in range(4)] == [True, True, False, False]
+    now[0] = 101.2
+    assert [limit.allow() for _ in range(3)] == [True, True, False]
+
+
+class VersionBumpingPdp(FakePdp):
+    """A PDP whose answer races a grant change: identity-tenant-service INCRs the version (and
+    may delete the whole `a2a:grant:*` family, version included) while the call is in flight."""
+
+    def __init__(self, other_client: Any, *, delete_after: bool = False) -> None:
+        super().__init__(allow_all())
+        self.other = other_client
+        self.delete_after = delete_after
+
+    async def authorize(self, org_id: uuid.UUID, role: str, qc: str, scope: str) -> str | None:
+        answer = await super().authorize(org_id, role, qc, scope)
+        await self.other.incr(f"nexus:{org_id}:a2a:grant:version")
+        if self.delete_after:
+            await self.other.delete(f"nexus:{org_id}:a2a:grant:version")
+        return answer
+
+
+@pytest.mark.parametrize("delete_after", [False, True])
+async def test_an_answer_racing_a_grant_change_is_returned_but_not_cached(delete_after: bool):
+    server = fakeredis.FakeServer()
+    mine = fakeredis.aioredis.FakeRedis(server=server)
+    backend = fakeredis.aioredis.FakeRedis(server=server)
+    pdp = VersionBumpingPdp(backend, delete_after=delete_after)
+    pep = Pep(mine, pdp)
+    assert await pep.authorize(ORG, "member", "meeting_context", "org") is True
+    assert await mine.get(grant_key(ORG, "member", "meeting_context", "org")) is None
+    await pep.authorize(ORG, "member", "meeting_context", "org")
+    assert len(pdp.calls) == 2  # nothing stale was cached, so the PDP is asked again
+
+
+async def test_an_unchanged_version_caches_and_a_missing_one_reads_as_zero():
+    server = fakeredis.FakeServer()
+    mine = fakeredis.aioredis.FakeRedis(server=server)
+    pdp = FakePdp(allow_all())
+    pep = Pep(mine, pdp)
+    assert await mine.get(f"nexus:{ORG}:a2a:grant:version") is None
+    assert await pep.authorize(ORG, "admin", "action_status", "department") is True
+    assert await mine.get(grant_key(ORG, "admin", "action_status", "department")) == b"allow"
+    await mine.set(f"nexus:{OTHER_ORG}:a2a:grant:version", 7)
+    assert await pep.authorize(OTHER_ORG, "admin", "action_status", "department") is True
+    assert await mine.get(grant_key(OTHER_ORG, "admin", "action_status", "department")) == b"allow"
+
+
+def test_the_a2a_emitter_logs_delivery_errors_instead_of_buffering_them():
+    from services.agent_runtime_service.emitter import Emitter
+    from tests.a2a_helpers import JsonCodec
+
+    class FailingProducer:
+        def produce(self, topic: str, key: Any = None, value: bytes = b"", on_delivery: Any = None):
+            on_delivery("broker down", None)
+
+        def poll(self, _t: float) -> int:
+            return 0
+
+        def flush(self, _t: float = 0) -> int:
+            return 0
+
+    seen: list[str] = []
+    emitter = Emitter(FailingProducer(), JsonCodec(), on_error=seen.append)
+    for _ in range(3):
+        asyncio.run(
+            emitter.agent_response(
+                org_id=ORG,
+                correlation_id="c",
+                responder_agent_id="a",
+                result="{}",
+                success=False,
+                latency_ms=1,
+            )
+        )
+    emitter.dead_letter(
+        topic="agent-requests",
+        dlq_topic=DLQ_TOPIC,
+        consumer_group="g",
+        partition=0,
+        offset=0,
+        org_id=None,
+        key_org=None,
+        idempotency_key="",
+        failure_class="BAD_SIGNATURE",
+        error="x",
+        raw_value=b"",
+    )
+    assert len(seen) == 4 and emitter._errors == []
+    emitter.flush()  # nothing buffered, nothing raised

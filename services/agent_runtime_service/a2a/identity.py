@@ -1,14 +1,23 @@
-"""The bound agent identity (P10 contract section 2, ADR-0013 section 1).
+"""The bound agent identity, signed per message (P10 contract section 2, ADR-0013 section 1).
 
-`requester_agent_id` / `responder_agent_id` = `cga:{org_id}:{user_id}:{sig}` with
-`sig = hex(HMAC-SHA256(AGENT_IDENTITY_SECRET, "cga:{org_id}:{user_id}"))[:32]`.
+Wire format, unchanged from the contract (no schema change): `cga:{org_id}:{user_id}:{sig}`,
+`sig` = the first 32 hex characters of an HMAC-SHA256 under `AGENT_IDENTITY_SECRET`. The MAC is
+not over the identity alone (that would be a bearer token anyone who saw one message could
+replay with any query), but over the message it travels on:
 
-Only agent-runtime-service holds the secret, so only it can mint an id, and the org and user of a
-request are derived from a VERIFIED id, never from the envelope. A bad signature, a malformed id or
-a non-canonical UUID spelling all verify to None: no derivable identity.
+- requester id on an AgentRequest:
+  `cga:{org}:{user}|{correlation_id}|{responder_target}|{deadline_micros}|{sha256(query)}`;
+- responder id on an AgentResponse: `cga:{org}:{user}|{correlation_id}|resp`.
 
-No secret (or one shorter than 32 characters) means no signer at all, and the runtime then runs
-with A2A off: it cannot mint ids, and its responder dead-letters every request.
+A verifier recomputes the MAC from the fields it received, so changing the query, the target,
+the deadline or the correlation id, or moving the id to another message, breaks it. What is left
+is an exact replay of one message, which the responder bounds with the deadline (past, or more
+than 5 s ahead, is refused) and a 60 s correlation-id dedupe.
+
+Only agent-runtime-service holds the secret, so only it can mint, and the org and user of a
+request are derived from a VERIFIED id, never from the envelope. A bad MAC, a malformed id or a
+non-canonical UUID spelling all verify to None: no derivable identity. No secret (or one shorter
+than 32 characters) means no signer: A2A off, and the responder dead-letters every request.
 """
 
 from __future__ import annotations
@@ -37,29 +46,71 @@ class AgentIdentity:
     user_id: UUID
 
 
+def request_material(
+    correlation_id: str, responder_target: str, deadline_us: int, query: str
+) -> str:
+    digest = hashlib.sha256(query.encode("utf-8")).hexdigest()
+    return f"{correlation_id}|{responder_target}|{int(deadline_us)}|{digest}"
+
+
+def response_material(correlation_id: str) -> str:
+    return f"{correlation_id}|resp"
+
+
 class IdentitySigner:
     def __init__(self, secret: str) -> None:
         if len(secret) < MIN_SECRET_CHARS:
             raise ValueError(f"{SECRET_ENV} must be at least {MIN_SECRET_CHARS} characters")
         self._key = secret.encode("utf-8")
 
-    def _sig(self, org_id: UUID, user_id: UUID) -> str:
-        msg = f"cga:{org_id}:{user_id}".encode()
+    def _sig(self, org_id: UUID, user_id: UUID, material: str) -> str:
+        msg = f"cga:{org_id}:{user_id}|{material}".encode()
         return hmac.new(self._key, msg, hashlib.sha256).hexdigest()[:SIG_CHARS]
 
-    def mint(self, org_id: UUID, user_id: UUID) -> str:
-        return f"cga:{org_id}:{user_id}:{self._sig(org_id, user_id)}"
+    def _mint(self, org_id: UUID, user_id: UUID, material: str) -> str:
+        return f"cga:{org_id}:{user_id}:{self._sig(org_id, user_id, material)}"
 
-    def verify(self, agent_id: object) -> AgentIdentity | None:
+    def _verify(self, agent_id: object, material: str) -> AgentIdentity | None:
         if not isinstance(agent_id, str):
             return None
         match = _AGENT_ID.match(agent_id)
         if match is None:
             return None
         org_id, user_id = UUID(match.group(1)), UUID(match.group(2))
-        if not hmac.compare_digest(match.group(3), self._sig(org_id, user_id)):
+        if not hmac.compare_digest(match.group(3), self._sig(org_id, user_id, material)):
             return None
         return AgentIdentity(org_id=org_id, user_id=user_id)
+
+    def mint_request(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        *,
+        correlation_id: str,
+        responder_target: str,
+        deadline_us: int,
+        query: str,
+    ) -> str:
+        material = request_material(correlation_id, responder_target, deadline_us, query)
+        return self._mint(org_id, user_id, material)
+
+    def verify_request(
+        self,
+        agent_id: object,
+        *,
+        correlation_id: str,
+        responder_target: str,
+        deadline_us: int,
+        query: str,
+    ) -> AgentIdentity | None:
+        material = request_material(correlation_id, responder_target, deadline_us, query)
+        return self._verify(agent_id, material)
+
+    def mint_response(self, org_id: UUID, user_id: UUID, correlation_id: str) -> str:
+        return self._mint(org_id, user_id, response_material(correlation_id))
+
+    def verify_response(self, agent_id: object, correlation_id: str) -> AgentIdentity | None:
+        return self._verify(agent_id, response_material(correlation_id))
 
 
 def signer_from_env() -> IdentitySigner | None:

@@ -29,10 +29,10 @@ import base64
 import json
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from libs.shared.avro_codec import AvroCodec
 from libs.shared.events import EventEnvelope
 from libs.shared.state import AgentResult, TranscriptWindow
 
@@ -46,17 +46,30 @@ class EmitError(RuntimeError):
 
 
 class Emitter:
-    def __init__(self, producer: Any, codec: AvroCodec) -> None:
+    """`on_error`: when given, delivery errors go to it instead of the buffer `flush` raises
+    from. The A2A emitter is never flushed (its traffic is deadline-bound and not tied to a
+    window commit), so it logs instead of buffering errors forever."""
+
+    def __init__(
+        self, producer: Any, codec: Any, *, on_error: Callable[[str], None] | None = None
+    ) -> None:
         self._producer = producer
         self._codec = codec
         self._errors: list[str] = []
+        self._on_error = on_error
+
+    def _delivery_error(self, error: str) -> None:
+        if self._on_error is not None:
+            self._on_error(error)
+        else:
+            self._errors.append(error)
 
     def _produce(self, envelope: EventEnvelope, key: str) -> None:
         value = self._codec.serialize_for(envelope.topic, envelope.to_value())
 
         def on_delivery(err: Any, _msg: Any) -> None:
             if err is not None:
-                self._errors.append(f"{envelope.topic}: {err}")
+                self._delivery_error(f"{envelope.topic}: {err}")
 
         self._producer.produce(envelope.topic, key=key, value=value, on_delivery=on_delivery)
         self._producer.poll(0)
@@ -223,7 +236,9 @@ class Emitter:
     ) -> None:
         """A `DlqEnvelope`-shaped JSON dead letter, the same shape `libs/shared/consumer.py`
         writes (not Avro: the message is here because it failed to conform). `key_org` is the
-        partition key: the DERIVED org when there is one, never the untrusted envelope org."""
+        partition key: the DERIVED org when there is one, never the untrusted envelope org.
+        Never flushed here: this runs on the event loop, and a blocking flush would stall every
+        A2A round trip; `poll(0)` serves delivery callbacks without waiting."""
         envelope = {
             "original_topic": topic,
             "original_partition": partition,
@@ -241,5 +256,10 @@ class Emitter:
             dlq_topic,
             key=key_org.encode() if key_org else None,
             value=json.dumps(envelope).encode(),
+            on_delivery=self._dlq_delivery,
         )
-        self._producer.flush(5)
+        self._producer.poll(0)
+
+    def _dlq_delivery(self, err: Any, _msg: Any) -> None:
+        if err is not None:
+            self._delivery_error(f"dlq: {err}")

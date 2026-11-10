@@ -2,10 +2,12 @@
 
 P10 contract sections 1, 5.5, 5.7 and 5.8; ADR-0013.
 
-Requester (`A2AClient.ask`): mint the requester's bound id, register an in-process future under
-a fresh `correlation_id`, publish the AgentRequest (key `org_id`, idempotency key
+Requester (`A2AClient.ask`): mint the requester's id signed over THIS request (correlation id,
+target, deadline, query hash; `identity.py`), register an in-process future under a fresh
+`correlation_id`, publish the AgentRequest (key `org_id`, idempotency key
 `areq:{correlation_id}`, `deadline` = the hop deadline), and wait for the future until the
-deadline. The PEP pre-publish check happens BEFORE this call, in `ContextGapAgent`.
+deadline. The PEP pre-publish check happens BEFORE this call, in `ContextGapAgent`. Passages in
+an answer are kept only if their citation kind is allowed for the query class.
 
 Response routing (`ResponseRouter`): every runtime instance consumes `agent-responses` in its own
 group `agent-runtime-resp-{hostname}` (auto.offset.reset latest) and resolves futures by
@@ -15,17 +17,27 @@ asked agent can answer.
 
 Responder (`Responder.handle`, group `agent-runtime-a2a` on `agent-requests`), the PEP
 pre-process check, in order, fail closed:
-1. verify `requester_agent_id`; bad -> `agent-requests.dlq`, log only (no derivable identity, so
-   nobody to attribute an entry to);
+1. verify `requester_agent_id` against the request's own fields; bad -> `agent-requests.dlq`,
+   log only (no derivable identity, so nobody to attribute an entry to), rate-limited to
+   `BAD_SIGNATURE_DLQ_PER_S` per process (beyond that: log and drop, so garbage cannot flood);
 2. derived org != `header.org_id` -> spoof: DLQ + an `org_spoof` entry under the DERIVED org;
 3. responder user (from `responder_target`) not in the derived org (GetUserContext fails or
    answers another org) -> DLQ + a `foreign_org` entry under the derived org;
-4. past the deadline on receipt -> dropped silently (the requester has already moved on);
+4. past the deadline on receipt -> dropped silently (the requester has already moved on); more
+   than `MAX_DEADLINE_AHEAD_S` (5 s) ahead -> DLQ (no real request lives that long);
+4b. replay: the correlation id is claimed with SET NX at
+   `nexus:{org_id}:dedupe:agent-requests:agent-runtime-a2a:{correlation_id}` (60 s TTL, the
+   canon dedupe key); already claimed -> dropped, so an exact replay is never served twice.
+   Redis down -> dropped too (fail closed);
 5. re-authorize with the PDP (defense in depth): deny -> `success=false`,
    `{"error": "authz_denied"}`, plus an `authz_denied` entry;
-6. retrieve AS THE RESPONDER (`rag.retrieve(org, user_id=<responder>, query)`), top 3 passages
+6. retrieve AS THE RESPONDER (`rag.retrieve(org, user_id=<responder>, query)`), keep only the
+   citation kinds the query class allows (`pep.allowed_kinds`), top 3 passages
    -> `{"passages": [{"text", "score", "citation": {"kind", "id", "meeting_id"?}}]}`; nothing ->
-   `success=false`, `{"error": "no_answer"}`.
+   `success=false`, `{"error": "no_answer"}`. The response carries the responder's id signed
+   over the correlation id.
+
+DLQ writes never block the event loop (produce + poll(0), no flush).
 
 Requests are deadline-bound (about a second), so both consumers auto-commit: a crash loses at
 most requests that would have expired anyway.
@@ -41,7 +53,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -58,6 +70,7 @@ from services.agent_runtime_service.a2a.identity import (
 )
 from services.agent_runtime_service.a2a.pep import (
     Pep,
+    allowed_kinds,
     classify_query,
     grantee_role,
     resolve_scope,
@@ -73,6 +86,11 @@ RESPONDER_GROUP = "agent-runtime-a2a"
 MAX_PASSAGES = 3
 MAX_PASSAGE_CHARS = 600
 MAX_QUERY_CHARS = 1000
+MAX_CORRELATION_CHARS = 128
+MAX_DEADLINE_AHEAD_S = 5
+DEDUPE_TTL_S = 60
+BAD_SIGNATURE_DLQ_PER_S = 10
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 ID_KEYS = {
     "transcript": "chunk_id",
     "document": "document_id",
@@ -94,8 +112,14 @@ def micros(value: object) -> int | None:
     if isinstance(value, int):
         return value
     if isinstance(value, datetime):
-        return int(value.timestamp() * 1_000_000)
+        # exact integer arithmetic: the signature covers the deadline to the microsecond
+        aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        return (aware - _EPOCH) // timedelta(microseconds=1)
     return None
+
+
+def dedupe_key(org_id: UUID, correlation_id: str) -> str:
+    return f"nexus:{org_id}:dedupe:{REQUESTS_TOPIC}:{RESPONDER_GROUP}:{correlation_id}"
 
 
 def now_us() -> int:
@@ -168,8 +192,9 @@ def stored_citation(raw: object) -> dict[str, Any] | None:
     return out
 
 
-def parse_answer(result: object) -> list[ScoredPassage]:
-    """A responder's success body to passages; anything malformed is skipped (never raises)."""
+def parse_answer(result: object, kinds: frozenset[str] | None = None) -> list[ScoredPassage]:
+    """A responder's success body to passages; anything malformed, or (with `kinds`) of a
+    citation kind the query class does not allow, is skipped. Never raises."""
     try:
         body = json.loads(str(result))
     except ValueError:
@@ -184,6 +209,8 @@ def parse_answer(result: object) -> list[ScoredPassage]:
         citation = stored_citation(p.get("citation"))
         score = p.get("score")
         if citation is None or isinstance(score, bool) or not isinstance(score, int | float):
+            continue
+        if kinds is not None and citation["kind"] not in kinds:
             continue
         clamped = max(0.0, min(1.0, float(score))) if score == score else 0.0
         out.append(ScoredPassage(p["text"].strip()[:MAX_PASSAGE_CHARS], clamped, citation))
@@ -265,6 +292,7 @@ class A2AClient:
         requester: UUID,
         responder: UUID,
         query: str,
+        query_class: str,
         deadline_s: float,
     ) -> AskOutcome:
         """`deadline_s` is wall-clock epoch seconds (it travels in the envelope)."""
@@ -273,14 +301,23 @@ class A2AClient:
         if remaining <= 0:
             return AskOutcome("deadline_miss", None, 0)
         cid = str(uuid.uuid4())
-        fut = self._router.expect(cid, self.signer.mint(org_id, responder))
+        target, sent_query = responder_target(responder), query[:MAX_QUERY_CHARS]
+        deadline_us = int(deadline_s * 1_000_000)
+        fut = self._router.expect(cid, self.signer.mint_response(org_id, responder, cid))
         try:
             await self._emitter.agent_request(
                 org_id=org_id,
-                requester_agent_id=self.signer.mint(org_id, requester),
-                responder_target=responder_target(responder),
-                query=query[:MAX_QUERY_CHARS],
-                deadline_us=int(deadline_s * 1_000_000),
+                requester_agent_id=self.signer.mint_request(
+                    org_id,
+                    requester,
+                    correlation_id=cid,
+                    responder_target=target,
+                    deadline_us=deadline_us,
+                    query=sent_query,
+                ),
+                responder_target=target,
+                query=sent_query,
+                deadline_us=deadline_us,
                 correlation_id=cid,
             )
         except Exception:  # noqa: BLE001 - an unpublished request is simply not answered
@@ -295,7 +332,7 @@ class A2AClient:
             self._router.forget(cid)
         latency = _ms(start)
         if value.get("success") is True:
-            passages = parse_answer(value.get("result"))
+            passages = parse_answer(value.get("result"), allowed_kinds(query_class))
             if passages:
                 return AskOutcome("answered", cid, latency, passages)
             return AskOutcome("no_answer", cid, latency)
@@ -311,6 +348,29 @@ def _ms(start: float) -> int:
 # --- responder -----------------------------------------------------------------------------
 
 
+class RateLimit:
+    """At most `per_s` events per wall-clock second; the rest are counted and logged once."""
+
+    def __init__(self, per_s: int, clock: Callable[[], float] = time.monotonic) -> None:
+        self._per_s = per_s
+        self._clock = clock
+        self._second = -1
+        self._count = 0
+        self._dropped = 0
+
+    def allow(self) -> bool:
+        second = int(self._clock())
+        if second != self._second:
+            if self._dropped:
+                logger.warning("a2a: dropped %s bad-signature requests (rate limit)", self._dropped)
+            self._second, self._count, self._dropped = second, 0, 0
+        self._count += 1
+        if self._count <= self._per_s:
+            return True
+        self._dropped += 1
+        return False
+
+
 class Responder:
     def __init__(
         self,
@@ -320,12 +380,16 @@ class Responder:
         rag: RagClient | None,
         user_context: ContextFn,
         emitter: Any,
+        redis: Any,
+        bad_signature_dlq_per_s: int = BAD_SIGNATURE_DLQ_PER_S,
     ) -> None:
         self._signer = signer
         self._pep = pep
         self._rag = rag
         self._context = user_context
         self._emitter = emitter
+        self._redis = redis
+        self._bad_signatures = RateLimit(bad_signature_dlq_per_s)
 
     def _dlq(
         self,
@@ -391,11 +455,28 @@ class Responder:
         header = value.get("header") if isinstance(value.get("header"), dict) else {}
         assert isinstance(header, dict)
         cid = str(value.get("correlation_id") or "")
-        query = str(value.get("query") or "")[:MAX_QUERY_CHARS]
-        target_raw = str(value.get("responder_target") or "")[:64]
+        signed_query = str(value.get("query") or "")  # verified exactly as it was sent
+        query = signed_query[:MAX_QUERY_CHARS]
+        signed_target = str(value.get("responder_target") or "")
+        target_raw = signed_target[:64]
+        deadline = micros(value.get("deadline"))
 
-        derived = self._signer.verify(value.get("requester_agent_id")) if self._signer else None
+        derived = None
+        if (
+            self._signer is not None
+            and deadline is not None
+            and 0 < len(cid) <= MAX_CORRELATION_CHARS
+        ):
+            derived = self._signer.verify_request(
+                value.get("requester_agent_id"),
+                correlation_id=cid,
+                responder_target=signed_target,
+                deadline_us=deadline,
+                query=signed_query,
+            )
         if derived is None:
+            if not self._bad_signatures.allow():
+                return "dropped_bad_signature"  # flood: logged once per second by RateLimit
             logger.warning("a2a: request %s with an unverifiable requester id; DLQ", cid[:64])
             self._dlq(value, raw, partition, offset, "BAD_SIGNATURE", "requester_agent_id", None)
             return "dlq_bad_signature"
@@ -429,9 +510,21 @@ class Responder:
             )
             return "dlq_foreign_org"
 
-        deadline = micros(value.get("deadline"))
-        if deadline is None or deadline <= now_us():
+        assert deadline is not None  # a verified request has one: the MAC covers it
+        now = now_us()
+        if deadline <= now:
             return "expired"
+        if deadline - now > MAX_DEADLINE_AHEAD_S * 1_000_000:
+            logger.error("a2a: request %s deadline too far ahead; DLQ", cid[:64])
+            self._dlq(value, raw, partition, offset, "BAD_DEADLINE", "deadline", org)
+            return "dlq_bad_deadline"
+        try:
+            fresh = await self._redis.set(dedupe_key(org, cid), "1", nx=True, ex=DEDUPE_TTL_S)
+        except Exception:  # noqa: BLE001 - cannot tell a replay from a first delivery: drop
+            logger.warning("a2a: dedupe unavailable for %s; dropped", cid[:64])
+            return "dedupe_unavailable"
+        if not fresh:
+            return "duplicate"
 
         requester_ctx = await self._context(org, requester)
         query_class = classify_query(query)
@@ -446,7 +539,7 @@ class Responder:
             and await self._pep.authorize(org, grantee_role(requester_ctx), query_class, scope)
         )
         assert self._signer is not None
-        me = self._signer.mint(org, responder)
+        me = self._signer.mint_response(org, responder, cid)
         if not allowed:
             await self._emitter.agent_response(
                 org_id=org,
@@ -478,7 +571,8 @@ class Responder:
                 )
             except TimeoutError:
                 found = []
-            body = answer_json(found)
+            kinds = allowed_kinds(query_class)  # the class bounds what may be returned
+            body = answer_json([p for p in found if p.kind in kinds])
         await self._emitter.agent_response(
             org_id=org,
             correlation_id=cid,

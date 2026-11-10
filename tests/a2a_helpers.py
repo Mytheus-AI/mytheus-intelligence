@@ -56,6 +56,7 @@ class Produced:
 class LoopbackProducer:
     def __init__(self) -> None:
         self.produced: list[Produced] = []
+        self.flushes = 0
         self.on_request: Callable[[bytes], None] | None = None
         self.on_response: Callable[[bytes], None] | None = None
 
@@ -70,6 +71,7 @@ class LoopbackProducer:
         return 0
 
     def flush(self, _t: float = 0) -> int:
+        self.flushes += 1
         return 0
 
     def on(self, topic: str) -> list[dict[str, Any]]:
@@ -188,6 +190,7 @@ class Loopback:
             rag=responder_rag if responder_rag is not None else rag,
             user_context=self.user_context,
             emitter=self.emitter,
+            redis=self.redis,
         )
         self.hop_delay = hop_delay
         self.outcomes: list[str] = []

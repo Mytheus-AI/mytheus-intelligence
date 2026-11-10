@@ -7,8 +7,13 @@ the four inputs itself, never from a payload:
 - `org_id` and the principal from the VERIFIED agent id (`identity.py`);
 - `grantee_role` = the principal's RBAC tier (`owner | admin | member`, UserContext.rbac_tier);
 - `query_class` = `classify_query(query)`, deterministic, no LLM: decision words ->
-  `decision_lineage`; action / owner / due / task / ticket words -> `action_status`; else
-  `meeting_context`;
+  `decision_lineage`; action / owner / due / task / ticket words -> `action_status`; a query with
+  neither signal -> `meeting_context`. The class is ENFORCED, not only authorized:
+  `allowed_kinds(query_class)` bounds which citation kinds may come back (decision -> decisions,
+  action -> actions, meeting_context -> transcript and document passages), on the responder and
+  on the requester's own RAG hop. So the fallback to `meeting_context` cannot widen what a grant
+  exposes, which is how ADR-0013's "a query outside the taxonomy is denied" holds: such a query
+  can only ever reach what a `meeting_context` grant already covers;
 - `target_scope` = `resolve_scope(...)` from both UserContexts: the same user -> `self`; a shared
   team -> `same_team`; the same department -> `department`; anyone else in the org -> `org`.
 
@@ -16,7 +21,10 @@ Decision cache: `nexus:{org_id}:a2a:grant:{grantee_role}:{query_class}:{target_s
 `allow` / `deny`, TTL 60 s. A miss calls the PDP and caches its answer. A PDP failure is a deny
 and is NOT cached, so the next check asks again. An unknown role, class or scope is a deny
 without any call. Redis being down only costs the cache: the PDP is still asked. Concurrent
-misses on the same key in one process share a single PDP call.
+misses on the same key in one process share a single PDP call. An answer is cached only when
+the per-org grant version (`nexus:{org_id}:a2a:grant:version`, INCRed by identity-tenant-service
+on every grant change) did not move during the PDP call, so a revoke racing a miss can never
+leave a stale `allow` in the cache.
 """
 
 from __future__ import annotations
@@ -33,6 +41,11 @@ ROLES = frozenset({"owner", "admin", "member"})
 QUERY_CLASSES = frozenset({"meeting_context", "decision_lineage", "action_status"})
 TARGET_SCOPES = frozenset({"self", "same_team", "department", "org"})
 GRANT_TTL_S = 60
+CLASS_KINDS: dict[str, frozenset[str]] = {
+    "decision_lineage": frozenset({"decision"}),
+    "action_status": frozenset({"action"}),
+    "meeting_context": frozenset({"transcript", "document"}),
+}
 
 _DECISION_WORDS = re.compile(
     r"\b(decid\w*|decision\w*|agreed|agree|agreement|approv\w*|chose|chosen|choice|"
@@ -83,6 +96,13 @@ def grantee_role(ctx: dict[str, Any] | None) -> str:
     return str((ctx or {}).get("rbac_tier") or "").strip().lower()
 
 
+def allowed_kinds(query_class: str) -> frozenset[str]:
+    """The citation kinds a query class may return. The class is enforced, not just a label: a
+    `decision_lineage` grant can only ever surface decisions, `action_status` only actions,
+    `meeting_context` only transcript and document passages. Unknown class: nothing."""
+    return CLASS_KINDS.get(query_class, frozenset())
+
+
 def grant_key(org_id: UUID, role: str, query_class: str, target_scope: str) -> str:
     return f"nexus:{org_id}:a2a:grant:{role}:{query_class}:{target_scope}"
 
@@ -124,15 +144,55 @@ class Pep:
     async def _ask(
         self, key: str, org_id: UUID, role: str, query_class: str, target_scope: str
     ) -> bool:
+        """One PDP call, cached only if no grant changed while it was in flight.
+
+        identity-tenant-service INCRs `nexus:{org_id}:a2a:grant:version` on every grant change
+        (and deletes `nexus:{org_id}:a2a:grant:*`, which can include the version key itself, so
+        a missing key reads as 0). The key is WATCHed before the PDP call and compared after:
+        an INCR or DEL in between aborts the cache write (WatchError), so an `allow` read just
+        before a revoke is returned once but never cached for 60 s."""
+        vkey = version_key(org_id)
+        pipe: Any = None
+        before: str | None = None
         try:
-            decision = await self._pdp.authorize(org_id, role, query_class, target_scope)
-        except Exception:  # noqa: BLE001 - PDP unreachable = deny
-            logger.warning("a2a PDP call raised org=%s (deny)", org_id)
-            decision = None
-        if decision not in ("allow", "deny"):
-            return False  # PDP down or nonsense: deny, and do not cache it
+            pipe = self._redis.pipeline(transaction=True)
+            await pipe.watch(vkey)
+            before = _version(await pipe.get(vkey))
+        except Exception:  # noqa: BLE001 - no version, no caching; the PDP still answers
+            logger.warning("a2a grant version read failed org=%s; answer not cached", org_id)
+            before = None
         try:
-            await self._redis.set(key, decision, ex=self._ttl)
-        except Exception:  # noqa: BLE001
-            logger.warning("a2a grant cache write failed org=%s", org_id)
-        return bool(decision == "allow")
+            try:
+                decision = await self._pdp.authorize(org_id, role, query_class, target_scope)
+            except Exception:  # noqa: BLE001 - PDP unreachable = deny
+                logger.warning("a2a PDP call raised org=%s (deny)", org_id)
+                decision = None
+            if decision not in ("allow", "deny"):
+                return False  # PDP down or nonsense: deny, and do not cache it
+            if before is not None:
+                try:
+                    if _version(await pipe.get(vkey)) == before:
+                        pipe.multi()
+                        pipe.set(key, decision, ex=self._ttl)
+                        await pipe.execute()
+                    else:
+                        logger.info("a2a grants changed during the PDP call org=%s", org_id)
+                except Exception:  # noqa: BLE001 - WatchError included: just not cached
+                    logger.info("a2a grant cache write skipped org=%s", org_id)
+            return bool(decision == "allow")
+        finally:
+            if pipe is not None:
+                try:
+                    await pipe.reset()
+                except Exception:  # noqa: BLE001
+                    pass
+
+
+def version_key(org_id: UUID) -> str:
+    return f"nexus:{org_id}:a2a:grant:version"
+
+
+def _version(raw: Any) -> str:
+    if raw is None:
+        return "0"
+    return raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)

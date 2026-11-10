@@ -107,14 +107,17 @@ async def test_a_round_trip_and_a_spoof_over_real_redpanda(avro_codec):
     async def user_context(org: uuid.UUID, user: uuid.UUID) -> dict[str, Any] | None:
         return contexts.get(org, {}).get(user)
 
-    rag = ScriptedRag({ALICE: [rag_passage("In July the team chose the enterprise tier.", 0.91)]})
+    rag = ScriptedRag(
+        {ALICE: [rag_passage("In July the team chose the enterprise tier.", 0.91, kind="decision")]}
+    )
     producer = Producer(
         {"bootstrap.servers": _brokers(), "acks": "all", "enable.idempotence": True}
     )
     emitter = Emitter(producer, avro_codec)
     pep = Pep(fakeredis.aioredis.FakeRedis(), FakePdp(allow_all()))
+    redis = fakeredis.aioredis.FakeRedis()
     responder = Responder(
-        signer=signer, pep=pep, rag=rag, user_context=user_context, emitter=emitter
+        signer=signer, pep=pep, rag=rag, user_context=user_context, emitter=emitter, redis=redis
     )
     router = ResponseRouter()
     client = A2AClient(emitter, router, signer)
@@ -129,28 +132,43 @@ async def test_a_round_trip_and_a_spoof_over_real_redpanda(avro_codec):
         asyncio.create_task(run_response_loop(responses, avro_codec, router, stop, poll_s=0.2)),
     ]
     try:
-        # 1. a real round trip (generous deadline: first assignment of a new group is slow)
+        # Deadlines may be at most 5 s ahead, so wait for both new groups to be assigned first.
+        end = time.monotonic() + 30
+        while (not requests.assignment() or not responses.assignment()) and time.monotonic() < end:
+            await asyncio.sleep(0.2)
+        assert requests.assignment() and responses.assignment(), "consumers never assigned"
+
+        # 1. a real round trip
         outcome = await client.ask(
             org_id=ORG,
             requester=BOB,
             responder=ALICE,
             query="Q3 pricing tier decision",
-            deadline_s=time.time() + 25,
+            query_class="decision_lineage",
+            deadline_s=time.time() + 4.5,
         )
         assert outcome.result == "answered", outcome
         assert outcome.passages[0].text.startswith("In July")
-        assert outcome.passages[0].citation["kind"] == "transcript"
+        assert outcome.passages[0].citation["kind"] == "decision"
         assert [(c["org_id"], c["user_id"]) for c in rag.calls] == [(ORG, ALICE)]
         assert router.pending == 0
 
         # 2. a forged envelope org: DLQ + an org_spoof context_fill record under the real org
         cid = str(uuid.uuid4())
+        deadline_us = int((time.time() + 4.5) * 1_000_000)
         await emitter.agent_request(
-            org_id=OTHER,  # header.org_id lies; the bound id says ORG
-            requester_agent_id=signer.mint(ORG, BOB),
+            org_id=OTHER,  # header.org_id lies; the signed id says ORG
+            requester_agent_id=signer.mint_request(
+                ORG,
+                BOB,
+                correlation_id=cid,
+                responder_target=f"user:{ALICE}",
+                deadline_us=deadline_us,
+                query="board compensation",
+            ),
             responder_target=f"user:{ALICE}",
             query="board compensation",
-            deadline_us=int((time.time() + 25) * 1_000_000),
+            deadline_us=deadline_us,
             correlation_id=cid,
         )
         emitter.flush()

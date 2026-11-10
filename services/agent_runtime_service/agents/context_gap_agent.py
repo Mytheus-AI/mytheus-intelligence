@@ -12,15 +12,18 @@ closed 30 s window:
 2. **One gate per window** (triage tier, Haiku, shared by all participants):
    `context_gap_gate@vN` answers `{is_gap, query, score}`; below `CONTEXT_GAP_GATE_THRESHOLD`
    (0.5), or no standalone query, nothing.
-3. **query_class**, deterministic (`a2a/pep.py`).
+3. **query_class**, deterministic (`a2a/pep.py`). It is enforced, not only a label: it bounds
+   the citation kinds that may come back (decision / action / transcript and document).
 4. **Who lacks it**: each participant's OWN participant-scoped retrieval
-   (`rag.retrieve(org, user_id=P, query)`); P lacks the context when no passage scores at least
-   `CONTEXT_GAP_HAVE_SCORE`. Requesters: weakest own score first, the referencing speaker only
-   if nobody else lacks it, at most `CONTEXT_GAP_MAX_REQUESTERS` (2).
+   (`rag.retrieve(org, user_id=P, query)`), kept to the class's kinds; P lacks the context when
+   no passage scores at least `CONTEXT_GAP_HAVE_SCORE`. Requesters: weakest own score first,
+   the referencing speaker only if nobody else lacks it, at most
+   `CONTEXT_GAP_MAX_REQUESTERS` (2).
 5. **Fallback chain per requester**, all inside `CONTEXT_GAP_DEADLINE_MS` (1500):
    throttled budget or `CONTEXT_GAP_A2A` != 1 -> straight to RAG. Otherwise
    - `peer`: up to 3 other participants (the best-informed first), in parallel, until 60% of the
-     deadline. PEP pre-publish per target (bound identity, role, class, scope, cached PDP);
+     deadline. PEP pre-publish per target (role, class, scope, cached PDP; the request id is
+     signed over the request itself);
      deny -> an `authz_denied` entry and no publish. Best answered response wins.
    - `related_meeting`: up to 3 users from core-api's related-attendees route, same PEP and
      request flow, until the overall deadline. Route unconfigured or failing -> hop skipped.
@@ -64,6 +67,7 @@ from services.agent_runtime_service.a2a.bus import A2AClient, ScoredPassage, fro
 from services.agent_runtime_service.a2a.identity import responder_target
 from services.agent_runtime_service.a2a.pep import (
     Pep,
+    allowed_kinds,
     classify_query,
     grantee_role,
     resolve_scope,
@@ -338,7 +342,7 @@ class ContextGapAgent(BaseAgent):
         query, score, speaker = verdict.query, verdict.score, verdict.speaker
 
         query_class = classify_query(query)
-        own = await self._own(window.org_id, list(people), query)
+        own = await self._own(window.org_id, list(people), query, query_class)
         requesters = choose_requesters(
             own, speaker, self._settings.have_score, self._settings.max_requesters
         )
@@ -394,10 +398,16 @@ class ContextGapAgent(BaseAgent):
         except Exception:  # noqa: BLE001 - unknown budget: take the cheap path (RAG only)
             return True
 
-    async def _own(self, org_id: UUID, users: list[UUID], query: str) -> dict[UUID, OwnContext]:
+    async def _own(
+        self, org_id: UUID, users: list[UUID], query: str, query_class: str
+    ) -> dict[UUID, OwnContext]:
+        """Each participant's own retrieval, limited to the citation kinds the query class allows
+        (the same bound the responder applies), so "has the context" and the RAG hop both mean
+        "has it within this class"."""
         rag = self._deps.rag
         assert rag is not None
         timeout = self._settings.deadline_ms / 1000
+        kinds = allowed_kinds(query_class)
 
         async def one(user: UUID) -> OwnContext:
             start = time.monotonic()
@@ -413,7 +423,9 @@ class ContextGapAgent(BaseAgent):
             passages = [
                 sp
                 for sp in (from_rag(p) for p in found)
-                if sp.text and valid_citation(sp.citation) is not None
+                if sp.text
+                and valid_citation(sp.citation) is not None
+                and sp.citation.get("kind") in kinds
             ]
             return OwnContext(
                 passages=passages,
@@ -545,19 +557,16 @@ class ContextGapAgent(BaseAgent):
     ) -> Winner | None:
         a2a, pep = self._deps.a2a, self._deps.pep
         assert a2a is not None and pep is not None
-        # PEP pre-publish: the identity is DERIVED from the bound id, never declared.
-        bound = a2a.signer.verify(a2a.signer.mint(org_id, requester))
+        # PEP pre-publish. The principal is this window's participant in this agent's org (the
+        # agent fails closed on a foreign window); A2AClient.ask signs its id over the request.
         requester_ctx = contexts[requester]
         role = grantee_role(requester_ctx)
 
         async def one(target: UUID, target_ctx: dict[str, Any]) -> tuple[dict[str, Any], Any]:
             scope = resolve_scope(requester, requester_ctx, target, target_ctx)
             start = time.monotonic()
-            allowed = (
-                bound is not None
-                and bound.org_id == org_id
-                and bound.user_id == requester
-                and await pep.authorize(org_id, role, query_class, scope)
+            allowed = org_id == self.org_id and await pep.authorize(
+                org_id, role, query_class, scope
             )
             if not allowed:
                 denied = collab.entry(
@@ -577,6 +586,7 @@ class ContextGapAgent(BaseAgent):
                 requester=requester,
                 responder=target,
                 query=query,
+                query_class=query_class,
                 deadline_s=deadline,
             )
             asked = collab.entry(

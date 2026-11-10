@@ -52,7 +52,10 @@ async def _meeting(rng: random.Random, samples: list[float]) -> None:
         u: {"rbac_tier": "member", "team_ids": [team], "department_id": ""} for u in users
     }
     rag = ScriptedRag(
-        {u: [rag_passage("The team chose the enterprise tier in July.", 0.9)] for u in users},
+        {
+            u: [rag_passage("The team chose the enterprise tier in July.", 0.9, kind="decision")]
+            for u in users
+        },
         delay=lambda: lognormal_delay(rng, 0.45, 0.4, 1.3),
     )
     pdp = SlowPdp(allow_all())
@@ -74,7 +77,8 @@ async def _meeting(rng: random.Random, samples: list[float]) -> None:
             requester=requester,
             responder=responder,
             query="Q3 pricing tier decision",
-            deadline_s=time.time() + 5,
+            query_class="decision_lineage",
+            deadline_s=time.time() + 4.5,  # inside the responder's 5 s horizon
         )
         assert outcome.result == "answered", outcome
         samples.append((time.monotonic() - start) * 1000)

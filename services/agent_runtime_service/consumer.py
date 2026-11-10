@@ -212,6 +212,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
             }
         ),
         codec,
+        on_error=lambda err: logger.warning("a2a delivery failed: %s", err),
     )
     responses = ResponseRouter()
     pep = Pep(redis, pdp)
@@ -240,7 +241,12 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         responses_consumer.subscribe([RESPONSES_TOPIC])
         a2a_consumers = [requests_consumer, responses_consumer]
         responder = Responder(
-            signer=signer, pep=pep, rag=rag, user_context=contexts.get, emitter=a2a_emitter
+            signer=signer,
+            pep=pep,
+            rag=rag,
+            user_context=contexts.get,
+            emitter=a2a_emitter,
+            redis=redis,
         )
         background = [
             asyncio.create_task(run_request_loop(requests_consumer, codec, responder, stop)),
