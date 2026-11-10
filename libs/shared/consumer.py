@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from libs.shared.avro_codec import AvroCodec
 from libs.shared.events import EventEnvelope
-from libs.shared.inbox import already_recorded, is_duplicate, record_consumed
+from libs.shared.inbox import already_recorded, dedupe_key, is_duplicate, record_consumed
 from libs.shared.metrics import (
     observe_consumer_lag,
     record_dlq,
@@ -225,17 +225,28 @@ class BaseConsumer(ABC):
             logger.info("consumer %s: duplicate (redis) %s", self.group, evt.idempotency_key)
             return "duplicate"
 
-        async with self._session_factory() as session, session.begin():
-            await set_rls(session, org_id)
-            if await already_recorded(session, self.group, str(org_id), evt.idempotency_key):
-                logger.info(
-                    "consumer %s: duplicate (inbox, cache-evicted) %s",
-                    self.group,
-                    evt.idempotency_key,
+        try:
+            async with self._session_factory() as session, session.begin():
+                await set_rls(session, org_id)
+                if await already_recorded(session, self.group, str(org_id), evt.idempotency_key):
+                    logger.info(
+                        "consumer %s: duplicate (inbox, cache-evicted) %s",
+                        self.group,
+                        evt.idempotency_key,
+                    )
+                    return "duplicate"
+                await self.apply(evt, session)
+                await record_consumed(session, self.group, str(org_id), evt.idempotency_key)
+        except Exception:
+            # The Redis mark above was set before `apply`; if the transaction failed, nothing
+            # was applied, so release it or the redelivery would be dropped as a duplicate.
+            try:
+                await self._redis.delete(
+                    dedupe_key(str(org_id), topic, self.group, evt.idempotency_key)
                 )
-                return "duplicate"
-            await self.apply(evt, session)
-            await record_consumed(session, self.group, str(org_id), evt.idempotency_key)
+            except Exception:  # noqa: BLE001 - best effort; the original error matters more
+                logger.exception("consumer %s: could not release the dedupe mark", self.group)
+            raise
         return "applied"
 
     def _to_dlq(
