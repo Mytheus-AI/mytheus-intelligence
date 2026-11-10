@@ -5,7 +5,8 @@ Plan 7-9: `PersonalListenerAgent` (P7, one per participant), `DecisionAgent` and
 (P8, one per meeting, candidates only), `QuestionAgent` (P9, one per participant, ADR-0034),
 `ContextGapAgent` (P10, one per meeting, one result per requester, ADR-0013), `ProactiveAgent`
 (P11, one per meeting for the per-window missing-stakeholder check; its decision/action checks run
-from `proactive/loop.py`).
+from `proactive/loop.py`), `MeetingAgent` (ADR-0038 D7, one per meeting, only for a meeting with an
+agenda; its one result per window goes to the host).
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from services.agent_runtime_service.agents.question_agent import QuestionAgent
 
 if TYPE_CHECKING:
     from services.agent_runtime_service.agents.context_gap_agent import ContextGapDeps
+    from services.agent_runtime_service.agents.meeting_agent import MeetingDeps
     from services.agent_runtime_service.agents.proactive_agent import ProactiveDeps
 
 
@@ -33,15 +35,22 @@ def registered_agents(
     grounder: Grounder | None = None,
     context_gap: ContextGapDeps | None = None,
     proactive: ProactiveDeps | None = None,
+    meeting: MeetingDeps | None = None,
 ) -> list[Callable[[], BaseAgent]]:
     """`grounder` defaults to the env-configured one (None unless QUESTION_RAG_GROUNDING=1).
     `context_gap` defaults to RAG only from env (silent without `RAG_CALLER_TOKEN`); the
-    consumer passes the full A2A wiring."""
+    consumer passes the full A2A wiring. `meeting` defaults to the env-configured agenda client
+    (the MeetingAgent never runs without `CORE_URL` and `CORE_CALLER_TOKEN`); the consumer
+    passes the shared Redis client."""
     # Imported here, not at the top: context_gap_agent imports the a2a package, which imports
     # helpers from this package (grounding, candidates), and a top-level import would cycle.
     from services.agent_runtime_service.agents.context_gap_agent import (
         ContextGapAgent,
         deps_from_env,
+    )
+    from services.agent_runtime_service.agents.meeting_agent import MeetingAgent
+    from services.agent_runtime_service.agents.meeting_agent import (
+        deps_from_env as meeting_from_env,
     )
     from services.agent_runtime_service.agents.proactive_agent import (
         ProactiveAgent,
@@ -53,6 +62,7 @@ def registered_agents(
     grounding = grounder if grounder is not None else grounder_from_env()
     gap = context_gap if context_gap is not None else deps_from_env()
     pro = proactive if proactive is not None else proactive_from_env()
+    mt = meeting if meeting is not None else meeting_from_env()
     return [
         lambda: PersonalListenerAgent(loader, router),
         lambda: DecisionAgent(loader, router),
@@ -60,4 +70,5 @@ def registered_agents(
         lambda: QuestionAgent(loader, router, grounder=grounding),
         lambda: ContextGapAgent(loader, router, deps=gap),
         lambda: ProactiveAgent(loader, router, deps=pro),
+        lambda: MeetingAgent(loader, router, deps=mt),
     ]

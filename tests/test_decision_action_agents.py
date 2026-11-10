@@ -455,6 +455,7 @@ async def test_one_instance_per_meeting_and_one_result_per_window():
         ("ActionAgent", MEETING),
         ("ContextGapAgent", MEETING),
         ("DecisionAgent", MEETING),
+        ("MeetingAgent", MEETING),
         ("ProactiveAgent", MEETING),
     ]
     assert len([k for k in m.agents if k[0] == "PersonalListenerAgent"]) == 3

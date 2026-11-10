@@ -289,6 +289,7 @@ def test_the_shipped_prompts_are_registered_and_render():
         "context_gap_agent": "v1",
         "proactive_conflict": "v1",
         "proactive_stakeholder": "v1",
+        "meeting_agent": "v1",
     }
 
 

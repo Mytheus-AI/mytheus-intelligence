@@ -176,12 +176,14 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.a2a.identity import signer_from_env
     from services.agent_runtime_service.a2a.pep import Pep
     from services.agent_runtime_service.a2a.related import related_from_env
+    from services.agent_runtime_service.agenda import agenda_from_env
     from services.agent_runtime_service.agents import registered_agents
     from services.agent_runtime_service.agents.context_gap_agent import (
         ContextGapDeps,
         ContextGapSettings,
         rag_from_env,
     )
+    from services.agent_runtime_service.agents.meeting_agent import MeetingDeps
     from services.agent_runtime_service.agents.proactive_agent import (
         ProactiveAgent,
         ProactiveSettings,
@@ -251,7 +253,15 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     runtime = AgentRuntime(
         sink=emitter,
         user_context=contexts.get,
-        agents=registered_agents(loader, router, context_gap=gap, proactive=proactive),
+        agents=registered_agents(
+            loader,
+            router,
+            context_gap=gap,
+            proactive=proactive,
+            # ADR-0038 D7: the agenda over core-api's internal route; rate-limit state in the
+            # shared Redis under nexus:{org_id}:meeting_agent:{meeting_id}
+            meeting=MeetingDeps(agenda=agenda_from_env(), redis=redis),
+        ),
         max_concurrency=int(os.environ.get("AGENT_MAX_CONCURRENCY", "8")),
     )
     stop = asyncio.Event()
