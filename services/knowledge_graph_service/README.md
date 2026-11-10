@@ -18,7 +18,7 @@ The only service that writes the Apache AGE graph `nexus_knowledge`.
 | `ROLE_TOPICS_TAXONOMY_VERSION` | Default `v1` |
 | `MYTHEUS_KG_CALLER_TOKENS` | `service=secret,...` (32+ chars each) for the read surfaces. Unset refuses every caller |
 | `KG_GRPC_BIND` | gRPC bind address, default `0.0.0.0:50104` |
-| `KG_CONSUMERS` | Which consumers `worker.py` starts, default `topic-seed,confirmed-facts` |
+| `KG_CONSUMERS` | Which consumers `worker.py` starts, default `topic-seed,confirmed-facts,erasure` (`erasure`: `admin-events` erasure requests, `erasure_consumer.py`) |
 | `DATABASE_URL`, `REDIS_URL`, `REDPANDA_BROKERS`, `SCHEMA_REGISTRY_URL` | The same as the other consumers (used for the inbox, dedupe and DLQ) |
 
 ```bash
