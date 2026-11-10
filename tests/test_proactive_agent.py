@@ -711,7 +711,7 @@ def test_the_agent_is_registered_and_its_prompts_load():
     router = LiteLLMRouter(budget(), UsageSink(), ScriptedLLM())
     loader = PromptLoader(PROMPTS_DIR)
     names = [f().name for f in registered_agents(loader, router, proactive=ProactiveDeps())]
-    assert names[-1] == "ProactiveAgent"
+    assert "ProactiveAgent" in names
     for key in ("proactive_conflict", "proactive_stakeholder"):
         prompt = loader.load(key, loader.resolve(key, ORG))
         assert prompt.version == "v1" and prompt.user_template

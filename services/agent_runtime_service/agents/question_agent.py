@@ -23,8 +23,12 @@ the participant this instance belongs to:
    `uuid5(CANDIDATE_NS, f"QuestionAgent:{window_id}:{user_id}:{index}")` (ADR-0034 D3).
 
 What the model sees: the participant as "You", everyone else as "Participant N", and a profile of
-role / skills / bio. No ids, names or email addresses; the router redacts PII on top. Every model
-call goes through the router, so it is budget-gated and metered on `usage-events`.
+role / skills / bio; from `question_agent@v2` (ADR-0038 D10) the proposal also gets the same
+"Listen especially for" / "Ignore" lines and voice block as PersonalListenerAgent, and the gate
+(`question_gate@v2`) the same two lines without the voice. Its threshold, the cooldown and the
+bands are unchanged. No ids, names or
+email addresses; the router redacts PII on top. Every model call goes through the router, so it
+is budget-gated and metered on `usage-events`.
 """
 
 from __future__ import annotations
@@ -50,7 +54,8 @@ from services.agent_runtime_service.agents.candidates import (
 from services.agent_runtime_service.agents.grounding import Grounder, Passage, ground
 from services.agent_runtime_service.agents.personal_listener_agent import (
     band,
-    render_profile,
+    gate_values,
+    persona_values,
     render_window,
 )
 
@@ -183,7 +188,7 @@ class QuestionAgent(BaseAgent):
                 tier="triage",
                 system=self.gate_prompt.system,
                 user=self.gate_prompt.render_user(
-                    profile=render_profile(s.context), window=render_window(s.chunk, s.user_id)
+                    **gate_values(s.context), window=render_window(s.chunk, s.user_id)
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,
@@ -210,7 +215,7 @@ class QuestionAgent(BaseAgent):
                 tier="extract",
                 system=self.prompt.system,
                 user=self.prompt.render_user(
-                    profile=render_profile(s.context),
+                    **persona_values(s.context),
                     window=render_window(s.chunk, s.user_id),
                     context=render_passages(passages),
                 ),

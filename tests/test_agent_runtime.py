@@ -713,7 +713,11 @@ def test_the_runtime_imports_no_database_driver():
 
 
 def test_identity_mirror_matches_the_proto():
+    """`proto/identity.proto` is this repo's COPY of mytheus-backend's (the owner); comments are
+    stripped first, because a `}` inside one (`nexus:{org_id}:...`) used to end the message body
+    early and hide every field declared after it (ADR-0038's fields 12-16)."""
     text = (ROOT / "proto" / "identity.proto").read_text(encoding="utf-8")
+    text = re.sub(r"//[^\n]*", "", text)
     for message, fields in user_context.FIELDS.items():
         body = re.search(rf"message {message} \{{(.*?)\}}", text, re.S)
         assert body, message

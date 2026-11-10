@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-This is `mytheus-intelligence`, the AI / inference tier of Mytheus (internal codename NEXUS): six LangGraph agents, a hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. The single most important thing to internalize: this tier NEVER writes Postgres directly. It emits `agent-results` and `core-api` commits them through its transactional outbox; the knowledge graph is written only on user confirmation. The agent tier proposes; `core-api` commits.
+This is `mytheus-intelligence`, the AI / inference tier of Mytheus (internal codename NEXUS): seven LangGraph agents, a hybrid RAG pipeline, GPU embedding/reranker serving, the Apache AGE knowledge graph, lexical search, and document ingestion. The single most important thing to internalize: this tier NEVER writes Postgres directly. It emits `agent-results` and `core-api` commits them through its transactional outbox; the knowledge graph is written only on user confirmation. The agent tier proposes; `core-api` commits.
 
 ## Repo at a glance
 
 Mytheus is a multi-tenant meeting-orchestration SaaS where every participant gets a personal AI agent. The platform is split into three scaling families: the CRUD/control plane (`mytheus-backend`), the real-time tier (`mytheus-realtime`), and this AI/inference tier. This repo is its own cost center: it autoscales on queue depth, GPU utilization, and token throughput, independently of CRUD req/s and real-time connection count. Seven services live here:
 
-- `agent-runtime-service` - the six LangGraph agents and the cost-controlled LLM pipeline.
+- `agent-runtime-service` - the seven LangGraph agents and the cost-controlled LLM pipeline.
 - `rag-service` - the sync orchestrator of hybrid retrieval.
 - `embedding-service` - GPU embeddings; the only writer of Qdrant, enforced by holding the only write API key rather than by convention.
 - `reranker-service` - GPU cross-encoder rerank.
@@ -30,7 +30,7 @@ Agent-to-agent collaboration. `ContextGapAgent` asks other users' agents for con
 
 | Service | Responsibility | Owns / calls | Events in | Events out |
 | --- | --- | --- | --- | --- |
-| `agent-runtime-service` | The six agents, `BaseAgent` lifecycle, tiered routing, per-tenant budgets | Calls `get_user_context` over gRPC; reads Redis budget mirror. Writes no Postgres | `transcript-chunks`, `document-chunks`, `agent-responses` | `agent-results`, `agent-stream`, `agent-requests`, `usage-events` |
+| `agent-runtime-service` | The seven agents, `BaseAgent` lifecycle, tiered routing, per-tenant budgets | Calls `get_user_context` over gRPC; reads Redis budget mirror. Writes no Postgres | `transcript-chunks`, `document-chunks`, `agent-responses` | `agent-results`, `agent-stream`, `agent-requests`, `usage-events` |
 | `rag-service` | `expand -> retrieve -> rerank -> assemble -> cite`; RRF fusion; Redis answer cache | Calls embedding / reranker / knowledge-graph / search over gRPC | (sync `POST /api/rag/query`) | `usage-events` |
 | `embedding-service` | BGE-small-en 384-dim; embed-on-ingest + query-embed | The only writer of Qdrant per-tenant collections | `transcript-chunks`, `document-chunks` | (upserts Qdrant) |
 | `reranker-service` | BGE-reranker-base cross-encoder; top-50 -> top-10; warm-replica floor | Owns no data | (sync gRPC from rag-service) | none |
@@ -38,7 +38,7 @@ Agent-to-agent collaboration. `ContextGapAgent` asks other users' agents for con
 | `search-service` | Postgres FTS arm; `tsvector` over `transcript_chunks` + `chat_messages`, RLS by `org_id` | Builds and owns its FTS indexes | `transcript-chunks` | (sync gRPC from rag-service) |
 | `ingestion-service` | `unstructured.io` parsing into typed chunked elements; blobs to object storage (**Cloudflare R2**, S3-compatible; MinIO locally) | Owns `document_chunks` / `document_elements` + object key prefix `{org_id}/` | `integration-events` | `document-chunks` |
 
-## The six agents
+## The seven agents
 
 One `PersonalListenerAgent` is spawned per participant per meeting; the others are spawned per meeting. All confidence handling follows the same gate: `> 0.7` surface to the user, `0.4-0.7` silent log to `worklogs`, `< 0.4` drop.
 
@@ -50,11 +50,12 @@ One `PersonalListenerAgent` is spawned per participant per meeting; the others a
 | `QuestionAgent` | A window plus a context-gap heuristic | Propose role-specific questions, `priority` 1-3, status Ask/Dismiss/Save-for-later | `agent_suggestions` on `agent-results` (suggestion card) |
 | `ContextGapAgent` | A reference to context a participant lacks | Query other users' agents via `agent-requests` with `correlation_id` + `deadline`; chain peer-agents -> related-meeting -> RAG -> silent | Context-fill card; `agent-requests` to peers. Silent on empty (no fabrication) |
 | `ProactiveAgent` | Confirmed `decisions` / `actions`; AGE graph queries | Conflict (AGE query + semantic over `decisions__{org_id}`), workload (open actions per assignee, 80%/95%), missing-stakeholder (org-graph traversal) | `notifications` on `agent-results`. Opus-tier; conflict false-positive rate is an eval gate |
+| `MeetingAgent` | A window of a meeting that has agenda items (ADR-0038 D7) | Track the agenda for the host: `in_progress` / `covered` updates, computed `over_time`, `off_agenda` (>= 0.75), `unaddressed` carried-forward items; one nudge per meeting per 5 min. Fast tier | One `meeting_update` on `agent-results` per window, `user_id` = host; core-api applies the updates (host wins) |
 
 ## Where things live
 
 ```
-services/agent-runtime-service/    # six LangGraph agents, BaseAgent, AgentState, tiered routing, budgets
+services/agent-runtime-service/    # seven LangGraph agents, BaseAgent, AgentState, tiered routing, budgets
   agents/                          # one module per agent class; the BaseAgent lifecycle
 services/rag-service/              # RAGService five stages; gRPC orchestrator; RRF; Redis answer cache
 services/embedding-service/        # BGE-small-en 384-dim (GPU Ray Serve); ONLY writer of Qdrant
@@ -88,7 +89,7 @@ Exception to the Postgres rule: `ingestion-service` owns `document_chunks` / `do
 
 Agent class names, topic names, AGE node/edge labels, and Qdrant collection names are frozen in `mytheus-docs` `_canon/` and doc 24 (Glossary & Naming). Never invent or rename. A rename lands in the Glossary and a superseding ADR first, then propagates here.
 
-- Agent classes: `PersonalListenerAgent`, `DecisionAgent`, `ActionAgent`, `QuestionAgent`, `ContextGapAgent`, `ProactiveAgent`.
+- Agent classes: `PersonalListenerAgent`, `DecisionAgent`, `ActionAgent`, `QuestionAgent`, `ContextGapAgent`, `ProactiveAgent`, `MeetingAgent` (ADR-0038).
 - Topics (kebab-case): `transcript-chunks`, `document-chunks`, `agent-requests`, `agent-responses`, `agent-results`, `agent-stream`, plus `decisions`, `actions`, `notifications`, `usage-events`, `integration-events`.
 - AGE graph: `nexus_knowledge`. Nodes: `Person`, `Meeting`, `Decision`, `Action`, `Topic`. Edges: `ATTENDED`, `PRODUCED`, `ASSIGNED_TO`, `RELATES_TO`, `FOLLOWS_FROM`.
 - Qdrant collections: `transcript_chunks__{org_id}`, `document_chunks__{org_id}`, `decisions__{org_id}`.

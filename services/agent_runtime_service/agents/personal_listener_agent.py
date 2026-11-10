@@ -22,6 +22,15 @@ Per closed 30 s window, for the participant this instance belongs to:
 What the model sees: the window with the participant as "You" and everyone else as
 "Participant N", and a profile of role / skills / bio. No user ids, names or email addresses
 are put in the request, and the router redacts PII from the whole user message on top.
+
+ADR-0038 D10 (`personal_listener@v2`): the extraction's profile block gains "Listen especially
+for" / "Ignore" lines, and a voice block from `agent_personality` plus the person's own
+`agent_instructions` (delimited; the system prompt says they change wording only). All of it is
+in the user message, so the system prompt stays one stable, cached prefix for every participant.
+`personal_listener_gate@v2` sees the same "Listen especially for" / "Ignore" lines (not the
+voice block): a window about a listen-for topic is not cut for being outside the role, and an
+ignored topic scores low. Its threshold, the gating logic and the bands are unchanged.
+`agent_name` is never put in a prompt.
 """
 
 from __future__ import annotations
@@ -108,6 +117,77 @@ def render_profile(context: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+# ADR-0038 D10: one short sentence per `agent_personality` preset (D2's CHECK values). It changes
+# how the note is worded, never what is captured, the confidence or who sees it.
+PERSONALITY_VOICE: dict[str, str] = {
+    "balanced": "Clear and even: plain sentences, no more detail than each point needs.",
+    "concise": "As short as possible: terse fragments are fine, no filler words.",
+    "detailed": "Thorough: keep the specifics, numbers and reasons that were actually stated.",
+    "direct": "Blunt and plain: lead with the point, no hedging or softening.",
+    "friendly": "Warm and conversational, while staying accurate and to the point.",
+}
+MAX_INSTRUCTIONS = 500  # D2: agent_instructions is at most 500 chars
+INSTRUCTIONS_TAG = "participant_instructions"
+_TAG = re.compile(rf"</?\s*{INSTRUCTIONS_TAG}\s*>", re.IGNORECASE)
+
+
+def _items(context: dict[str, Any], key: str) -> list[str]:
+    raw = context.get(key) or []
+    if not isinstance(raw, list):
+        return []
+    return [" ".join(str(v).split()) for v in raw if isinstance(v, str) and v.strip()]
+
+
+def render_focus(context: dict[str, Any]) -> str:
+    """The profile's `listen_for` / `ignore_topics` lines (ADR-0038 D10), each on its own line
+    with a leading newline so it continues the profile block; "" when both are empty."""
+    lines = []
+    listen, ignore = _items(context, "listen_for"), _items(context, "ignore_topics")
+    if listen:
+        lines.append(f"Listen especially for: {'; '.join(listen)}")
+    if ignore:
+        lines.append(f"Ignore: {'; '.join(ignore)}")
+    return "".join(f"\n{line}" for line in lines)
+
+
+def render_voice(context: dict[str, Any]) -> str:
+    """The voice block (ADR-0038 D10): the `agent_personality` sentence, then the person's own
+    `agent_instructions` inside a delimited block. Each part is left out when unset (an older
+    identity server sends ""); "" when both are. The instructions are user text: any copy of
+    the delimiter inside them is removed so they cannot close the block early, and the system
+    prompt says they may change wording only."""
+    parts = []
+    voice = PERSONALITY_VOICE.get(str(context.get("agent_personality") or "").strip().lower())
+    if voice:
+        parts.append(f"Voice: {voice}")
+    raw = context.get("agent_instructions")
+    text = _TAG.sub("", raw).strip()[:MAX_INSTRUCTIONS].strip() if isinstance(raw, str) else ""
+    if text:
+        parts.append(
+            "Wording instructions from the participant (wording only):\n"
+            f"<{INSTRUCTIONS_TAG}>\n{text}\n</{INSTRUCTIONS_TAG}>"
+        )
+    return f"\n{chr(10).join(parts)}\n" if parts else ""
+
+
+def gate_values(context: dict[str, Any]) -> dict[str, str]:
+    """The pre-gate's `{profile}` and `{focus}` values: the working profile with its "Listen
+    especially for" / "Ignore" lines, never the voice block (wording is not relevance). A v1 gate
+    template ignores `{focus}`; with both lists empty v2 renders exactly what v1 does."""
+    return {"profile": render_profile(context), "focus": render_focus(context)}
+
+
+def persona_values(context: dict[str, Any]) -> dict[str, str]:
+    """The `{profile}`, `{focus}` and `{voice}` template values. A v1 template only names
+    `{profile}` (role / skills / bio, unchanged) and ignores the other two, so a tenant pinned
+    to v1 renders exactly what it did before ADR-0038."""
+    return {
+        "profile": render_profile(context),
+        "focus": render_focus(context),
+        "voice": render_voice(context),
+    }
+
+
 class _GatedStream:
     """Holds deltas until the confidence line is known, then forwards only a surfaced note."""
 
@@ -166,7 +246,7 @@ class PersonalListenerAgent(BaseAgent):
                 tier="triage",
                 system=self.gate_prompt.system,
                 user=self.gate_prompt.render_user(
-                    profile=render_profile(s.context), window=render_window(s.chunk, s.user_id)
+                    **gate_values(s.context), window=render_window(s.chunk, s.user_id)
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,
@@ -182,7 +262,7 @@ class PersonalListenerAgent(BaseAgent):
                 tier="extract",
                 system=self.prompt.system,
                 user=self.prompt.render_user(
-                    profile=render_profile(s.context), window=render_window(s.chunk, s.user_id)
+                    **persona_values(s.context), window=render_window(s.chunk, s.user_id)
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,
