@@ -1,4 +1,5 @@
-"""`get_user_context(user_id)` over gRPC to `identity-tenant-service`.
+"""`get_user_context(user_id)` over gRPC to `identity-tenant-service`, and the A2A PDP
+`Authorize` (ADR-0013, P10) on the same service.
 
 The contract is `mytheus-backend/proto/identity.proto` (`mytheus.identity.v1.IdentityService`
 `GetUserContext`), with `org_id` in gRPC metadata under `org-id`, never in the message body.
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 PACKAGE = "mytheus.identity.v1"
 METHOD = f"/{PACKAGE}.IdentityService/GetUserContext"
+AUTHORIZE_METHOD = f"/{PACKAGE}.IdentityService/Authorize"
 _F = descriptor_pb2.FieldDescriptorProto
 
 # (name, number, type, repeated) - mirrors identity.proto
@@ -44,6 +46,13 @@ FIELDS: dict[str, list[tuple[str, int, int, bool]]] = {
         ("department_id", 10, _F.TYPE_STRING, False),
         ("cache_expires_at", 11, _F.TYPE_INT64, False),
     ],
+    "AuthorizeRequest": [
+        ("org_id", 1, _F.TYPE_STRING, False),
+        ("grantee_role", 2, _F.TYPE_STRING, False),
+        ("query_class", 3, _F.TYPE_STRING, False),
+        ("target_scope", 4, _F.TYPE_STRING, False),
+    ],
+    "AuthorizeResponse": [("decision", 1, _F.TYPE_STRING, False)],
 }
 
 
@@ -70,6 +79,8 @@ def _build() -> dict[str, Any]:
 _classes = _build()
 GetUserContextRequest: Any = _classes["GetUserContextRequest"]
 UserContext: Any = _classes["UserContext"]
+AuthorizeRequest: Any = _classes["AuthorizeRequest"]
+AuthorizeResponse: Any = _classes["AuthorizeResponse"]
 
 
 class UserContextClient:
@@ -108,7 +119,54 @@ class UserContextClient:
             "bio": reply.bio,
             "team_ids": list(reply.team_ids),
             "department_id": reply.department_id,
+            # The RBAC tier is the A2A grantee_role (ADR-0013). Never rendered into a prompt.
+            "rbac_tier": reply.rbac_tier,
         }
+
+    async def close(self) -> None:
+        if self._channel is not None:
+            await self._channel.close()
+
+
+class PdpClient:
+    """The agent-to-agent PDP, `IdentityService.Authorize` (ADR-0013, P10 contract section 3).
+
+    Returns "allow" or "deny" from the server, or None when the call failed (unreachable,
+    UNIMPLEMENTED, timeout). The PEP treats None as deny and does not cache it."""
+
+    def __init__(self, address: str | None = None, timeout_s: float = 0.5) -> None:
+        self._address = address or os.environ.get("IDENTITY_GRPC_ADDR", "localhost:50051")
+        self._timeout = timeout_s
+        self._channel: grpc.aio.Channel | None = None
+
+    def _call(self) -> Any:
+        if self._channel is None:
+            self._channel = grpc.aio.insecure_channel(self._address)
+        return self._channel.unary_unary(
+            AUTHORIZE_METHOD,
+            request_serializer=AuthorizeRequest.SerializeToString,
+            response_deserializer=AuthorizeResponse.FromString,
+        )
+
+    async def authorize(
+        self, org_id: UUID, grantee_role: str, query_class: str, target_scope: str
+    ) -> str | None:
+        try:
+            reply = await self._call()(
+                AuthorizeRequest(
+                    org_id=str(org_id),
+                    grantee_role=grantee_role,
+                    query_class=query_class,
+                    target_scope=target_scope,
+                ),
+                metadata=(("org-id", str(org_id)),),
+                timeout=self._timeout,
+            )
+        except grpc.RpcError as exc:
+            logger.warning("Authorize failed org=%s: %s (deny)", org_id, exc)
+            return None
+        decision = str(reply.decision)
+        return decision if decision in ("allow", "deny") else None
 
     async def close(self) -> None:
         if self._channel is not None:
