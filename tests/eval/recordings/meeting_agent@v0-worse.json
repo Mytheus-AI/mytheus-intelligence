@@ -1,0 +1,28 @@
+{
+  "prompt": "meeting_agent@v0-worse",
+  "prompt_sha256": "317eb54a4d2b5eefaaa8b8404b211a541f2b019b6cd8fc54d42f21fe2fc7824d",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "m-01": "{\"updates\": [{\"item\": 1, \"status\": \"covered\", \"note\": \"Discussed.\", \"confidence\": 0.8}], \"off_agenda\": null, \"raised\": []}",
+    "m-02": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-03": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to: Totally separate thing, but the office move, are we doing the fourth floor or no\", \"confidence\": 0.83}, \"raised\": []}",
+    "m-04": "{\"updates\": [{\"item\": 2, \"status\": \"in_progress\", \"note\": \"Mentioned.\", \"confidence\": 0.86}], \"off_agenda\": {\"content\": \"The discussion moved to: Anyone want coffee? I'm grabbing one.\", \"confidence\": 0.9}, \"raised\": []}",
+    "m-05": "{\"updates\": [{\"item\": 2, \"status\": \"in_progress\", \"note\": \"Mentioned.\", \"confidence\": 0.86}], \"off_agenda\": {\"content\": \"The discussion moved to: On the roadmap, reporting slips a sprint, we'll get to hiring later, it's relate\", \"confidence\": 0.81}, \"raised\": []}",
+    "m-06": "{\"updates\": [], \"off_agenda\": null, \"raised\": [1]}",
+    "m-07": "{\"updates\": [{\"item\": 3, \"status\": \"in_progress\", \"note\": \"Mentioned.\", \"confidence\": 0.86}], \"off_agenda\": null, \"raised\": [2]}",
+    "m-08": "{\"updates\": [{\"item\": 1, \"status\": \"covered\", \"note\": \"Mentio",
+    "m-09": "{\"updates\": [{\"item\": 4, \"status\": \"covered\", \"note\": \"Discussed.\", \"confidence\": 0.91}], \"off_agenda\": null, \"raised\": []}",
+    "m-10": "{\"updates\": [{\"item\": 2, \"status\": \"in_progress\", \"note\": \"Hiring discussed.\", \"confidence\": 0.85}], \"off_agenda\": null, \"raised\": []}",
+    "m-11": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to: Sorry to derail, but Northwind escalated again this morning, their exports are f\", \"confidence\": 0.84}, \"raised\": []}",
+    "m-12": "{\"updates\": [{\"item\": 2, \"status\": \"in_progress\", \"note\": \"Mentioned.\", \"confidence\": 0.86}], \"off_agenda\": {\"content\": \"The discussion moved to: How was everyone's weekend? I finally got the garden done.\", \"confidence\": 0.84}, \"raised\": []}",
+    "m-13": "{\"updates\": [{\"item\": 3, \"status\": \"covered\", \"note\": \"Discussed.\", \"confidence\": 0.92}], \"off_agenda\": null, \"raised\": []}",
+    "m-14": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-15": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to: -- the conference booth, did we ever book the bigger one?\", \"confidence\": 0.81}, \"raised\": []}",
+    "m-16": "{\"updates\": [{\"item\": 3, \"status\": \"in_progress\", \"note\": \"Mentioned.\", \"confidence\": 0.86}], \"off_agenda\": null, \"raised\": []}",
+    "m-17": "{\"updates\": [{\"item\": 4, \"status\": \"in_progress\", \"note\": \"Discussed.\", \"confidence\": 0.92}], \"off_agenda\": null, \"raised\": []}",
+    "m-18": "{\"updates\": [{\"item\": 2, \"status\": \"in_progress\", \"note\": \"Mentioned.\", \"confidence\": 0.86}], \"off_agenda\": {\"content\": \"The discussion moved to: Sorry, my dog is barking, one second.\", \"confidence\": 0.88}, \"raised\": []}",
+    "m-19": "{\"updates\": [{\"item\": 2, \"status\": \"covered\", \"note\": \"Discussed.\", \"confidence\": 0.88}], \"off_agenda\": null, \"raised\": []}",
+    "m-20": "{\"updates\": [], \"off_agenda\": null, \"raised\": [2]}"
+  }
+}

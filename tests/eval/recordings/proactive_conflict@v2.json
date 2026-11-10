@@ -1,0 +1,28 @@
+{
+  "prompt": "proactive_conflict@v2",
+  "prompt_sha256": "beeeae40936bbee78beb8320fe97c853a7e7f6a1e8113b3db371d3d425285cbe",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "budget-cap-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.82, \"rationale\": \"They clash.\"}]}",
+    "consistent-number": "{\"conflicts\": []}",
+    "date-refinement": "{\"conflicts\": []}",
+    "different-product-dates": "{\"conflicts\": []}",
+    "different-team-budget": "{\"conflicts\": []}",
+    "free-tier-removed": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.83, \"rationale\": \"They clash.\"}]}",
+    "hiring-freeze-broken": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.82, \"rationale\": \"They clash.\"}]}",
+    "launch-date-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.85, \"rationale\": \"They clash.\"}]}",
+    "launch-detail-added": "{\"conflicts\": []}",
+    "launch-moved-explicitly": "{\"conflicts\": []}",
+    "office-vs-hiring": "{\"conflicts\": []}",
+    "pricing-annual-discount": "{\"conflicts\": []}",
+    "pricing-revised": "{\"conflicts\": []}",
+    "region-policy-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.82, \"rationale\": \"They clash.\"}]}",
+    "reorg-replaces-plan": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.53, \"rationale\": \"They clash.\"}]}",
+    "same-vendor-different-use": "{\"conflicts\": []}",
+    "scope-narrowing": "{\"conflicts\": []}",
+    "search-indexing-owner": "{\"conflicts\": []}",
+    "vendor-choice-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.87, \"rationale\": \"They clash.\"}]}",
+    "vendor-reversed": "{\"conflicts\": []}"
+  }
+}

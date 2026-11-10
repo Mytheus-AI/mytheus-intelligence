@@ -1,0 +1,61 @@
+{
+  "_about": "The ONE place eval thresholds live (polish plan, 'Evals that can fail'). Each suite's metrics are checked by tests/evalkit/scoring.check: {min} is a floor, {max} a ceiling. The offline gate (pytest -m eval, CI) and the live mode (EVAL_LIVE=1, see tests/evalkit/harness.py) use the same numbers. Raise a floor only with a recorded live run that clears it; lower one only with a written reason in the commit.",
+  "decision": {
+    "f1": {"min": 0.82},
+    "recall": {"min": 0.8},
+    "surfaced_precision": {"min": 0.9},
+    "brier": {"max": 0.12},
+    "lookalike_fp_rate": {"max": 0.1},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "action": {
+    "f1": {"min": 0.82},
+    "recall": {"min": 0.8},
+    "surfaced_precision": {"min": 0.9},
+    "brier": {"max": 0.12},
+    "lookalike_fp_rate": {"max": 0.1},
+    "assignee_accuracy": {"min": 0.85},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "persona": {
+    "fact_overlap": {"min": 0.8},
+    "shared_coverage": {"min": 0.8},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "meeting": {
+    "update_f1": {"min": 0.85},
+    "off_agenda_precision": {"min": 0.8},
+    "off_agenda_recall": {"min": 0.75},
+    "false_nudge_rate": {"max": 0.1},
+    "raised_accuracy": {"min": 0.85},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "proactive_conflict": {
+    "precision": {"min": 0.8},
+    "recall": {"min": 0.8},
+    "false_positive_rate": {"max": 0.15},
+    "surfaced_false_positive_rate": {"max": 0.05},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "proactive_workload": {
+    "accuracy": {"min": 1.0},
+    "false_positive_rate": {"max": 0.0}
+  },
+  "proactive_stakeholder": {
+    "precision": {"min": 0.95},
+    "recall": {"min": 0.95},
+    "false_positive_rate": {"max": 0.0},
+    "band_accuracy": {"min": 1.0}
+  },
+  "never_record": {
+    "leaks": {"max": 0},
+    "outright_skip_rate": {"min": 1.0}
+  },
+  "judge": {
+    "faithfulness": {"min": 4.0},
+    "coverage": {"min": 3.5},
+    "attribution": {"min": 3.5},
+    "ground_rules": {"min": 4.8},
+    "overall": {"min": 3.8}
+  }
+}

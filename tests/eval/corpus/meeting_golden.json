@@ -1,0 +1,196 @@
+{
+  "about": "Golden set for MeetingAgent (ADR-0038 D7): agenda status updates, off-agenda drift and raised carried items, with false-positive cases (asides, passing mentions, host-set items, never-record). Run through the real MeetingAgent.process_meeting; the model answer is replayed. expected.updates lists the updates that must REACH the host (after the agent's own rules), expected.off_agenda whether an off_agenda nudge is emitted, expected.raised the carried items (1-based) marked raised.",
+  "default_agenda": [
+    {"title": "Q4 roadmap review", "status": "in_progress", "duration_minutes": 20, "status_source": null},
+    {"title": "Hiring plan", "status": "pending", "duration_minutes": 15, "status_source": null},
+    {"title": "Pricing page launch", "status": "pending", "duration_minutes": 15, "status_source": null},
+    {"title": "Incident follow-ups", "status": "pending", "duration_minutes": 10, "status_source": null}
+  ],
+  "default_carried": ["Priya to send the vendor shortlist", "Decide the offsite venue"],
+  "cases": [
+    {
+      "id": "m-01", "kind": "cover_and_start",
+      "turns": [
+        {"speaker": "S1", "text": "Okay, that's the roadmap settled then, the three themes stay as they are."},
+        {"speaker": "S2", "text": "Good. Moving on to hiring, um, we have two open reqs and one offer out."},
+        {"speaker": "S1", "text": "Right, so for the backend req the pipeline is pretty thin."}
+      ],
+      "expected": {"updates": [{"item": 1, "status": "covered"}, {"item": 2, "status": "in_progress"}], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-02", "kind": "start",
+      "turns": [
+        {"speaker": "S1", "text": "Let's do the pricing page now, uh, design is basically done."},
+        {"speaker": "S2", "text": "-- copy too?"},
+        {"speaker": "S1", "text": "Copy's in review. The open thing is the comparison table, whether we show the enterprise column."}
+      ],
+      "expected": {"updates": [{"item": 3, "status": "in_progress"}], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-03", "kind": "off_agenda",
+      "turns": [
+        {"speaker": "S1", "text": "Totally separate thing, but the office move, are we doing the fourth floor or not?"},
+        {"speaker": "S2", "text": "Facilities said the fourth floor is ready in January, but parking is a mess."},
+        {"speaker": "S3", "text": "And the lease on the old space runs to March, so we'd pay double for two months."},
+        {"speaker": "S1", "text": "Okay so we need a number on that."}
+      ],
+      "expected": {"updates": [], "off_agenda": true, "raised": []}
+    },
+    {
+      "id": "m-04", "kind": "aside",
+      "turns": [
+        {"speaker": "S1", "text": "Anyone want coffee? I'm grabbing one."},
+        {"speaker": "S2", "text": "I'm good, thanks."},
+        {"speaker": "S1", "text": "Okay, back to the roadmap, theme two is the reporting work."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-05", "kind": "passing_mention",
+      "turns": [
+        {"speaker": "S1", "text": "On the roadmap, reporting slips a sprint, we'll get to hiring later, it's related."},
+        {"speaker": "S2", "text": "Fine, so reporting lands in the second December sprint."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-06", "kind": "carried_raised",
+      "turns": [
+        {"speaker": "S1", "text": "Pria, the vendor shortlist from last time, where is it?"},
+        {"speaker": "S2", "text": "It's three vendors, I'll share it today. Two of them can do the SSO piece, um, the third can't."},
+        {"speaker": "S1", "text": "Okay, then the third is out."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": [1]}
+    },
+    {
+      "id": "m-07", "kind": "carried_passing",
+      "turns": [
+        {"speaker": "S1", "text": "Remind me about the offsite venue at the end. For now, roadmap theme three."},
+        {"speaker": "S2", "text": "Theme three is the mobile parity work, still scoped at six weeks."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-08", "kind": "continuing",
+      "turns": [
+        {"speaker": "S1", "text": "Still on the roadmap, the reporting theme needs one more engineer."},
+        {"speaker": "S2", "text": "We could borrow someone from platform for a sprint."},
+        {"speaker": "S3", "text": "Platform is stretched, um, but maybe."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-09", "kind": "deferred",
+      "turns": [
+        {"speaker": "S1", "text": "We're out of time for incidents. Let's push incident follow-ups to next week."},
+        {"speaker": "S2", "text": "Fine, defer it, nothing urgent there."}
+      ],
+      "expected": {"updates": [{"item": 4, "status": "covered"}], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-10", "kind": "host_set",
+      "agenda": [
+        {"title": "Q4 roadmap review", "status": "in_progress", "duration_minutes": 20, "status_source": null},
+        {"title": "Hiring plan", "status": "pending", "duration_minutes": 15, "status_source": "host"},
+        {"title": "Pricing page launch", "status": "pending", "duration_minutes": 15, "status_source": null},
+        {"title": "Incident follow-ups", "status": "pending", "duration_minutes": 10, "status_source": null}
+      ],
+      "turns": [
+        {"speaker": "S1", "text": "Hiring, quickly, the offer to the designer went out yesterday."},
+        {"speaker": "S2", "text": "Great, and the backend req is still open."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-11", "kind": "off_agenda",
+      "turns": [
+        {"speaker": "S1", "text": "Sorry to derail, but Northwind escalated again this morning, their exports are failing."},
+        {"speaker": "S2", "text": "Is it the timeout thing? Support said it's every export over ten thousand rows."},
+        {"speaker": "S3", "text": "Yeah, and they're threatening to pause the renewal."}
+      ],
+      "expected": {"updates": [], "off_agenda": true, "raised": []}
+    },
+    {
+      "id": "m-12", "kind": "aside",
+      "turns": [
+        {"speaker": "S1", "text": "How was everyone's weekend? I finally got the garden done."},
+        {"speaker": "S2", "text": "Ha, nice. Mine was mostly rain."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-13", "kind": "cover_direct",
+      "turns": [
+        {"speaker": "S1", "text": "Pricing page is done, it goes live Monday, nothing left to discuss there."},
+        {"speaker": "S2", "text": "Great, next item then."}
+      ],
+      "expected": {"updates": [{"item": 3, "status": "covered"}], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-14", "kind": "never_record",
+      "turns": [
+        {"speaker": "S1", "text": "Between us, the layoffs list for January is at fourteen names."},
+        {"speaker": "S2", "text": "Okay, we keep that off the record."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-15", "kind": "off_agenda",
+      "turns": [
+        {"speaker": "S1", "text": "-- the conference booth, did we ever book the bigger one?"},
+        {"speaker": "S2", "text": "We have the small one, the big one was eight thousand more."},
+        {"speaker": "S3", "text": "-- for three days?"},
+        {"speaker": "S2", "text": "Three days, plus the swag budget on top."}
+      ],
+      "expected": {"updates": [], "off_agenda": true, "raised": []}
+    },
+    {
+      "id": "m-16", "kind": "keyword_trap",
+      "turns": [
+        {"speaker": "S1", "text": "For roadmap theme one, the pricing engine refactor is the long pole."},
+        {"speaker": "S2", "text": "Right, that's the internal engine, not the page, and it's eight weeks."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-17", "kind": "start",
+      "turns": [
+        {"speaker": "S1", "text": "Okay, incident follow-ups. Two open items from the outage on the third."},
+        {"speaker": "S2", "text": "The runbook update is done, the alerting change isn't."}
+      ],
+      "expected": {"updates": [{"item": 4, "status": "in_progress"}], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-18", "kind": "aside",
+      "turns": [
+        {"speaker": "S1", "text": "Sorry, my dog is barking, one second."},
+        {"speaker": "S2", "text": "No worries."},
+        {"speaker": "S1", "text": "Okay, I'm back. Where were we on theme two?"}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-19", "kind": "cover_after_start",
+      "agenda": [
+        {"title": "Q4 roadmap review", "status": "covered", "duration_minutes": 20, "status_source": null},
+        {"title": "Hiring plan", "status": "in_progress", "duration_minutes": 15, "status_source": null},
+        {"title": "Pricing page launch", "status": "pending", "duration_minutes": 15, "status_source": null},
+        {"title": "Incident follow-ups", "status": "pending", "duration_minutes": 10, "status_source": null}
+      ],
+      "turns": [
+        {"speaker": "S1", "text": "Great, so the hiring plan is agreed, the two reqs are approved, done."},
+        {"speaker": "S2", "text": "Done. Next."}
+      ],
+      "expected": {"updates": [{"item": 2, "status": "covered"}], "off_agenda": false, "raised": []}
+    },
+    {
+      "id": "m-20", "kind": "carried_raised",
+      "turns": [
+        {"speaker": "S1", "text": "The offsite venue from last time. Lisbon or the lake place?"},
+        {"speaker": "S2", "text": "Lisbon is cheaper with flights, the lake place needs a bus."},
+        {"speaker": "S1", "text": "Then Lisbon, unless finance objects."}
+      ],
+      "expected": {"updates": [], "off_agenda": false, "raised": [2]}
+    }
+  ]
+}

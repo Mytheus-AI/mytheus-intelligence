@@ -1,0 +1,28 @@
+{
+  "prompt": "meeting_agent@v2",
+  "prompt_sha256": "e7bda548b3f49971140f0beabcc0e07c598c8aa8d9a34edc516719ce2598bbfd",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "m-01": "{\"updates\": [{\"item\": 1, \"status\": \"covered\", \"note\": \"From the discussion.\", \"confidence\": 0.84}, {\"item\": 2, \"status\": \"in_progress\", \"note\": \"From the discussion.\", \"confidence\": 0.84}], \"off_agenda\": null, \"raised\": []}",
+    "m-02": "{\"updates\": [{\"item\": 3, \"status\": \"in_progress\", \"note\": \"From the discussion.\", \"confidence\": 0.92}], \"off_agenda\": null, \"raised\": []}",
+    "m-03": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to: Totally separate thing, but the office move, are we doing the fourth floor or no\", \"confidence\": 0.91}, \"raised\": []}",
+    "m-04": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-05": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-06": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-07": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-08": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-09": "{\"updates\": [{\"item\": 4, \"status\": \"covered\", \"note\": \"From the discussion.\", \"confidence\": 0.91}], \"off_agenda\": null, \"raised\": []}",
+    "m-10": "{\"updates\": [{\"item\": 2, \"status\": \"in_progress\", \"note\": \"Hiring discussed.\", \"confidence\": 0.85}], \"off_agenda\": null, \"raised\": []}",
+    "m-11": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to: Sorry to derail, but Northwind escalated again this morning, their exports are f\", \"confidence\": 0.84}, \"raised\": []}",
+    "m-12": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-13": "{\"updates\": [{\"item\": 3, \"status\": \"covered\", \"note\": \"From the discussion.\", \"confidence\": 0.81}], \"off_agenda\": null, \"raised\": []}",
+    "m-14": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-15": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to: -- the conference booth, did we ever book the bigger one?\", \"confidence\": 0.83}, \"raised\": []}",
+    "m-16": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-17": "{\"updates\": [{\"item\": 4, \"status\": \"in_progress\", \"note\": \"From the discussion.\", \"confidence\": 0.85}], \"off_agenda\": null, \"raised\": []}",
+    "m-18": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-19": "{\"updates\": [{\"item\": 2, \"status\": \"covered\", \"note\": \"From the discussion.\", \"confidence\": 0.95}], \"off_agenda\": null, \"raised\": []}",
+    "m-20": "{\"updates\": [], \"off_agenda\": null, \"raised\": [2]}"
+  }
+}

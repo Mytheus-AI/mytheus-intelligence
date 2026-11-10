@@ -1,0 +1,17 @@
+{
+  "prompt": "proactive_stakeholder@v2",
+  "prompt_sha256": "6bcd3bc5fffb4f1e1d0a77ae0c0dcada1b01ac61425a0d0ae07925845f6465dc",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "s-01": "{\"topic\": \"pricing\", \"score\": 0.85}",
+    "s-02": "{\"topic\": \"pricing\", \"score\": 0.82}",
+    "s-03": "{\"topic\": \"\", \"score\": 0.05}",
+    "s-04": "{\"topic\": \"infra\", \"score\": 0.45}",
+    "s-05": "{\"topic\": \"roadmap\", \"score\": 0.9}",
+    "s-06": "{\"topic\": \"hiring\", \"score\": 0.8}",
+    "s-07": "{\"topic\": \"security\", \"score\": 0.85}",
+    "s-08": "{\"topic\": \"security\", \"score\": 0.88}",
+    "s-09": "{\"topic\": \"pricing\", \"score\": 0.6}"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "prompt": "proactive_conflict@v0-worse",
+  "prompt_sha256": "c5c7d80aa6f3710c8b6688aea1f7123a0b59ee7345a662ca8f46a7dbc85290cd",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "budget-cap-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.91, \"rationale\": \"They clash.\"}]}",
+    "consistent-number": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.84, \"rationale\": \"They clash.\"}]}",
+    "date-refinement": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.81, \"rationale\": \"They clash.\"}]}",
+    "different-product-dates": "{\"conflicts\": []}",
+    "different-team-budget": "{\"conflicts\": []}",
+    "free-tier-removed": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.92, \"rationale\": \"They clash.\"}]}",
+    "hiring-freeze-broken": "{\"conflicts\": []}",
+    "launch-date-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.92, \"rationale\": \"They clash.\"}]}",
+    "launch-detail-added": "{\"conflicts\": []}",
+    "launch-moved-explicitly": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.88, \"rationale\": \"They clash.\"}]}",
+    "office-vs-hiring": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.83, \"rationale\": \"They clash.\"}]}",
+    "pricing-annual-discount": "{\"conflicts\": []}",
+    "pricing-revised": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.78, \"rationale\": \"They clash.\"}]}",
+    "region-policy-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.88, \"rationale\": \"They clash.\"}]}",
+    "reorg-replaces-plan": "{\"conflicts\": []}",
+    "same-vendor-different-use": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.78, \"rationale\": \"They clash.\"}]}",
+    "scope-narrowing": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.78, \"rationale\": \"They clash.\"}]}",
+    "search-indexing-owner": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.87, \"rationale\": \"They clash.\"}]}",
+    "vendor-choice-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.92, \"rationale\": \"They clash.\"}]}",
+    "vendor-reversed": "{\"conflicts\": []}"
+  }
+}
