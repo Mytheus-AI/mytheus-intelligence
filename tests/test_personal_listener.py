@@ -278,12 +278,12 @@ def test_the_shipped_prompts_are_registered_and_render():
 
     assert json.loads((Path(PROMPTS_DIR) / "registry.json").read_text())["defaults"] == {
         "personal_listener": "v2",
-        "personal_listener_gate": "v1",
+        "personal_listener_gate": "v2",
         "decision_gate": "v1",
         "decision_agent": "v1",
         "action_gate": "v1",
         "action_agent": "v1",
-        "question_gate": "v1",
+        "question_gate": "v2",
         "question_agent": "v2",
         "context_gap_gate": "v1",
         "context_gap_agent": "v1",

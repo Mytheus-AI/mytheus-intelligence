@@ -8,7 +8,11 @@
    and a voice block (personality sentence + delimited instructions); empty values render
    nothing, and v2 with an empty persona renders the same user message as v1.
 3. The instructions cannot close their own block, and the system prompt limits them to wording.
-4. The gates are untouched: they still see role / skills / bio only, at v1.
+4. The v2 gates (`personal_listener_gate@v2`, `question_gate@v2`) see the "Listen especially for" /
+   "Ignore" lines but never the voice block; with both lists empty they render exactly what v1
+   did. A window about a listen-for topic outside the role is not cut, and an ignored topic in the
+   role is (shown with a fake model that scores from what the gate is sent; the real model's
+   judgment is the live eval's job, `tests/eval/personal_listener_golden.json`).
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from services.agent_runtime_service.agents.personal_listener_agent import (
     INSTRUCTIONS_TAG,
     PERSONALITY_VOICE,
     PersonalListenerAgent,
+    gate_values,
     persona_values,
     render_focus,
     render_profile,
@@ -290,7 +295,10 @@ async def test_personal_listener_sends_the_persona_to_the_note_call_only():
     assert result is not None and result.payload["prompt"] == "personal_listener@v2"
     assert result.payload["surfaced"] is True  # bands unchanged
     gate_user, note_user = llm.user(0), llm.user(1)
-    assert "Listen especially for" not in gate_user and "Voice:" not in gate_user
+    assert "Listen especially for: billing migration" in gate_user and "Ignore: hiring" in gate_user
+    assert (
+        "Voice:" not in gate_user and INSTRUCTIONS_TAG not in gate_user
+    )  # wording is not relevance
     assert "Listen especially for: billing migration" in note_user
     assert "Always note numbers." in note_user and INSTRUCTIONS_TAG in note_user
     # the persona lives in the user message: the cached system prefix is the same for everyone
@@ -328,5 +336,109 @@ async def test_question_agent_sends_the_persona_to_the_proposal_call_only():
     result = await agent.process(_state(PERSONA))
     assert result is not None and result.payload["prompt"] == "question_agent@v2"
     assert result.payload["suggestions"][0]["surfaced"] is True
-    assert "Ignore: hiring" not in llm.user(0) and "Ignore: hiring" in llm.user(1)
+    assert "Ignore: hiring" in llm.user(0) and "Ignore: hiring" in llm.user(1)
+    assert "Voice:" not in llm.user(0)
     assert f"Voice: {PERSONALITY_VOICE['concise']}" in llm.user(1)
+
+
+# --- 4. the v2 gates --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("key", ["personal_listener_gate", "question_gate"])
+def test_v2_gates_with_empty_lists_render_exactly_what_v1_did(key: str):
+    v1, v2 = _versions(key)
+    for ctx in (EMPTY, BASE):
+        values = {**gate_values(ctx), "window": "You: hi"}
+        assert v2.render_user(**values) == v1.render_user(**values)
+
+
+@pytest.mark.parametrize("key", ["personal_listener_gate", "question_gate"])
+def test_v2_gates_render_focus_and_say_how_to_score_it(key: str):
+    v1, v2 = _versions(key)
+    rendered = v2.render_user(**gate_values(PERSONA), window="You: hi")
+    assert rendered.startswith(
+        "Participant profile:\nRole: Backend engineer\nSkills: python\nAbout: Owns billing.\n"
+        "Listen especially for: billing migration; Q3 deadline\nIgnore: hiring\n\nTranscript"
+    )
+    assert "Voice:" not in rendered and "Always note numbers." not in rendered
+    assert '"Listen especially for"' in v2.system and "outside their role" in v2.system
+    assert '"Ignore"' in v2.system and "Listen especially for" not in v1.system
+    assert "{" not in v2.system.replace('{"', "")  # no placeholder in the cached prefix
+
+
+def test_the_registry_advances_both_gates():
+    loader = PromptLoader(PROMPTS_DIR)
+    assert loader.resolve("personal_listener_gate", ORG) == "v2"
+    assert loader.resolve("question_gate", ORG) == "v2"
+
+
+class _ProfileAwareGate(_LLM):
+    """A stand-in for the triage model that scores only from what the gate is sent: a window
+    about a "Listen especially for" topic scores 0.85, one about an "Ignore" topic 0.1, anything
+    else 0.8 if it mentions the role's skill (python) and 0.2 if not."""
+
+    async def __call__(self, **kw: Any) -> Any:
+        if "haiku" not in kw["model"]:
+            return await super().__call__(**kw)
+        self.calls.append(kw)
+        user = str(kw["messages"][1]["content"])
+        profile, _, transcript = user.partition("Transcript (30 seconds):")
+        listen = ignore = ""
+        for line in profile.splitlines():
+            if line.startswith("Listen especially for: "):
+                listen = line.split(": ", 1)[1]
+            elif line.startswith("Ignore: "):
+                ignore = line.split(": ", 1)[1]
+        text = transcript.lower()
+        if any(t and t.lower() in text for t in ignore.split("; ")):
+            score = 0.1
+        elif any(t and t.lower() in text for t in listen.split("; ")):
+            score = 0.85
+        else:
+            score = 0.8 if "python" in text else 0.2
+        answer = json.dumps({"relevance": score, "score": score})
+        return {"choices": [{"message": {"content": answer}}], "usage": {"prompt_tokens": 9}}
+
+
+def _talk(text: str) -> AgentState:
+    words = " ".join(["and we should decide it this week before the review"] * 3)
+    state = _state(BASE)
+    state.chunk.turns[0].text = f"{text} {words}"
+    return state
+
+
+ROLE_ONLY = {**EMPTY, "role": "Backend engineer", "skills": ["python"], "bio": ""}
+OUT_OF_ROLE = "The office relocation budget needs an owner"
+IN_ROLE_IGNORED = "The python hiring loop for the new team needs an owner"
+
+
+async def _passes_pl_gate(context: dict[str, Any], text: str) -> bool:
+    llm = _ProfileAwareGate("", "CONFIDENCE: 0.9\n- You own it.")
+    agent = PersonalListenerAgent(PromptLoader(PROMPTS_DIR), _router(llm))
+    await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=ME)
+    state = _talk(text)
+    state.context = context
+    await agent.process(state)
+    return len(llm.calls) == 2  # the gate passed, so the note call was made
+
+
+async def _passes_question_gate(context: dict[str, Any], text: str) -> bool:
+    llm = _ProfileAwareGate("", json.dumps({"suggestions": []}))
+    agent = QuestionAgent(PromptLoader(PROMPTS_DIR), _router(llm))
+    await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=ME)
+    state = _talk(text)
+    state.context = context
+    await agent.process(state)
+    return len(llm.calls) == 2
+
+
+@pytest.mark.parametrize("passes", [_passes_pl_gate, _passes_question_gate])
+async def test_a_listen_for_topic_outside_the_role_is_not_cut_by_the_gate(passes: Any):
+    assert not await passes(ROLE_ONLY, OUT_OF_ROLE)  # v1-style profile: cut
+    assert await passes({**ROLE_ONLY, "listen_for": ["office relocation"]}, OUT_OF_ROLE)
+
+
+@pytest.mark.parametrize("passes", [_passes_pl_gate, _passes_question_gate])
+async def test_an_ignored_topic_inside_the_role_is_cut_by_the_gate(passes: Any):
+    assert await passes(ROLE_ONLY, IN_ROLE_IGNORED)  # in the role: passes
+    assert not await passes({**ROLE_ONLY, "ignore_topics": ["hiring"]}, IN_ROLE_IGNORED)

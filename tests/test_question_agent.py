@@ -542,10 +542,11 @@ async def test_one_instance_per_participant_and_each_result_is_its_owners():
 def test_the_prompts_load_render_and_are_registered():
     loader = PromptLoader(PROMPTS_DIR)
     registry = json.loads((Path(PROMPTS_DIR) / "registry.json").read_text("utf-8"))
-    assert registry["defaults"]["question_gate"] == "v1"
-    assert registry["defaults"]["question_agent"] == "v2"  # ADR-0038 D10
+    assert registry["defaults"]["question_gate"] == "v2"  # ADR-0038 D10
+    assert registry["defaults"]["question_agent"] == "v2"
     for key, version in (
         ("question_gate", "v1"),
+        ("question_gate", "v2"),
         ("question_agent", "v1"),
         ("question_agent", "v2"),
     ):

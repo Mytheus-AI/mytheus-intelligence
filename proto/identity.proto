@@ -10,10 +10,24 @@ package mytheus.identity.v1;
 // org_id travels in gRPC metadata (key: "org-id"), not in the message body.
 service IdentityService {
   rpc GetUserContext(GetUserContextRequest) returns (UserContext);
-  // Authorize is the agent-to-agent PDP (ADR-0013): may an agent whose principal holds
-  // grantee_role ask query_class of a target at target_scope? Deny by default: any error,
-  // unknown value or missing org answers "deny".
+  // The A2A policy decision point (ADR-0013, P10). Deny by default: an allow needs a live
+  // `effect = 'allow'` grant for exactly this (grantee_role, query_class, target_scope) and no
+  // matching deny. An unknown value or a missing/malformed org is "deny". An infrastructure
+  // failure is status UNAVAILABLE (never a cacheable "deny"); the PEP treats it as deny.
   rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);
+}
+
+// org_id is in the body here (P10 contract section 3); when the caller ALSO sends "org-id"
+// metadata, the two must agree or the answer is "deny".
+message AuthorizeRequest {
+  string org_id       = 1;
+  string grantee_role = 2;  // RBAC tier: "owner" | "admin" | "member"
+  string query_class  = 3;  // "meeting_context" | "decision_lineage" | "action_status"
+  string target_scope = 4;  // "self" | "same_team" | "department" | "org"
+}
+
+message AuthorizeResponse {
+  string decision = 1;  // "allow" | "deny"
 }
 
 message GetUserContextRequest {
@@ -32,21 +46,11 @@ message UserContext {
   repeated string team_ids = 9;
   string department_id = 10;
   int64 cache_expires_at = 11;  // unix ms; cached at nexus:{org_id}:user_ctx:{user_id} 5-min TTL
-  // ADR-0038 D4: working profile and agent persona (no avatar seed: no agent needs it)
-  repeated string listen_for    = 12;  // at most 15, each 1-100 chars
-  repeated string ignore_topics = 13;  // same limits
-  string agent_name         = 14;  // display label only; "" = the UI default
-  string agent_personality  = 15;  // "balanced" | "concise" | "detailed" | "direct" | "friendly"
-  string agent_instructions = 16;  // up to 500 chars of the person's own text; "" = none
-}
-
-message AuthorizeRequest {
-  string org_id       = 1;
-  string grantee_role = 2;  // "owner" | "admin" | "member" (UserContext.rbac_tier)
-  string query_class  = 3;  // "meeting_context" | "decision_lineage" | "action_status"
-  string target_scope = 4;  // "self" | "same_team" | "department" | "org"
-}
-
-message AuthorizeResponse {
-  string decision = 1;  // "allow" | "deny"
+  // ADR-0038 D4: the working profile and the agent persona. Empty string = not set
+  // (agent_personality is never empty: it defaults to "balanced").
+  repeated string listen_for    = 12;
+  repeated string ignore_topics = 13;
+  string agent_name             = 14;
+  string agent_personality      = 15;  // "balanced" | "concise" | "detailed" | "direct" | "friendly"
+  string agent_instructions     = 16;
 }

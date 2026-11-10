@@ -29,9 +29,9 @@ from libs.shared.prompts import PromptLoader
 from libs.shared.router import LiteLLMRouter
 from services.agent_runtime_service.agents.personal_listener_agent import (
     GATE_KEY,
+    gate_values,
     parse_relevance,
     relevance_threshold,
-    render_profile,
 )
 from services.agent_runtime_service.consumer import PROMPTS_DIR
 
@@ -124,7 +124,14 @@ async def test_pregate_meets_the_baseline():
             tier="triage",
             system=prompt.system,
             user=prompt.render_user(
-                profile=render_profile({"role": case["role"], "skills": case["skills"]}),
+                **gate_values(
+                    {
+                        "role": case["role"],
+                        "skills": case["skills"],
+                        "listen_for": case.get("listen_for", []),
+                        "ignore_topics": case.get("ignore_topics", []),
+                    }
+                ),
                 window=case["window"],
             ),
             org_id=org,

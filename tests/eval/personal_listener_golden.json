@@ -28,6 +28,10 @@
     {"id": "pm-priorities", "role": "Product manager", "skills": ["roadmap"], "relevant": true,
      "window": "Participant 1: We can do either team management or the usage console this sprint, not both.\nParticipant 2: That's a product call. We need a decision from whoever owns the roadmap."},
     {"id": "be-vague", "role": "Backend engineer", "skills": ["python"], "relevant": false,
-     "window": "Participant 1: Yeah.\nParticipant 2: Mm-hm.\nParticipant 1: Okay, let's see where we are next week."}
+     "window": "Participant 1: Yeah.\nParticipant 2: Mm-hm.\nParticipant 1: Okay, let's see where we are next week."},
+    {"id": "be-listen-for-out-of-role", "role": "Backend engineer", "skills": ["python", "postgres"], "listen_for": ["office relocation"], "relevant": true,
+     "window": "Participant 1: The office relocation moves to March, the new floor is not ready.\nParticipant 2: So everyone keeps their current desks until then and the movers are rebooked.\nParticipant 1: Right, I'll send the new dates on Monday."},
+    {"id": "be-ignore-in-role", "role": "Backend engineer", "skills": ["python", "postgres"], "ignore_topics": ["hiring"], "relevant": false,
+     "window": "Participant 1: For hiring, the python screen for the platform role needs a second interviewer.\nParticipant 2: We have four candidates next week, mostly postgres-heavy backgrounds.\nParticipant 1: Let's pick panels on Thursday."}
   ]
 }

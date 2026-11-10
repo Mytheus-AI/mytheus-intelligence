@@ -27,8 +27,10 @@ ADR-0038 D10 (`personal_listener@v2`): the extraction's profile block gains "Lis
 for" / "Ignore" lines, and a voice block from `agent_personality` plus the person's own
 `agent_instructions` (delimited; the system prompt says they change wording only). All of it is
 in the user message, so the system prompt stays one stable, cached prefix for every participant.
-The relevance pre-gate (`personal_listener_gate@v1`), its threshold and the bands are unchanged:
-the gate still sees role / skills / bio only. `agent_name` is never put in a prompt.
+`personal_listener_gate@v2` sees the same "Listen especially for" / "Ignore" lines (not the
+voice block): a window about a listen-for topic is not cut for being outside the role, and an
+ignored topic scores low. Its threshold, the gating logic and the bands are unchanged.
+`agent_name` is never put in a prompt.
 """
 
 from __future__ import annotations
@@ -168,6 +170,13 @@ def render_voice(context: dict[str, Any]) -> str:
     return f"\n{chr(10).join(parts)}\n" if parts else ""
 
 
+def gate_values(context: dict[str, Any]) -> dict[str, str]:
+    """The pre-gate's `{profile}` and `{focus}` values: the working profile with its "Listen
+    especially for" / "Ignore" lines, never the voice block (wording is not relevance). A v1 gate
+    template ignores `{focus}`; with both lists empty v2 renders exactly what v1 does."""
+    return {"profile": render_profile(context), "focus": render_focus(context)}
+
+
 def persona_values(context: dict[str, Any]) -> dict[str, str]:
     """The `{profile}`, `{focus}` and `{voice}` template values. A v1 template only names
     `{profile}` (role / skills / bio, unchanged) and ignores the other two, so a tenant pinned
@@ -237,7 +246,7 @@ class PersonalListenerAgent(BaseAgent):
                 tier="triage",
                 system=self.gate_prompt.system,
                 user=self.gate_prompt.render_user(
-                    profile=render_profile(s.context), window=render_window(s.chunk, s.user_id)
+                    **gate_values(s.context), window=render_window(s.chunk, s.user_id)
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,
