@@ -1,11 +1,19 @@
 {
-  "about": "Targets resume_point@vN must reach on room_signals_golden.json: resume_open_accuracy, resume_topic_hit_rate (topic keywords and the reason), resume_cut_off_accuracy, quote_verbatim_rate and leak_free (both 1.0). Not measured yet: the coordinator's live run (EVAL_LIVE=1 EVAL_RECORD=1 uv run pytest -m eval tests/test_room_signals_eval.py -k live -s) records the answers and fills in the measured values; until then only the offline replay of the simulated recordings gates.",
-  "measured": false,
+  "about": "Targets resume_point@vN must reach on room_signals_golden.json: resume_open_accuracy, resume_topic_hit_rate (topic keywords and the reason), resume_cut_off_accuracy, quote_verbatim_rate and leak_free (both 1.0). Every min_ bound gates the offline replay and the live run alike (tests/test_room_signals_eval.py `_assert_baselines`); `measured` records only that the numbers below came from a live run.",
+  "measured": true,
   "prompt": "resume_point@v1",
   "golden_meetings": 5,
   "min_resume_open_accuracy": 0.8,
   "min_resume_topic_hit_rate": 0.75,
   "min_resume_cut_off_accuracy": 0.75,
   "min_quote_verbatim_rate": 1.0,
-  "min_leak_free": 1.0
+  "min_leak_free": 1.0,
+  "measured_on": "2026-11-11",
+  "last_live": {
+    "resume_open_accuracy": 1.0,
+    "resume_topic_hit_rate": 1.0,
+    "resume_cut_off_accuracy": 1.0,
+    "quote_verbatim_rate": 1.0,
+    "leak_free": 1.0
+  }
 }

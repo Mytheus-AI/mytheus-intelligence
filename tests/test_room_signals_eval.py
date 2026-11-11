@@ -8,7 +8,7 @@ Modes:
     uv run pytest -m eval tests/test_room_signals_eval.py
 
     # live (the coordinator's): real Haiku + Sonnet calls (about 7 calls); writes
-    # tests/eval/room_signals_last_run.json and asserts the baselines once they are `measured`
+    # tests/eval/room_signals_last_run.json and asserts every min_/max_ of the three baselines
     EVAL_LIVE=1 uv run pytest -m eval tests/test_room_signals_eval.py -k live -s
 
     # live + record: the answers replace the simulated recordings (`source: recorded`)
@@ -235,13 +235,29 @@ async def test_offline_replay_meets_the_gate() -> None:
 
 
 def _assert_baselines(m: dict[str, float]) -> None:
+    """Every `min_*` and `max_*` of the three baselines, always: `measured` only says whether the
+    numbers came from a live run, never whether they gate (a 0.333 topic hit rate passed the
+    live run on 2026-11-11 while this skipped unmeasured baselines)."""
+    failures: list[str] = []
     for name in BASELINES:
         baseline = json.loads((EVAL_DIR / f"{name}_baseline.json").read_text("utf-8"))
-        if not baseline.get("measured"):
-            continue
-        for key, floor in baseline.items():
-            if key.startswith("min_"):
-                assert m[key[4:]] >= floor, (name, key, m[key[4:]])
+        bounds = {k: v for k, v in baseline.items() if k.startswith(("min_", "max_"))}
+        assert bounds, f"{name}_baseline.json has no min_/max_ bounds"
+        for key, bound in bounds.items():
+            metric = key[4:]
+            assert metric in m, f"{name}: {key} names no metric the scorer reports"
+            if key.startswith("min_") and m[metric] < bound:
+                failures.append(f"{name}: {metric} {m[metric]:.3f} < {key} {bound}")
+            if key.startswith("max_") and m[metric] > bound:
+                failures.append(f"{name}: {metric} {m[metric]:.3f} > {key} {bound}")
+    assert not failures, "; ".join(failures)
+
+
+def test_the_gate_enforces_every_bound_measured_or_not() -> None:
+    passing = {k: 1.0 for k in kit.score([])}
+    _assert_baselines(passing)
+    with pytest.raises(AssertionError, match="topic_hit_rate 0.333"):
+        _assert_baselines({**passing, "topic_hit_rate": 1 / 3})
 
 
 # --- live (the coordinator runs it; never in CI) ----------------------------------------------

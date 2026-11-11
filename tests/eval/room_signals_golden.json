@@ -1,5 +1,5 @@
 {
-  "about": "Golden meetings for the room signals (a3): last_word@vN, consensus_read@vN, resume_point@vN. Times are seconds on the meeting clock; labels follow the order of first speaking. `simulated` holds the ideal model answers the simulated recordings replay; `expect` is what the whole reading must produce.",
+  "about": "Golden meetings for the room signals (a3): last_word@vN, consensus_read@vN, resume_point@vN. Times are seconds on the meeting clock; labels follow the order of first speaking. `simulated` holds the ideal model answers the simulated recordings replay; `expect` is what the whole reading must produce. Topic keywords are word stems where the subject has several word forms (\"pric\" accepts pricing, price and priced: \"the enterprise price rise\" and \"enterprise pricing\" name the same subject; the scorer checks the subject, not the exact word form).",
   "cases": [
     {
       "id": "pricing-cutoff",
@@ -181,7 +181,7 @@
             "who": "Participant 3",
             "kind": "cut_off",
             "keywords": [
-              "pricing"
+              "pric"
             ]
           },
           {

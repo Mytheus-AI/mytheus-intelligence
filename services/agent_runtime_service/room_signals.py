@@ -217,7 +217,12 @@ def render_signals(
         ]
         parts += [
             "",
-            f"S{n}. {labels.label(c.user_id)} {_WHAT[c.kind]} at [{rules.clock(at)}].",
+            (
+                f"S{n}. {labels.label(c.user_id)} {_WHAT[c.kind]}: the hand went up at "
+                f"[{rules.clock(at)}] and came down at [{rules.clock(end)}]."
+                if c.kind == "hand_not_called"
+                else f"S{n}. {labels.label(c.user_id)} {_WHAT[c.kind]} at [{rules.clock(at)}]."
+            ),
             f"Agenda item then: {item_title or '(unknown)'}",
             f"Their words then: {c.quote or '(none)'}",
             "Lines around it:",

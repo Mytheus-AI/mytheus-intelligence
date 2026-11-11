@@ -63,6 +63,7 @@ SIMULATED_REFS = frozenset(
         # a3 room signals: simulated from the golden cases' ideal answers
         # (tests/evalkit/room_signals.py) until the coordinator's live record run replaces them
         "last_word@v1",
+        "last_word@v2",
         "consensus_read@v1",
         "resume_point@v1",
         # A briefing from your agent (tests/test_briefing_eval.py): hand-written stand-ins for

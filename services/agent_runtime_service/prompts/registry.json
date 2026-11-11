@@ -19,7 +19,7 @@
     "minutes": "v1",
     "delegated_answer": "v1",
     "promise_extract": "v1",
-    "last_word": "v1",
+    "last_word": "v2",
     "consensus_read": "v1",
     "resume_point": "v1",
     "briefing": "v1",

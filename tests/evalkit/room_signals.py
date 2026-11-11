@@ -41,7 +41,7 @@ from tests.evalkit.corpus import EVAL_DIR, RECORDINGS_DIR
 
 GOLDEN = EVAL_DIR / "room_signals_golden.json"
 REFS = {
-    "last_word": "last_word@v1",
+    "last_word": "last_word@v2",
     "consensus_read": "consensus_read@v1",
     "resume_point": "resume_point@v1",
 }

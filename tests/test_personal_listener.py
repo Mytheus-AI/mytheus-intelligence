@@ -307,7 +307,7 @@ def test_the_shipped_prompts_are_registered_and_render():
         "minutes": "v1",  # minutes for everyone
         "delegated_answer": "v1",
         "promise_extract": "v1",  # promise ledger: the person's own messages
-        "last_word": "v1",
+        "last_word": "v2",
         "consensus_read": "v1",
         "resume_point": "v1",
         "briefing": "v1",  # a briefing from your agent

@@ -695,7 +695,7 @@ async def test_the_whole_reading() -> None:
     validate(p)
     assert p["status"] == "ready" and p["generation"] == "gen1"
     assert p["prompt_versions"] == {
-        "last_word": "last_word@v1",
+        "last_word": "last_word@v2",
         "consensus": "consensus_read@v1",
         "resume_point": "resume_point@v1",
     }
