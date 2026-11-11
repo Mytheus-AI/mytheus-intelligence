@@ -306,6 +306,9 @@ def test_the_shipped_prompts_are_registered_and_render():
         "proactive_topic_watch": "v2",
         "minutes": "v1",  # minutes for everyone
         "delegated_answer": "v1",
+        "decision_assumptions": "v1",  # decisions that know why
+        "decision_ripple": "v1",
+        "assumption_check": "v1",
     }
 
 

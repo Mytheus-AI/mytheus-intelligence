@@ -104,6 +104,10 @@ PROMPT_AGENTS: dict[str, str] = {
     "meeting_agent": "MeetingAgent",
     "minutes": "MinutesAgent",
     "never_record_check": "NeverRecordGuard",
+    # "Decisions that know why" (decision_why.py): ProactiveAgent records
+    "decision_assumptions": "ProactiveAgent",
+    "decision_ripple": "ProactiveAgent",
+    "assumption_check": "ProactiveAgent",
 }
 
 # How each prompt answers, for the parse check. ("number", key): a JSON object with a number
@@ -126,6 +130,9 @@ OUTPUT_FORMATS: dict[str, tuple[str, str]] = {
     "proactive_already_decided_gate": ("number", "score"),
     "proactive_already_decided": ("list", "matches"),
     "proactive_topic_watch": ("list", "topics"),
+    "decision_assumptions": ("list", "assumptions"),
+    "decision_ripple": ("list", "actions"),
+    "assumption_check": ("list", "breaks"),
 }
 
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*[0-9]*\.?[0-9]+\s*$", re.IGNORECASE)
