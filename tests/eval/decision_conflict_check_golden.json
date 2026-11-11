@@ -1,0 +1,290 @@
+{
+  "about": "Golden set for the decision-conflict check (decision_conflict_check@vN, rag-service). One piece of writing per case, the confirmed decisions retrieval would put in front of the judge, and which of them (1-based) the writing contradicts or reopens, or null. Categories: contradicts and reopens are positives; supports (agrees with the decision), related (same topic, compatible or different scope) and unrelated are negatives. A false alarm interrupts someone at work, so the false positive rate is the headline gate.",
+  "cases": [
+    {
+      "id": "c01-discount",
+      "category": "contradicts",
+      "source": "extension",
+      "place": "Gmail",
+      "text": "Hi, thanks for the call today. We can do 30% off the annual plan if you sign by Friday, no need to loop anyone else in.",
+      "candidates": [
+        [
+          "No discounts above 20% without finance sign-off.",
+          "Pricing review",
+          "2026-10-03"
+        ],
+        [
+          "Annual plans are billed upfront.",
+          "Pricing review",
+          "2026-10-03"
+        ]
+      ],
+      "expected": 1,
+      "relation": "contradicts"
+    },
+    {
+      "id": "c02-launch-date",
+      "category": "contradicts",
+      "source": "slack",
+      "place": "#launch",
+      "text": "Reminder for everyone: annual billing goes live on 1 November, so the help center articles need to be ready by then.",
+      "candidates": [
+        [
+          "Annual billing launches on 15 November, not 1 November.",
+          "Launch planning",
+          "2026-10-10"
+        ],
+        [
+          "Help center articles are owned by support.",
+          "Launch planning",
+          "2026-10-10"
+        ]
+      ],
+      "expected": 1,
+      "relation": "contradicts"
+    },
+    {
+      "id": "c03-database",
+      "category": "contradicts",
+      "source": "extension",
+      "place": "Jira",
+      "text": "Set up a MySQL cluster for the new events store and migrate the ingestion writer to it this sprint.",
+      "candidates": [
+        [
+          "Use Postgres for the events store; no new database engines.",
+          "Infra sync",
+          "2026-09-22"
+        ],
+        [
+          "Ingestion runs on the shared worker pool.",
+          "Infra sync",
+          "2026-09-22"
+        ]
+      ],
+      "expected": 1,
+      "relation": "contradicts"
+    },
+    {
+      "id": "c04-free-tier",
+      "category": "contradicts",
+      "source": "mcp",
+      "place": "Claude",
+      "text": "Draft announcement: starting next month the free tier is going away and every workspace moves to a 14 day trial.",
+      "candidates": [
+        [
+          "Keep the free tier for workspaces under 5 seats.",
+          "Pricing review",
+          "2026-10-03"
+        ],
+        [
+          "Trials last 14 days.",
+          "Pricing review",
+          "2026-10-03"
+        ]
+      ],
+      "expected": 1,
+      "relation": "contradicts"
+    },
+    {
+      "id": "r01-annual",
+      "category": "reopens",
+      "source": "slack",
+      "place": "#pricing",
+      "text": "Honestly I'm still not convinced annual billing is the right move. Can we revisit it before we commit?",
+      "candidates": [
+        [
+          "Move all new customers to annual billing from Q1.",
+          "Pricing review",
+          "2026-10-03"
+        ],
+        [
+          "Monthly plans stay available for existing customers.",
+          "Pricing review",
+          "2026-10-03"
+        ]
+      ],
+      "expected": 1,
+      "relation": "reopens"
+    },
+    {
+      "id": "r02-hiring",
+      "category": "reopens",
+      "source": "extension",
+      "place": "Google Docs",
+      "text": "Open question for leadership: should we hire the second designer in Q1 after all, given the roadmap?",
+      "candidates": [
+        [
+          "Hiring freeze on design roles until Q2.",
+          "Hiring sync",
+          "2026-09-30"
+        ],
+        [
+          "Recruiting budget is reviewed monthly.",
+          "Hiring sync",
+          "2026-09-30"
+        ]
+      ],
+      "expected": 1,
+      "relation": "reopens"
+    },
+    {
+      "id": "r03-sso",
+      "category": "reopens",
+      "source": "slack",
+      "place": "#security",
+      "text": "I think we should reconsider requiring SSO for every enterprise workspace, it is slowing down onboarding a lot.",
+      "candidates": [
+        [
+          "SSO is mandatory for all enterprise workspaces.",
+          "Security review",
+          "2026-08-14"
+        ],
+        [
+          "Audit logs are kept for one year.",
+          "Security review",
+          "2026-08-14"
+        ]
+      ],
+      "expected": 1,
+      "relation": "reopens"
+    },
+    {
+      "id": "s01-discount-ok",
+      "category": "supports",
+      "source": "extension",
+      "place": "Gmail",
+      "text": "We can offer 15% off the annual plan. Anything beyond that needs a quick sign-off from finance, which I'll get.",
+      "candidates": [
+        [
+          "No discounts above 20% without finance sign-off.",
+          "Pricing review",
+          "2026-10-03"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    },
+    {
+      "id": "s02-launch",
+      "category": "supports",
+      "source": "slack",
+      "place": "#launch",
+      "text": "Confirming the plan: annual billing launches on 15 November. Marketing email goes out the same morning.",
+      "candidates": [
+        [
+          "Annual billing launches on 15 November, not 1 November.",
+          "Launch planning",
+          "2026-10-10"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    },
+    {
+      "id": "s03-postgres",
+      "category": "supports",
+      "source": "extension",
+      "place": "Jira",
+      "text": "Add a partitioned table to the Postgres events store for the new audit stream.",
+      "candidates": [
+        [
+          "Use Postgres for the events store; no new database engines.",
+          "Infra sync",
+          "2026-09-22"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    },
+    {
+      "id": "x01-related-pricing",
+      "category": "related",
+      "source": "slack",
+      "place": "#pricing",
+      "text": "Has anyone looked at how competitors price their enterprise add-ons? Curious for the next review.",
+      "candidates": [
+        [
+          "No discounts above 20% without finance sign-off.",
+          "Pricing review",
+          "2026-10-03"
+        ],
+        [
+          "Move all new customers to annual billing from Q1.",
+          "Pricing review",
+          "2026-10-03"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    },
+    {
+      "id": "x02-other-scope",
+      "category": "related",
+      "source": "extension",
+      "place": "Google Docs",
+      "text": "For the internal analytics prototype we'll try DuckDB locally on laptops; nothing ships to production.",
+      "candidates": [
+        [
+          "Use Postgres for the events store; no new database engines.",
+          "Infra sync",
+          "2026-09-22"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    },
+    {
+      "id": "x03-trial",
+      "category": "related",
+      "source": "mcp",
+      "place": "Claude",
+      "text": "Write a friendly onboarding email for teams on the free tier that explains how to invite colleagues.",
+      "candidates": [
+        [
+          "Keep the free tier for workspaces under 5 seats.",
+          "Pricing review",
+          "2026-10-03"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    },
+    {
+      "id": "u01-lunch",
+      "category": "unrelated",
+      "source": "slack",
+      "place": "#random",
+      "text": "Team lunch is moving to Thursday this week because half of us are travelling on Wednesday.",
+      "candidates": [
+        [
+          "Annual billing launches on 15 November, not 1 November.",
+          "Launch planning",
+          "2026-10-10"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    },
+    {
+      "id": "u02-bug",
+      "category": "unrelated",
+      "source": "extension",
+      "place": "Jira",
+      "text": "The export button on the reports page throws a 500 when the date range is empty. Steps to reproduce below.",
+      "candidates": [
+        [
+          "SSO is mandatory for all enterprise workspaces.",
+          "Security review",
+          "2026-08-14"
+        ],
+        [
+          "Audit logs are kept for one year.",
+          "Security review",
+          "2026-08-14"
+        ]
+      ],
+      "expected": null,
+      "relation": null
+    }
+  ]
+}

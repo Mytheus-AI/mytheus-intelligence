@@ -306,6 +306,16 @@ def test_the_shipped_prompts_are_registered_and_render():
         "proactive_topic_watch": "v2",
         "minutes": "v1",  # minutes for everyone
         "delegated_answer": "v1",
+        "promise_extract": "v1",  # promise ledger: the person's own messages
+        "last_word": "v2",
+        "consensus_read": "v1",
+        "resume_point": "v1",
+        "briefing": "v1",  # a briefing from your agent
+        "decision_assumptions": "v1",  # decisions that know why
+        "decision_ripple": "v1",
+        "assumption_check": "v1",
+        "interrupt_gate": "v1",  # the live watch ("in every meeting at once")
+        "decision_bet": "v1",  # decisions as bets
     }
 
 

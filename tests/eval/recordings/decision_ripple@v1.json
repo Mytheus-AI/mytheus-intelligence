@@ -1,0 +1,17 @@
+{
+  "prompt": "decision_ripple@v1",
+  "prompt_sha256": "009e236f25f1c76b288fbaa6bd4645f86f53f83f5a7efbfb333c71d8bb8389cf",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "r-01": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"Moving observability to a vendor that is 40% cheaper directly lowers infrastructure spend.\", \"confidence\": 0.8}], \"actions\": [{\"action\": \"A1\", \"effect\": \"changes\", \"why\": \"Checkout tracing must now target Vendor B instead of Vendor A, so the integration work changes.\", \"confidence\": 0.85}, {\"action\": \"A3\", \"effect\": \"blocks\", \"why\": \"Switching away from Vendor A makes renewing its 2027 contract pointless unless the switch is reversed.\", \"confidence\": 0.85}]}",
+    "r-02": "{\"goals\":[{\"goal\":\"G2\",\"effect\":\"advances\",\"why\":\"Freezing new SaaS purchases cuts spend, which supports the aim of reducing costs this year.\",\"confidence\":0.5}],\"actions\":[{\"action\":\"A1\",\"effect\":\"blocks\",\"why\":\"Buying a Figma enterprise seat pack is a new SaaS purchase, which the freeze prohibits until January.\",\"confidence\":0.9}]}",
+    "r-03": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"Choosing a payments provider unblocks building self-serve billing, which needs a payment processor to launch.\", \"confidence\": 0.65}], \"actions\": [{\"action\": \"A1\", \"effect\": \"unblocks\", \"why\": \"The contract task was waiting for the provider choice, which is now Stripe.\", \"confidence\": 0.95}]}",
+    "r-04": "{\"goals\": [], \"actions\": []}",
+    "r-05": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"risks\", \"why\": \"Delaying EU data residency launch to June removes a capability EU enterprise customers may need before the May deadline.\", \"confidence\": 0.6}], \"actions\": [{\"action\": \"A1\", \"effect\": \"changes\", \"why\": \"The EU region go-live date to confirm with the customer moves to June because of the launch delay.\", \"confidence\": 0.85}]}",
+    "r-06": "{\"goals\": [], \"actions\": []}",
+    "r-07": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"Dropping IE11 support removes a class of browser-specific frontend bugs, shrinking the backlog to be halved.\", \"confidence\": 0.5}], \"actions\": [{\"action\": \"A1\", \"effect\": \"blocks\", \"why\": \"With IE11 support ending in January, fixing an IE11-only layout bug becomes largely pointless.\", \"confidence\": 0.65}, {\"action\": \"A2\", \"effect\": \"unblocks\", \"why\": \"The task was waiting on whether IE11 stays supported, and the decision settles it: support ends in January.\", \"confidence\": 0.9}]}",
+    "r-08": "{\"goals\": [], \"actions\": []}",
+    "r-09": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"A second on-call payments engineer adds incident-response capacity, directly supporting the payments uptime target.\", \"confidence\": 0.7}], \"actions\": [{\"action\": \"A1\", \"effect\": \"changes\", \"why\": \"The December payments on-call rota must account for a second on-call engineer if they are hired in time.\", \"confidence\": 0.55}]}"
+  }
+}

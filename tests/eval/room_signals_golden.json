@@ -1,0 +1,774 @@
+{
+  "about": "Golden meetings for the room signals (a3): last_word@vN, consensus_read@vN, resume_point@vN. Times are seconds on the meeting clock; labels follow the order of first speaking. `simulated` holds the ideal model answers the simulated recordings replay; `expect` is what the whole reading must produce. Topic keywords are word stems where the subject has several word forms (\"pric\" accepts pricing, price and priced: \"the enterprise price rise\" and \"enterprise pricing\" name the same subject; the scorer checks the subject, not the exact word form).",
+  "cases": [
+    {
+      "id": "pricing-cutoff",
+      "about": "Raj is cut off on pricing and again on the migration risk at the end; the price rise is agreed by two of four; Lee listens for pricing and says nothing.",
+      "scheduled_minutes": 30,
+      "call_seconds": 303,
+      "participants": [
+        {
+          "label": "Participant 1",
+          "role": "host"
+        },
+        {
+          "label": "Participant 2"
+        },
+        {
+          "label": "Participant 3",
+          "listen_for": [
+            "migration"
+          ]
+        },
+        {
+          "label": "Participant 4",
+          "listen_for": [
+            "pricing",
+            "hiring"
+          ]
+        },
+        {
+          "label": "Participant 5",
+          "attendance": "agent",
+          "listen_for": [
+            "pricing"
+          ]
+        }
+      ],
+      "transcript": [
+        [
+          "Participant 1",
+          0,
+          4,
+          "Let's start with pricing for the enterprise tier."
+        ],
+        [
+          "Participant 2",
+          5,
+          12,
+          "I think we should raise enterprise pricing by ten percent."
+        ],
+        [
+          "Participant 3",
+          13,
+          15,
+          "I just want to say"
+        ],
+        [
+          "Participant 1",
+          15.2,
+          19,
+          "Great, so we raise pricing by ten percent then."
+        ],
+        [
+          "Participant 2",
+          20,
+          22,
+          "Yes, agreed."
+        ],
+        [
+          "Participant 2",
+          250,
+          256,
+          "We should move the billing tables first and freeze writes for a day."
+        ],
+        [
+          "Participant 1",
+          265,
+          270,
+          "I'd rather run both systems in parallel for a week."
+        ],
+        [
+          "Participant 3",
+          280,
+          283.5,
+          "The migration risk is that the old billing tables"
+        ],
+        [
+          "Participant 1",
+          284,
+          288,
+          "Sorry, we're out of time, let's pick this up next week."
+        ],
+        [
+          "Participant 4",
+          300,
+          302,
+          "Thanks everyone, bye."
+        ]
+      ],
+      "decisions": [
+        {
+          "content": "Raise enterprise pricing by ten percent",
+          "owner": "Participant 1",
+          "at": 15.2,
+          "end": 19,
+          "quote": "so we raise pricing by ten percent"
+        }
+      ],
+      "agenda": [
+        {
+          "title": "Enterprise pricing",
+          "status": "covered",
+          "started": 0,
+          "ended": 240
+        },
+        {
+          "title": "Migration plan",
+          "status": "in_progress",
+          "started": 240,
+          "ended": null
+        }
+      ],
+      "room_signals": [],
+      "never_record": [],
+      "simulated": {
+        "last_word": {
+          "signals": [
+            {
+              "ref": "S1",
+              "topic": "pricing for the enterprise tier",
+              "keep": true
+            },
+            {
+              "ref": "S2",
+              "topic": "the migration risk",
+              "keep": true
+            }
+          ]
+        },
+        "consensus_read": {
+          "stances": [
+            {
+              "participant": "Participant 1",
+              "stance": "clear_yes",
+              "quote": "so we raise pricing by ten percent then"
+            },
+            {
+              "participant": "Participant 2",
+              "stance": "clear_yes",
+              "quote": "Yes, agreed."
+            },
+            {
+              "participant": "Participant 3",
+              "stance": "no_stance",
+              "quote": null
+            }
+          ]
+        },
+        "resume_point": {
+          "open": true,
+          "topic": "the migration risk",
+          "positions": [
+            {
+              "participant": "Participant 2",
+              "quote": "move the billing tables first and freeze writes for a day"
+            },
+            {
+              "participant": "Participant 1",
+              "quote": "run both systems in parallel for a week"
+            }
+          ],
+          "cut_off": {
+            "participant": "Participant 3",
+            "quote": "The migration risk is that the old billing tables"
+          }
+        }
+      },
+      "expect": {
+        "nudges": [
+          {
+            "who": "Participant 3",
+            "kind": "cut_off",
+            "keywords": [
+              "pric"
+            ]
+          },
+          {
+            "who": "Participant 4",
+            "kind": "topic_silent",
+            "keywords": [
+              "pricing"
+            ]
+          }
+        ],
+        "consensus": [
+          {
+            "strength": "weak",
+            "counts": {
+              "yes": 2,
+              "hedged": 0,
+              "silent": 1,
+              "objected": 0,
+              "talked_over": 1
+            },
+            "ask": {
+              "Participant 3": "talked_over",
+              "Participant 4": "silent"
+            }
+          }
+        ],
+        "resume": {
+          "open": true,
+          "reason": "cut_off",
+          "keywords": [
+            "migration"
+          ],
+          "cut_off": "Participant 3"
+        },
+        "forbidden": []
+      }
+    },
+    {
+      "id": "beta-hedge",
+      "about": "Two of four hedge on the beta date; Participant 3 raised a hand that nobody called on.",
+      "scheduled_minutes": 30,
+      "call_seconds": 46,
+      "participants": [
+        {
+          "label": "Participant 1",
+          "role": "host"
+        },
+        {
+          "label": "Participant 2"
+        },
+        {
+          "label": "Participant 3"
+        },
+        {
+          "label": "Participant 4"
+        }
+      ],
+      "transcript": [
+        [
+          "Participant 1",
+          0,
+          5,
+          "Okay, the beta. Let's ship the beta on December second."
+        ],
+        [
+          "Participant 2",
+          6,
+          9,
+          "Sure, I guess that works."
+        ],
+        [
+          "Participant 3",
+          10,
+          14,
+          "I can live with it if QA signs off in time."
+        ],
+        [
+          "Participant 4",
+          15,
+          18,
+          "Yes, absolutely, let's do it."
+        ],
+        [
+          "Participant 1",
+          19,
+          24,
+          "Great, December second it is. Next, the launch email."
+        ],
+        [
+          "Participant 2",
+          25,
+          40,
+          "I'll draft the launch email and send it to marketing by Friday for review."
+        ],
+        [
+          "Participant 1",
+          41,
+          46,
+          "Perfect, thanks everyone, that's all for today."
+        ]
+      ],
+      "decisions": [
+        {
+          "content": "Ship the beta on December 2",
+          "owner": "Participant 1",
+          "at": 0,
+          "end": 5,
+          "quote": "Let's ship the beta on December second"
+        }
+      ],
+      "agenda": [
+        {
+          "title": "Beta date",
+          "status": "covered",
+          "started": 0,
+          "ended": 19
+        },
+        {
+          "title": "Launch email",
+          "status": "covered",
+          "started": 19,
+          "ended": null
+        }
+      ],
+      "room_signals": [
+        {
+          "kind": "hand_not_called",
+          "who": "Participant 3",
+          "at": 20,
+          "end": 46,
+          "detail": {
+            "outcome": "still_raised_at_end",
+            "waited_ms": 26000
+          }
+        }
+      ],
+      "never_record": [],
+      "simulated": {
+        "last_word": {
+          "signals": [
+            {
+              "ref": "S1",
+              "topic": "the launch email",
+              "keep": true
+            }
+          ]
+        },
+        "consensus_read": {
+          "stances": [
+            {
+              "participant": "Participant 1",
+              "stance": "clear_yes",
+              "quote": "Let's ship the beta on December second."
+            },
+            {
+              "participant": "Participant 2",
+              "stance": "hedged",
+              "quote": "Sure, I guess that works."
+            },
+            {
+              "participant": "Participant 3",
+              "stance": "hedged",
+              "quote": "I can live with it if QA signs off in time."
+            },
+            {
+              "participant": "Participant 4",
+              "stance": "clear_yes",
+              "quote": "Yes, absolutely, let's do it."
+            }
+          ]
+        }
+      },
+      "expect": {
+        "nudges": [
+          {
+            "who": "Participant 3",
+            "kind": "hand_not_called",
+            "keywords": [
+              "launch|email"
+            ]
+          }
+        ],
+        "consensus": [
+          {
+            "strength": "mixed",
+            "counts": {
+              "yes": 2,
+              "hedged": 2,
+              "silent": 0,
+              "objected": 0,
+              "talked_over": 0
+            },
+            "ask": {
+              "Participant 2": "hedged",
+              "Participant 3": "hedged"
+            }
+          }
+        ],
+        "resume": {
+          "open": false
+        },
+        "forbidden": []
+      }
+    },
+    {
+      "id": "hiring-ran-out",
+      "about": "Everyone clearly agrees on two hires; a talked-over attempt is made up for right after; time runs out mid-argument on the interview loop.",
+      "scheduled_minutes": 30,
+      "call_seconds": 1820,
+      "participants": [
+        {
+          "label": "Participant 1",
+          "role": "host"
+        },
+        {
+          "label": "Participant 2"
+        },
+        {
+          "label": "Participant 3"
+        }
+      ],
+      "transcript": [
+        [
+          "Participant 1",
+          0,
+          5,
+          "Today is about the hiring plan for next quarter."
+        ],
+        [
+          "Participant 2",
+          6,
+          10,
+          "We need two backend engineers before March."
+        ],
+        [
+          "Participant 1",
+          11,
+          14,
+          "Agreed, two backend hires it is."
+        ],
+        [
+          "Participant 3",
+          15,
+          17,
+          "Yes, makes sense to me."
+        ],
+        [
+          "Participant 2",
+          18,
+          20,
+          "Agreed, let's open both roles."
+        ],
+        [
+          "Participant 1",
+          595,
+          610,
+          "Let me walk you through the budget for the contractor roles."
+        ],
+        [
+          "Participant 3",
+          612,
+          640,
+          "What I wanted to add is that the contractor budget should come out of the platform line, not the product line, because platform owns the work."
+        ],
+        [
+          "Participant 1",
+          1700,
+          1745,
+          "On the interview loop, I think we keep four rounds because the system design round catches most of the weak candidates early."
+        ],
+        [
+          "Participant 2",
+          1750,
+          1795,
+          "I disagree, four rounds is too slow, we lose good people to faster offers, and three rounds with a take-home exercise would be better for everyone involved."
+        ],
+        [
+          "Participant 1",
+          1798,
+          1815,
+          "We're at time, so let's pick up the interview loop question again next week."
+        ]
+      ],
+      "decisions": [
+        {
+          "content": "Hire two backend engineers before March",
+          "owner": "Participant 1",
+          "at": 11,
+          "end": 14,
+          "quote": "two backend hires it is"
+        }
+      ],
+      "agenda": [],
+      "room_signals": [
+        {
+          "kind": "spoken_over",
+          "who": "Participant 3",
+          "at": 600,
+          "end": 601.5,
+          "detail": {
+            "over_user_id": null,
+            "spoke_ms": 1500
+          }
+        }
+      ],
+      "never_record": [],
+      "simulated": {
+        "consensus_read": {
+          "stances": [
+            {
+              "participant": "Participant 1",
+              "stance": "clear_yes",
+              "quote": "Agreed, two backend hires it is."
+            },
+            {
+              "participant": "Participant 2",
+              "stance": "clear_yes",
+              "quote": "Agreed, let's open both roles."
+            },
+            {
+              "participant": "Participant 3",
+              "stance": "clear_yes",
+              "quote": "Yes, makes sense to me."
+            }
+          ]
+        },
+        "resume_point": {
+          "open": true,
+          "topic": "the interview loop",
+          "positions": [
+            {
+              "participant": "Participant 1",
+              "quote": "I think we keep four rounds"
+            },
+            {
+              "participant": "Participant 2",
+              "quote": "three rounds with a take-home exercise would be better"
+            }
+          ],
+          "cut_off": null
+        }
+      },
+      "expect": {
+        "nudges": [],
+        "consensus": [
+          {
+            "strength": "strong",
+            "counts": {
+              "yes": 3,
+              "hedged": 0,
+              "silent": 0,
+              "objected": 0,
+              "talked_over": 0
+            },
+            "ask": {}
+          }
+        ],
+        "resume": {
+          "open": true,
+          "reason": "time_ran_out",
+          "keywords": [
+            "interview"
+          ],
+          "cut_off": null
+        },
+        "forbidden": []
+      }
+    },
+    {
+      "id": "vendor-objection",
+      "about": "An objection and a hedge on the vendor; a never-record topic (layoffs) is said in between and must leave no trace.",
+      "scheduled_minutes": 30,
+      "call_seconds": 210,
+      "participants": [
+        {
+          "label": "Participant 1",
+          "role": "host"
+        },
+        {
+          "label": "Participant 2",
+          "listen_for": [
+            "layoffs"
+          ]
+        },
+        {
+          "label": "Participant 3",
+          "listen_for": [
+            "vendor"
+          ]
+        }
+      ],
+      "transcript": [
+        [
+          "Participant 1",
+          0,
+          5,
+          "Proposal: we go with Vendor A for the data warehouse."
+        ],
+        [
+          "Participant 2",
+          6,
+          9,
+          "Okay, I suppose."
+        ],
+        [
+          "Participant 3",
+          10,
+          18,
+          "I don't agree, the Vendor A contract locks us in for three years and that is too risky."
+        ],
+        [
+          "Participant 1",
+          19,
+          24,
+          "Noted, but we'll go with Vendor A anyway and revisit next year."
+        ],
+        [
+          "Participant 2",
+          100,
+          104,
+          "On another note, the layoffs in sales are planned for March."
+        ],
+        [
+          "Participant 3",
+          130,
+          134,
+          "Those cuts will hit the sales team hardest."
+        ],
+        [
+          "Participant 1",
+          200,
+          205,
+          "Let's stop there. Thanks all, see you next week."
+        ]
+      ],
+      "decisions": [
+        {
+          "content": "Go with Vendor A for the data warehouse",
+          "owner": "Participant 1",
+          "at": 19,
+          "end": 24,
+          "quote": "we'll go with Vendor A anyway"
+        }
+      ],
+      "agenda": [
+        {
+          "title": "Vendor choice",
+          "status": "covered",
+          "started": 0,
+          "ended": 100
+        },
+        {
+          "title": "Headcount",
+          "status": "pending",
+          "started": null,
+          "ended": null
+        }
+      ],
+      "room_signals": [],
+      "never_record": [
+        "layoffs"
+      ],
+      "simulated": {
+        "consensus_read": {
+          "stances": [
+            {
+              "participant": "Participant 1",
+              "stance": "clear_yes",
+              "quote": "we'll go with Vendor A anyway"
+            },
+            {
+              "participant": "Participant 2",
+              "stance": "hedged",
+              "quote": "Okay, I suppose."
+            },
+            {
+              "participant": "Participant 3",
+              "stance": "objected",
+              "quote": "I don't agree, the Vendor A contract locks us in for three years and that is too risky."
+            }
+          ]
+        }
+      },
+      "expect": {
+        "nudges": [],
+        "consensus": [
+          {
+            "strength": "weak",
+            "counts": {
+              "yes": 1,
+              "hedged": 1,
+              "silent": 0,
+              "objected": 1,
+              "talked_over": 0
+            },
+            "ask": {
+              "Participant 2": "hedged"
+            }
+          }
+        ],
+        "resume": {
+          "open": false
+        },
+        "forbidden": [
+          "layoffs",
+          "cuts will hit"
+        ]
+      }
+    },
+    {
+      "id": "wrapped-up",
+      "about": "The meeting runs to its scheduled end but wraps up cleanly: no thread is open. Participant 3 listens for release notes and does speak to them.",
+      "scheduled_minutes": 15,
+      "call_seconds": 905,
+      "participants": [
+        {
+          "label": "Participant 1",
+          "role": "host"
+        },
+        {
+          "label": "Participant 2"
+        },
+        {
+          "label": "Participant 3",
+          "listen_for": [
+            "release notes"
+          ]
+        }
+      ],
+      "transcript": [
+        [
+          "Participant 1",
+          0,
+          5,
+          "Quick sync on the Q1 launch checklist."
+        ],
+        [
+          "Participant 2",
+          6,
+          12,
+          "Docs are done and the release notes are in review."
+        ],
+        [
+          "Participant 1",
+          800,
+          830,
+          "So to wrap up: docs are done, release notes go out Tuesday, and Sam owns the announcement, everyone clear on their part?"
+        ],
+        [
+          "Participant 2",
+          832,
+          850,
+          "Yes, clear, I will send the release notes on Tuesday morning after the final review with legal and the product team."
+        ],
+        [
+          "Participant 3",
+          852,
+          870,
+          "Clear for me too, I have the checklist and will update the tracker tonight so everyone can see the status."
+        ],
+        [
+          "Participant 1",
+          872,
+          880,
+          "Great, thanks everyone, bye."
+        ]
+      ],
+      "decisions": [],
+      "agenda": [],
+      "room_signals": [],
+      "never_record": [],
+      "simulated": {
+        "resume_point": {
+          "open": false,
+          "topic": null,
+          "positions": [],
+          "cut_off": null
+        }
+      },
+      "expect": {
+        "nudges": [],
+        "consensus": [],
+        "resume": {
+          "open": false
+        },
+        "forbidden": []
+      }
+    }
+  ]
+}

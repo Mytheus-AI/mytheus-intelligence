@@ -51,11 +51,52 @@
     "leaks": {"max": 0},
     "outright_skip_rate": {"min": 1.0}
   },
+  "decision_assumptions": {
+    "precision": {"min": 0.85},
+    "recall": {"min": 0.8},
+    "f1": {"min": 0.82},
+    "negative_fp_rate": {"max": 0.1},
+    "speaker_accuracy": {"min": 0.85},
+    "watch_accuracy": {"min": 0.8},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "decision_ripple": {
+    "precision": {"min": 0.85},
+    "recall": {"min": 0.8},
+    "f1": {"min": 0.82},
+    "false_positive_rate": {"max": 0.1},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "assumption_check": {
+    "precision": {"min": 0.9},
+    "recall": {"min": 0.9},
+    "false_positive_rate": {"max": 0.1},
+    "parse_failure_rate": {"max": 0.02}
+  },
   "judge": {
     "faithfulness": {"min": 4.0},
     "coverage": {"min": 3.5},
     "attribution": {"min": 3.5},
     "ground_rules": {"min": 4.8},
     "overall": {"min": 3.8}
+  },
+  "promise_extract": {
+    "precision": {"min": 0.9},
+    "recall": {"min": 0.85},
+    "false_promise_rate": {"max": 0.1},
+    "due_date_accuracy": {"min": 0.85},
+    "recipient_accuracy": {"min": 0.85},
+    "never_record_leak": {"max": 0.0},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "briefing": {
+    "coverage": {"min": 0.85},
+    "link_accuracy": {"min": 0.85},
+    "length_ok": {"min": 0.75},
+    "greets_by_name": {"min": 1.0},
+    "order_ok": {"min": 0.75},
+    "spoken_style": {"min": 0.9},
+    "leak_free": {"min": 1.0},
+    "parse_failure_rate": {"max": 0.0}
   }
 }

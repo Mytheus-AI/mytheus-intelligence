@@ -1,0 +1,21 @@
+{
+  "prompt": "interrupt_gate@v1",
+  "prompt_sha256": "7349a5d2c050f6e0df16353cdc1b493af8fb8443669c6679c94c296138eef4bb",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "birthday": "{\"interrupt\": false}",
+    "competitor-pricing-logo": "{\"interrupt\": false}",
+    "cutover-date-moved": "{\"interrupt\": true, \"reason\": \"decision\", \"confidence\": 0.93, \"headline\": \"The billing migration cutover date has been moved to the 14th\", \"detail\": \"The group has decided to move the billing migration cutover to the 14th, and Participant 2 is updating the calendar, which affects your cutover plan.\", \"topic\": \"Billing migration cutover date\", \"quote\": \"Participant 1: The billing migration cutover moves to the 14th. Participant 2: Yes, decided, I'll update the calendar.\"}",
+    "deck-mention": "{\"interrupt\": false}",
+    "migration-status-answered": "{\"interrupt\": false}",
+    "platform-on-call-promise": "{\"interrupt\": true, \"reason\": \"promise\", \"confidence\": 0.85, \"headline\": \"Your Platform team is being signed up for weekend on-call\", \"detail\": \"Participant 1 has agreed that your Platform team will take the weekend on-call rotation starting Monday, and says they will inform them afterwards.\", \"topic\": \"Weekend on-call rotation\", \"quote\": \"Participant 2: Put Platform down for the weekend on-call rotation starting Monday. Participant 1: Yes, they'll do it, I'll let them know after.\"}",
+    "platform-status-praise": "{\"interrupt\": false}",
+    "platform-take-sso-bug": "{\"interrupt\": true, \"reason\": \"question\", \"confidence\": 0.9, \"headline\": \"Someone is asking whether your Platform team can take the SSO bug this sprint\", \"detail\": \"Participant 1 asked if Platform can take the SSO bug this sprint, and Participant 2 confirmed nobody in the room can answer for your team.\", \"topic\": \"SSO bug sprint capacity\", \"quote\": \"Can the Platform team take the SSO bug this sprint? Nobody here can say, they'd have to answer.\"}",
+    "pricing-brainstorm": "{\"interrupt\": false}",
+    "priya-signed-up-runbook": "{\"interrupt\": true, \"reason\": \"promise\", \"confidence\": 0.9, \"headline\": \"Your migration runbook has been promised for Friday\", \"detail\": \"Participant 1 has committed you to having the migration runbook done by Friday, and Participant 2 is recording it in the notes as yours.\", \"topic\": \"Billing migration runbook\", \"quote\": \"[the absent person] will have the migration runbook done by Friday.\"}",
+    "retention-question-for-her": "{\"interrupt\": true, \"reason\": \"question\", \"confidence\": 0.9, \"headline\": \"Your answer is being asked on whether retention drops to 30 days\", \"detail\": \"Participant 1 is asking whether data retention can drop to 30 days and wants your answer before the group closes it; Participant 2 says it is your call.\", \"topic\": \"Data retention\", \"quote\": \"Can retention drop to 30 days? We need [the absent person]'s answer before we close this.\"}",
+    "retention-settled": "{\"interrupt\": true, \"reason\": \"decision\", \"confidence\": 0.85, \"headline\": \"Data retention has been set to 90 days for logs\", \"detail\": \"The group has agreed to keep logs for 90 days rather than a year, which is one of the topics you asked to hear about.\", \"topic\": \"Log retention period\", \"quote\": \"Participant 2: So on data retention we keep logs for 90 days, not a year. Participant 1: Agreed, that's the call. Done.\"}",
+    "starter-price-decided": "{\"interrupt\": true, \"reason\": \"decision\", \"confidence\": 0.85, \"headline\": \"Starter plan pricing is being locked at twenty dollars per seat\", \"detail\": \"The group has agreed and finalized the starter plan at twenty dollars per seat today, which touches your listened-for pricing topic.\", \"topic\": \"Starter plan pricing\", \"quote\": \"Participant 1: Okay, for the starter plan pricing, twenty dollars per seat. Participant 2: Agreed, that's final, we lock it today.\"}"
+  }
+}

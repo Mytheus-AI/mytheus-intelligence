@@ -1,0 +1,10 @@
+{
+  "prompt": "last_word@v2",
+  "prompt_sha256": "a02ab23eff2d60c60404631b90d03c62939e5ee2d90a6c75ce507c7a34e4dc42",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "beta-hedge": "{\"signals\": [{\"ref\": \"S1\", \"topic\": \"the launch email\", \"keep\": true}]}",
+    "pricing-cutoff": "{\"signals\": [{\"ref\": \"S1\", \"topic\": \"enterprise pricing\", \"keep\": true}, {\"ref\": \"S2\", \"topic\": \"the migration risk to the old billing tables\", \"keep\": true}]}"
+  }
+}

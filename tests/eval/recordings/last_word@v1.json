@@ -1,0 +1,10 @@
+{
+  "prompt": "last_word@v1",
+  "prompt_sha256": "bc0d34393c6e1b68cb806932046345d25b271daf56b605c38d3d52b9a28c881c",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "beta-hedge": "{\"signals\": [{\"ref\": \"S1\", \"topic\": \"whether QA can sign off in time for the December second beta\", \"keep\": true}]}",
+    "pricing-cutoff": "{\"signals\": [{\"ref\": \"S1\", \"topic\": \"the enterprise price rise\", \"keep\": true}, {\"ref\": \"S2\", \"topic\": \"the risk in the billing table migration\", \"keep\": true}]}"
+  }
+}

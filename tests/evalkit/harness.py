@@ -7,6 +7,8 @@ Suites (each through the agent's real code; only the model answer and the stores
     persona         PersonalListenerAgent.process, two personas per window (persona_pairs.json)
     meeting         MeetingAgent.process_meeting over meeting_golden.json
     proactive_*     ProactiveAgent.check_decision / check_action / check_window
+    decision_*      DecisionWhy (decision_why.py): decision_assumptions, decision_ripple and
+                    assumption_check over decision_why_golden.json (tests/evalkit/why.py)
     never_record    AgentRuntime.process_window (PersonalListener + Decision + Action) over the
                     never-record windows and 10 controls: counts canaries and never-record terms
                     in everything that leaves the tier (results and streamed deltas)
@@ -73,7 +75,7 @@ from services.agent_runtime_service.consumer import PROMPTS_DIR
 from services.agent_runtime_service.proactive.core import ActionContext, Participant
 from services.agent_runtime_service.runtime import AgentRuntime
 from tests.a2a_helpers import ScriptedRag, rag_passage
-from tests.evalkit import corpus, scoring
+from tests.evalkit import corpus, scoring, why
 from tests.evalkit.models import Model
 
 VARIANTS = ("current", "worse")
@@ -85,6 +87,9 @@ WORSE: dict[str, str] = {
     "personal_listener": "v0-worse",
     "meeting_agent": "v0-worse",
     "proactive_conflict": "v0-worse",
+    "decision_assumptions": "v0-worse",
+    "decision_ripple": "v0-worse",
+    "assumption_check": "v0-worse",
 }
 TOPICS = ["pricing", "roadmap", "infra", "hiring", "security"]
 HOST = uuid5(corpus.NS, "host")
@@ -587,6 +592,10 @@ SUITES: dict[str, Callable[[Model, str], Awaitable[dict[str, Any]]]] = {
     "proactive_workload": run_workload,
     "proactive_stakeholder": run_stakeholder,
     "never_record": run_never_record,
+    # Decisions that know why (tests/evalkit/why.py)
+    "decision_assumptions": lambda m, v: why.run_assumptions(m, loader_for(v), router_for(m)),
+    "decision_ripple": lambda m, v: why.run_ripple(m, loader_for(v), router_for(m)),
+    "assumption_check": lambda m, v: why.run_check(m, loader_for(v), router_for(m)),
 }
 
 

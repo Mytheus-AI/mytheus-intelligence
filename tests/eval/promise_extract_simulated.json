@@ -1,0 +1,23 @@
+{
+  "prompt": "promise_extract@v1",
+  "prompt_sha256": "a29d16e382d4eae0782b8c95f8591bad9dc4d793535308e3da4872a29775c2a3",
+  "source": "simulated",
+  "about": "Simulated answers for promise_extract@v1, written before the first live run. Kept OUT of tests/eval/recordings on purpose: the harness never lets a new prompt pass on simulated answers (tests/evalkit/generate.py SIMULATED_REFS). The offline eval replays these only while no live recording exists; EVAL_LIVE=1 EVAL_RECORD=1 uv run pytest -m eval tests/test_promise_extract_eval.py -k live -s writes tests/eval/recordings/promise_extract@v1.json, and from then on the offline gate replays that.",
+  "entries": {
+    "p-01": "{\"promises\": [{\"content\": \"Send Sam the revised pricing deck\", \"due_hint\": \"by Friday\", \"due_date\": \"2026-11-13\", \"recipient\": 1, \"recipient_label\": null, \"quote\": \"I'll send you the revised pricing deck by Friday\", \"confidence\": 0.93}]}",
+    "p-02": "{\"promises\": [{\"content\": \"Do the onboarding review and send Priya notes\", \"due_hint\": \"tomorrow\", \"due_date\": \"2026-11-12\", \"recipient\": 1, \"recipient_label\": null, \"quote\": \"Will have notes to you tomorrow.\", \"confidence\": 0.88}]}",
+    "p-03": "{\"promises\": []}",
+    "p-04": "{\"promises\": []}",
+    "p-05": "{\"promises\": []}",
+    "p-06": "{\"promises\": []}",
+    "p-07": "{\"promises\": []}",
+    "p-08": "{\"promises\": [{\"content\": \"Update the roadmap doc\", \"due_hint\": \"today\", \"due_date\": \"2026-11-11\", \"recipient\": null, \"recipient_label\": null, \"quote\": \"I'll update the roadmap doc today\", \"confidence\": 0.9}, {\"content\": \"Book the big room for the offsite\", \"due_hint\": null, \"due_date\": null, \"recipient\": null, \"recipient_label\": null, \"quote\": \"I'll book the big room for the offsite\", \"confidence\": 0.86}]}",
+    "p-09": "{\"promises\": [{\"content\": \"Get Acme an answer on the SSO question\", \"due_hint\": \"by end of month\", \"due_date\": \"2026-11-30\", \"recipient\": null, \"recipient_label\": \"Acme\", \"quote\": \"I'll get Acme an answer on the SSO question by end of month\", \"confidence\": 0.9}]}",
+    "p-10": "{\"promises\": []}",
+    "p-11": "{\"promises\": []}",
+    "p-13": "{\"promises\": [{\"content\": \"Ship the login bug fix\", \"due_hint\": \"tomorrow morning\", \"due_date\": \"2026-11-12\", \"recipient\": null, \"recipient_label\": null, \"quote\": \"will ship the fix tomorrow morning\", \"confidence\": 0.84}]}",
+    "p-14": "{\"promises\": [{\"content\": \"Present the Q1 plan to the board\", \"due_hint\": \"next Friday\", \"due_date\": \"2026-11-20\", \"recipient\": null, \"recipient_label\": null, \"quote\": \"next Friday I'll present the Q1 plan to the board\", \"confidence\": 0.9}]}",
+    "p-15": "{\"promises\": [{\"content\": \"Send Dana the completed security questionnaire\", \"due_hint\": \"by Monday\", \"due_date\": \"2026-11-16\", \"recipient\": 1, \"recipient_label\": null, \"quote\": \"I will send over the completed security questionnaire by Monday\", \"confidence\": 0.94}]}",
+    "p-16": "{\"promises\": [{\"content\": \"Help with interviews for the hiring team\", \"due_hint\": null, \"due_date\": null, \"recipient\": null, \"recipient_label\": \"the hiring team\", \"quote\": \"Happy to help with interviews\", \"confidence\": 0.55}]}"
+  }
+}

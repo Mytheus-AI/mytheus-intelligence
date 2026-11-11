@@ -1,0 +1,23 @@
+{
+  "prompt": "decision_conflict_check@v1",
+  "prompt_sha256": "01ae4a27d075d30d8b6a0cb9a865e08679bb8186b8bea6024feb53369d0e55cc",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "c01-discount": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"contradicts\", \"confidence\": 0.96, \"quote\": \"We can do 30% off the annual plan if you sign by Friday, no need to loop anyone else in.\", \"why\": \"Offering 30% off without involving anyone goes against the decision that discounts above 20% need finance sign-off.\"}]}",
+    "c02-launch-date": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"contradicts\", \"confidence\": 0.95, \"quote\": \"annual billing goes live on 1 November\", \"why\": \"The team confirmed annual billing launches on 15 November, not 1 November.\"}]}",
+    "c03-database": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"contradicts\", \"confidence\": 0.96, \"quote\": \"Set up a MySQL cluster for the new events store and migrate the ingestion writer to it this sprint.\", \"why\": \"The team decided to use Postgres for the events store with no new database engines, and this proposes a MySQL cluster instead.\"}]}",
+    "c04-free-tier": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"contradicts\", \"confidence\": 0.9, \"quote\": \"starting next month the free tier is going away and every workspace moves to a 14 day trial.\", \"why\": \"The team decided to keep the free tier for workspaces under 5 seats, but the draft announces it is being removed for every workspace.\"}]}",
+    "r01-annual": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"reopens\", \"confidence\": 0.88, \"quote\": \"Honestly I'm still not convinced annual billing is the right move. Can we revisit it before we commit?\", \"why\": \"The team already decided to move all new customers to annual billing from Q1, and this asks to revisit that decision.\"}]}",
+    "r02-hiring": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"reopens\", \"confidence\": 0.88, \"quote\": \"should we hire the second designer in Q1 after all, given the roadmap?\", \"why\": \"A hiring freeze on design roles until Q2 was confirmed, and this questions hiring a designer in Q1.\"}]}",
+    "r03-sso": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"reopens\", \"confidence\": 0.88, \"quote\": \"I think we should reconsider requiring SSO for every enterprise workspace, it is slowing down onboarding a lot.\", \"why\": \"SSO was confirmed as mandatory for all enterprise workspaces, and this asks to revisit that requirement.\"}]}",
+    "s01-discount-ok": "{\"conflicts\": []}",
+    "s02-launch": "{\"conflicts\": []}",
+    "s03-postgres": "{\"conflicts\": []}",
+    "x01-related-pricing": "{\"conflicts\": []}",
+    "x02-other-scope": "{\"conflicts\": [{\"candidate\": 1, \"relation\": \"contradicts\", \"confidence\": 0.5, \"quote\": \"we'll try DuckDB locally on laptops; nothing ships to production.\", \"why\": \"The team decided on Postgres for the events store with no new database engines, but this proposes trying DuckDB, though only as a local prototype.\"}]}",
+    "x03-trial": "{\"conflicts\": []}",
+    "u01-lunch": "{\"conflicts\": []}",
+    "u02-bug": "{\"conflicts\": []}"
+  }
+}

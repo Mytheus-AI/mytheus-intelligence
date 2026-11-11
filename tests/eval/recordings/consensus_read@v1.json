@@ -1,0 +1,12 @@
+{
+  "prompt": "consensus_read@v1",
+  "prompt_sha256": "66e669bb10ee71c408d4749abf1c17c594df411ffab935a81689c93bf2b73528",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "beta-hedge": "{\"stances\": [{\"participant\": \"Participant 1\", \"stance\": \"clear_yes\", \"quote\": \"Let's ship the beta on December second.\"}, {\"participant\": \"Participant 2\", \"stance\": \"hedged\", \"quote\": \"Sure, I guess that works.\"}, {\"participant\": \"Participant 3\", \"stance\": \"hedged\", \"quote\": \"I can live with it if QA signs off in time.\"}, {\"participant\": \"Participant 4\", \"stance\": \"clear_yes\", \"quote\": \"Yes, absolutely, let's do it.\"}]}",
+    "hiring-ran-out": "{\"stances\": [{\"participant\": \"Participant 1\", \"stance\": \"clear_yes\", \"quote\": \"Agreed, two backend hires it is.\"}, {\"participant\": \"Participant 2\", \"stance\": \"clear_yes\", \"quote\": \"Agreed, let's open both roles.\"}, {\"participant\": \"Participant 3\", \"stance\": \"clear_yes\", \"quote\": \"Yes, makes sense to me.\"}]}",
+    "pricing-cutoff": "{\"stances\": [{\"participant\": \"Participant 1\", \"stance\": \"clear_yes\", \"quote\": \"Great, so we raise pricing by ten percent then.\"}, {\"participant\": \"Participant 2\", \"stance\": \"clear_yes\", \"quote\": \"Yes, agreed.\"}, {\"participant\": \"Participant 3\", \"stance\": \"no_stance\", \"quote\": null}]}",
+    "vendor-objection": "{\"stances\": [{\"participant\": \"Participant 1\", \"stance\": \"clear_yes\", \"quote\": \"Proposal: we go with Vendor A for the data warehouse.\"}, {\"participant\": \"Participant 2\", \"stance\": \"hedged\", \"quote\": \"Okay, I suppose.\"}, {\"participant\": \"Participant 3\", \"stance\": \"objected\", \"quote\": \"I don't agree, the Vendor A contract locks us in for three years and that is too risky.\"}]}"
+  }
+}

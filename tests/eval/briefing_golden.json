@@ -1,0 +1,427 @@
+{
+  "about": "Golden set for briefing@vN (a briefing from your agent). Each case is the source core-api's claim answers; expect lists the items that must be spoken (keywords) with their 'open the moment' link, the length window in words and text that must never be spoken.",
+  "cases": [
+    {
+      "id": "b-01-after-pricing",
+      "about": "After a pricing review: a decision, a new task, someone waiting, an open promise, a question carried to the follow-up and one the agent saved.",
+      "never_record": [],
+      "source": {
+        "briefing_id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000002",
+        "trigger": "meeting_end",
+        "length": "standard",
+        "target_words": 220,
+        "language": "en",
+        "person": {
+          "name": "Sam Lee",
+          "first_name": "Sam"
+        },
+        "agent": {
+          "name": "Juniper",
+          "personality": "friendly",
+          "seed": null,
+          "instructions": null
+        },
+        "meeting": {
+          "id": "00000000-0000-0000-0000-000000000065",
+          "title": "Pricing review"
+        },
+        "minutes": {
+          "summary": "The team agreed to raise the base price by 8% from January; the reseller discount waits until October.",
+          "decisions": [
+            "Raise the base price by 8% from January"
+          ],
+          "open_items": [
+            "Send the vendor comparison"
+          ]
+        },
+        "changed": [
+          {
+            "id": "00000000-0000-0000-0000-00000000000b",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Pricing review",
+            "text": "Raise the base price by 8% from January",
+            "status": "decided",
+            "at_ms": 61000
+          },
+          {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Pricing review",
+            "text": "Update the pricing page copy",
+            "status": "now yours",
+            "due": "2026-11-14",
+            "at_ms": 140000
+          }
+        ],
+        "waiting": [
+          {
+            "id": "00000000-0000-0000-0000-00000000000d",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Pricing review",
+            "text": "Send the vendor comparison",
+            "status": "asked you for an update",
+            "who": "Maya Patel",
+            "due": "2026-11-12",
+            "at_ms": 90000
+          }
+        ],
+        "promises": [
+          {
+            "id": "00000000-0000-0000-0000-00000000000e",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Pricing review",
+            "text": "Share the draft terms with legal",
+            "due": "Friday",
+            "at_ms": 95000
+          }
+        ],
+        "questions": [
+          {
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Pricing review",
+            "text": "Does legal need to review the new terms?",
+            "who": "Ana Ruiz",
+            "carried_to": "Pricing follow-up (Thu 13 Nov)"
+          },
+          {
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Pricing review",
+            "text": "Who owns the reseller terms?",
+            "status": "your agent saved it for next time",
+            "at_ms": 150000
+          }
+        ],
+        "topics": [
+          "pricing",
+          "vendors"
+        ]
+      },
+      "expect": {
+        "first_name": "Sam",
+        "cover": [
+          {
+            "ref": "C1",
+            "keywords": [
+              "8",
+              "price"
+            ],
+            "link": {
+              "type": "decision",
+              "id": "00000000-0000-0000-0000-00000000000b"
+            }
+          },
+          {
+            "ref": "C2",
+            "keywords": [
+              "pricing page"
+            ],
+            "link": {
+              "type": "action",
+              "id": "00000000-0000-0000-0000-00000000000c"
+            }
+          },
+          {
+            "ref": "W1",
+            "keywords": [
+              "maya",
+              "vendor"
+            ],
+            "link": {
+              "type": "action",
+              "id": "00000000-0000-0000-0000-00000000000d"
+            }
+          },
+          {
+            "ref": "P1",
+            "keywords": [
+              "legal"
+            ],
+            "link": {
+              "type": "promise",
+              "id": "00000000-0000-0000-0000-00000000000e"
+            }
+          },
+          {
+            "ref": "Q1",
+            "keywords": [
+              "follow-up"
+            ],
+            "link": {
+              "type": "question",
+              "id": null
+            }
+          },
+          {
+            "ref": "Q2",
+            "keywords": [
+              "reseller"
+            ],
+            "link": {
+              "type": "question",
+              "id": null
+            }
+          }
+        ],
+        "min_words": 90,
+        "max_words": 293,
+        "forbidden": []
+      }
+    },
+    {
+      "id": "b-02-quiet",
+      "about": "Nothing changed, nobody waiting, nothing open: a short warm all-clear, no padding.",
+      "never_record": [],
+      "source": {
+        "briefing_id": "00000000-0000-0000-0000-000000000003",
+        "user_id": "00000000-0000-0000-0000-000000000004",
+        "trigger": "on_demand",
+        "length": "standard",
+        "target_words": 220,
+        "language": "en",
+        "person": {
+          "name": "Priya Shah",
+          "first_name": "Priya"
+        },
+        "agent": {
+          "name": "Priya's agent",
+          "personality": "balanced",
+          "seed": null,
+          "instructions": null
+        },
+        "meeting": null,
+        "minutes": null,
+        "changed": [],
+        "waiting": [],
+        "promises": [],
+        "questions": [],
+        "topics": []
+      },
+      "expect": {
+        "first_name": "Priya",
+        "cover": [],
+        "min_words": 8,
+        "max_words": 70,
+        "forbidden": []
+      }
+    },
+    {
+      "id": "b-03-never-record",
+      "about": "A never-record topic sits in the source; it must never be spoken, and the rest still is.",
+      "never_record": [
+        "layoffs"
+      ],
+      "source": {
+        "briefing_id": "00000000-0000-0000-0000-000000000005",
+        "user_id": "00000000-0000-0000-0000-000000000006",
+        "trigger": "meeting_end",
+        "length": "standard",
+        "target_words": 220,
+        "language": "en",
+        "person": {
+          "name": "Dana Cole",
+          "first_name": "Dana"
+        },
+        "agent": {
+          "name": "Atlas",
+          "personality": "direct",
+          "seed": null,
+          "instructions": "Keep it brisk."
+        },
+        "meeting": {
+          "id": "00000000-0000-0000-0000-000000000066",
+          "title": "Ops planning"
+        },
+        "minutes": {
+          "summary": "Agreed the on-call rotation; layoffs were discussed for March.",
+          "decisions": [
+            "Move to a weekly on-call rotation"
+          ],
+          "open_items": []
+        },
+        "changed": [
+          {
+            "id": "00000000-0000-0000-0000-000000000015",
+            "meeting_id": "00000000-0000-0000-0000-000000000066",
+            "meeting_title": "Ops planning",
+            "text": "Move to a weekly on-call rotation from December",
+            "status": "decided",
+            "at_ms": 30000
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000016",
+            "meeting_id": "00000000-0000-0000-0000-000000000066",
+            "meeting_title": "Ops planning",
+            "text": "Plan the layoffs announcement for March",
+            "status": "decided",
+            "at_ms": 45000
+          }
+        ],
+        "waiting": [],
+        "promises": [
+          {
+            "id": "00000000-0000-0000-0000-000000000017",
+            "meeting_id": "00000000-0000-0000-0000-000000000066",
+            "meeting_title": "Ops planning",
+            "text": "Draft the on-call handbook",
+            "due": "next Tuesday"
+          }
+        ],
+        "questions": [],
+        "topics": []
+      },
+      "expect": {
+        "first_name": "Dana",
+        "cover": [
+          {
+            "ref": "C1",
+            "keywords": [
+              "on-call"
+            ],
+            "link": {
+              "type": "decision",
+              "id": "00000000-0000-0000-0000-000000000015"
+            }
+          },
+          {
+            "ref": "P1",
+            "keywords": [
+              "handbook"
+            ],
+            "link": {
+              "type": "promise",
+              "id": "00000000-0000-0000-0000-000000000017"
+            }
+          }
+        ],
+        "min_words": 30,
+        "max_words": 293,
+        "forbidden": [
+          "layoff"
+        ]
+      }
+    },
+    {
+      "id": "b-04-short-busy",
+      "about": "Short (about 45 s) with more than fits: the late work and the people waiting come first.",
+      "never_record": [],
+      "source": {
+        "briefing_id": "00000000-0000-0000-0000-000000000007",
+        "user_id": "00000000-0000-0000-0000-000000000008",
+        "trigger": "on_demand",
+        "length": "short",
+        "target_words": 110,
+        "language": "en",
+        "person": {
+          "name": "Leo Park",
+          "first_name": "Leo"
+        },
+        "agent": {
+          "name": "Pip",
+          "personality": "concise",
+          "seed": null,
+          "instructions": null
+        },
+        "meeting": null,
+        "minutes": null,
+        "changed": [
+          {
+            "id": "00000000-0000-0000-0000-00000000001f",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Launch sync",
+            "text": "Ship the beta on December 2",
+            "status": "decided"
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000020",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Launch sync",
+            "text": "Drop the Safari 15 support",
+            "status": "replaced by a later decision"
+          }
+        ],
+        "waiting": [
+          {
+            "id": "00000000-0000-0000-0000-000000000021",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Launch sync",
+            "text": "Fix the signup crash",
+            "status": "overdue",
+            "who": "Ines Moreau",
+            "due": "2026-11-09"
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000022",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Launch sync",
+            "text": "Review the release notes",
+            "status": "asked you for an update",
+            "who": "Tom Hale"
+          }
+        ],
+        "promises": [
+          {
+            "id": "00000000-0000-0000-0000-000000000023",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Launch sync",
+            "text": "Send the QA checklist",
+            "due": "today"
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000024",
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Launch sync",
+            "text": "Book the launch retro"
+          }
+        ],
+        "questions": [
+          {
+            "meeting_id": "00000000-0000-0000-0000-000000000065",
+            "meeting_title": "Launch sync",
+            "text": "Is the pricing banner ready for the beta?",
+            "who": "Ines Moreau"
+          }
+        ],
+        "topics": []
+      },
+      "expect": {
+        "first_name": "Leo",
+        "cover": [
+          {
+            "ref": "W1",
+            "keywords": [
+              "signup"
+            ],
+            "link": {
+              "type": "action",
+              "id": "00000000-0000-0000-0000-000000000021"
+            }
+          },
+          {
+            "ref": "W2",
+            "keywords": [
+              "release notes"
+            ],
+            "link": {
+              "type": "action",
+              "id": "00000000-0000-0000-0000-000000000022"
+            }
+          },
+          {
+            "ref": "C1",
+            "keywords": [
+              "beta"
+            ],
+            "link": {
+              "type": "decision",
+              "id": "00000000-0000-0000-0000-00000000001f"
+            }
+          }
+        ],
+        "min_words": 40,
+        "max_words": 147,
+        "forbidden": []
+      }
+    }
+  ]
+}

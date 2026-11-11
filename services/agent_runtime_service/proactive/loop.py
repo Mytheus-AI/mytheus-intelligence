@@ -16,6 +16,12 @@ Per message, at-least-once and in order per partition:
 
 An exception inside a check (a bug, a provider outage) is logged and the message is committed:
 re-running it on every restart would re-bill model calls and block the partition.
+
+"Decisions that know why" (`decision_why.py`, a4 contract section 1): after the conflict check,
+a confirmed decision also goes to `DecisionWhy.on_decision` (the `decision_why` record and the
+assumption watcher's trigger A). Its records ride the same producer and the same flush. It runs
+in its own guard: a failure there never stops the conflict alerts, and a failing conflict check
+does not stop it.
 """
 
 from __future__ import annotations
@@ -26,9 +32,11 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from libs.shared.state import AgentResult
+from services.agent_runtime_service import decision_why
 from services.agent_runtime_service.agents.proactive_agent import (
     AGENT,
     Alert,
+    ConfirmedDecision,
     ProactiveAgent,
     parse_action,
     parse_decision,
@@ -59,13 +67,17 @@ class ProactiveLoop:
     """The testable core: one decoded record in, alerts out, flushed. Returns the number of
     `agent-results` records emitted."""
 
-    def __init__(self, agent: ProactiveAgent, sink: AlertSink) -> None:
+    def __init__(
+        self, agent: ProactiveAgent, sink: AlertSink, why: decision_why.DecisionWhy | None = None
+    ) -> None:
         self.agent = agent
         self.sink = sink
+        self.why = why
 
     async def handle(self, topic: str, value: dict[str, Any]) -> int:
         alerts: list[Alert] = []
         org: UUID | None = None
+        decision: ConfirmedDecision | None = None
         try:
             if topic == "decisions":
                 decision = parse_decision(value)
@@ -87,7 +99,8 @@ class ProactiveLoop:
             raise
         except Exception:  # noqa: BLE001 - see module docstring: skip, never crash-loop
             logger.exception("ProactiveAgent failed on a %s record; skipped", topic)
-            return 0
+            alerts = []
+        records = await self._why(decision, value) if decision is not None else []
         emitted = 0
         for alert in alerts:
             assert org is not None
@@ -101,9 +114,23 @@ class ProactiveLoop:
                     result=result,
                 )
                 emitted += 1
+        emitted += await decision_why.emit(self.sink, records)
         if emitted:
             self.sink.flush()  # raises EmitError: the caller must not commit
         return emitted
+
+    async def _why(
+        self, decision: ConfirmedDecision, value: dict[str, Any]
+    ) -> list[decision_why.Record]:
+        if self.why is None:
+            return []
+        try:
+            return await self.why.on_decision(decision, decision_why.event_date(value))
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - never stops the conflict alerts
+            logger.exception("decision why failed on a decisions record; skipped")
+            return []
 
 
 async def run_proactive_loop(

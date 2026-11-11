@@ -1,0 +1,17 @@
+{
+  "about": "Targets consensus_read@vN must reach on room_signals_golden.json: stance_accuracy (decisions whose counts of clear yes, hedged, silent, objected and talked over are exactly right), strength_accuracy, ask_accuracy (exactly the right people asked, for the right reason), leak_free (1.0). Every min_ bound gates the offline replay and the live run alike (tests/test_room_signals_eval.py `_assert_baselines`); `measured` records only that the numbers below came from a live run.",
+  "measured": true,
+  "prompt": "consensus_read@v1",
+  "golden_meetings": 5,
+  "min_stance_accuracy": 0.75,
+  "min_strength_accuracy": 0.75,
+  "min_ask_accuracy": 0.75,
+  "min_leak_free": 1.0,
+  "measured_on": "2026-11-11",
+  "last_live": {
+    "stance_accuracy": 1.0,
+    "strength_accuracy": 1.0,
+    "ask_accuracy": 1.0,
+    "leak_free": 1.0
+  }
+}

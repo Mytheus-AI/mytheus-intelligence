@@ -1,0 +1,23 @@
+{
+  "prompt": "promise_extract@v1",
+  "prompt_sha256": "a29d16e382d4eae0782b8c95f8591bad9dc4d793535308e3da4872a29775c2a3",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "p-01": "{\"promises\": [{\"content\": \"Send Sam the revised pricing deck\", \"due_hint\": \"by Friday\", \"due_date\": \"2026-11-13\", \"recipient\": 1, \"recipient_label\": null, \"quote\": \"I'll send you the revised pricing deck by Friday\", \"confidence\": 0.95}]}",
+    "p-02": "{\"promises\": [{\"content\": \"Send Priya notes on the onboarding review\", \"due_hint\": \"tomorrow\", \"due_date\": \"2026-11-12\", \"recipient\": 1, \"recipient_label\": null, \"quote\": \"sure, I can take the onboarding review. Will have notes to you tomorrow.\", \"confidence\": 0.92}]}",
+    "p-03": "{\"promises\": []}",
+    "p-04": "{\"promises\": []}",
+    "p-05": "{\"promises\": []}",
+    "p-06": "{\"promises\": []}",
+    "p-07": "{\"promises\": []}",
+    "p-08": "{\"promises\": [{\"content\": \"Update the roadmap doc\", \"due_hint\": \"today\", \"due_date\": \"2026-11-11\", \"recipient\": null, \"recipient_label\": null, \"quote\": \"I'll update the roadmap doc today\", \"confidence\": 0.93}, {\"content\": \"Book the big room for the offsite\", \"due_hint\": null, \"due_date\": null, \"recipient\": null, \"recipient_label\": null, \"quote\": \"I'll book the big room for the offsite\", \"confidence\": 0.92}]}",
+    "p-09": "{\"promises\": [{\"content\": \"Get Acme an answer on the SSO question\", \"due_hint\": \"by end of month\", \"due_date\": \"2026-11-30\", \"recipient\": null, \"recipient_label\": \"Acme\", \"quote\": \"Leave it with me, I'll get Acme an answer on the SSO question by end of month.\", \"confidence\": 0.92}]}",
+    "p-10": "{\"promises\": []}",
+    "p-11": "{\"promises\": []}",
+    "p-13": "{\"promises\": [{\"content\": \"Patch the login bug and ship the fix\", \"due_hint\": \"tomorrow morning\", \"due_date\": \"2026-11-12\", \"recipient\": null, \"recipient_label\": null, \"quote\": \"On it. Patching the login bug now, will ship the fix tomorrow morning.\", \"confidence\": 0.9}]}",
+    "p-14": "{\"promises\": [{\"content\": \"Present the Q1 plan to the board\", \"due_hint\": \"next Friday\", \"due_date\": \"2026-11-20\", \"recipient\": null, \"recipient_label\": \"the board\", \"quote\": \"next Friday I'll present the Q1 plan to the board\", \"confidence\": 0.9}]}",
+    "p-15": "{\"promises\": [{\"content\": \"Send Dana the completed security questionnaire\", \"due_hint\": \"by Monday\", \"due_date\": \"2026-11-16\", \"recipient\": 1, \"recipient_label\": null, \"quote\": \"As promised, I will send over the completed security questionnaire by Monday.\", \"confidence\": 0.95}]}",
+    "p-16": "{\"promises\": []}"
+  }
+}

@@ -56,6 +56,30 @@ SIMULATED_REFS = frozenset(
         "personal_listener@v0-worse",
         "meeting_agent@v0-worse",
         "proactive_conflict@v0-worse",
+        # rag-service's decision-conflict check (A1). Simulated by its own eval module,
+        # tests/test_decision_check_eval.py `simulated_answer`, not by this harness; the live
+        # record mode there (EVAL_LIVE=1 EVAL_RECORD=1) replaces it with `source: recorded`.
+        "decision_conflict_check@v1",
+        # a3 room signals: simulated from the golden cases' ideal answers
+        # (tests/evalkit/room_signals.py) until the coordinator's live record run replaces them
+        "last_word@v1",
+        "last_word@v2",
+        "consensus_read@v1",
+        "resume_point@v1",
+        # A briefing from your agent (tests/test_briefing_eval.py): hand-written stand-ins for
+        # the golden set, never generated here, until the live record run replaces them
+        # (`source: recorded`): EVAL_LIVE=1 EVAL_RECORD=1 ... tests/test_briefing_eval.py -k live.
+        "briefing@v1",
+        "briefing@v0-worse",
+        # Decisions that know why (2026-11-11): simulated until the first live recording
+        # (EVAL_LIVE=1 EVAL_RECORD=1 EVAL_SUITES=decision_assumptions,decision_ripple,
+        # assumption_check), which then wins over these (a `recorded` file is never rewritten).
+        "decision_assumptions@v1",
+        "decision_ripple@v1",
+        "assumption_check@v1",
+        "decision_assumptions@v0-worse",
+        "decision_ripple@v0-worse",
+        "assumption_check@v0-worse",
     }
 )
 
