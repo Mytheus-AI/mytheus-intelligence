@@ -468,6 +468,74 @@ async def test_notes_accumulate_short_windows_until_a_span_or_a_cue():
     assert await rt.process_window(last) == 1  # the meeting's end flushes
 
 
+async def test_a_held_stretch_is_written_when_the_meeting_ends_or_its_listener_leaves():
+    """The first live eval's production gap: a stretch shorter than the note span that no cue,
+    later window or final window completed (the last window closed on silence before the
+    meeting ended) was dropped with the agents. It is now written as the meeting's end."""
+    note = AgentResult("note", "A note.", 0.9, 0.9, [], {})
+    probe = _probe("PersonalListenerAgent", "participant", note, span=30_000)
+    sink = Sink()
+
+    async def ctx(_o: uuid.UUID, _u: uuid.UUID) -> dict[str, Any]:
+        return {"role": "PM"}
+
+    rt = AgentRuntime(sink=sink, user_context=ctx, agents=[probe])  # type: ignore[list-item]
+    await rt.on_room_event(ORG, MEETING, "joined", str(ALICE))
+    await rt.on_room_event(ORG, MEETING, "joined", str(BOB))
+    assert await rt.process_window(_win(0, "one")) == 0
+    assert await rt.process_window(_win(4_000, "two", speaker=BOB)) == 0
+    # Bob leaves: his held stretch is written for him, Alice's keeps collecting
+    await rt.on_room_event(ORG, MEETING, "left", str(BOB))
+    assert [r["user_id"] for r in sink.results] == [BOB]
+    seen = probe.seen[0]["window"]
+    assert seen.final and [u.text for u in seen.utterances] == ["one", "two"]
+    await rt.end_meeting(ORG, MEETING)  # Alice's held stretch is written at the end
+    assert [r["user_id"] for r in sink.results] == [BOB, ALICE]
+    assert [u.text for u in probe.seen[1]["window"].utterances] == ["one", "two"]
+    assert await rt.flush_pending(ORG, MEETING) == 0  # nothing twice
+
+
+class _EndRuntime:
+    """Records the order of the consumer's calls at the meeting's end."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Any]] = []
+        self.present: set[uuid.UUID] = {ALICE}
+
+    async def process_window(self, window: TranscriptWindow) -> int:
+        self.calls.append(("window", (window.final, tuple(self.present))))
+        return 0
+
+    async def on_room_event(self, _o: Any, _m: Any, event: str, who: Any) -> None:
+        self.calls.append((event, who))
+        if event == "left":
+            self.present.discard(uuid.UUID(str(who)))
+
+    def roster(self, *_a: Any) -> set[uuid.UUID]:
+        return set(self.present)
+
+    async def end_meeting(self, *_a: Any) -> None:
+        self.calls.append(("end", None))
+
+
+async def test_the_last_leaver_still_gets_the_meetings_last_window():
+    rt = _EndRuntime()
+    loop = Loop(rt, _Flush(), Windower())  # type: ignore[arg-type]
+    await loop.handle("transcript-chunks", 0, 1, _value(MEETING, 0, "so the plan is"))
+    await loop.drain()
+    left = {
+        "header": {"org_id": str(ORG)},
+        "meeting_id": str(MEETING),
+        "event_type": "left",
+        "participant_id": str(ALICE),
+    }
+    await loop.handle("meeting-room-events", 0, 1, left)
+    await loop.drain()
+    # the final window ran while Alice was still present, then the meeting ended
+    assert rt.calls == [("window", (True, (ALICE,))), ("end", None)]
+    await loop.close()
+
+
 # --- 5. the emitter ---------------------------------------------------------------------------
 
 

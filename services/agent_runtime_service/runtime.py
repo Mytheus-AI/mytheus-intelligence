@@ -126,6 +126,7 @@ class _Meeting:
     recent: deque[str] = field(default_factory=lambda: deque(maxlen=RECENT_WINDOWS))
     # (agent name, user) -> the windows an accumulating agent has not run on yet
     pending: dict[tuple[str, UUID], list[TranscriptWindow]] = field(default_factory=dict)
+    proxies: set[UUID] = field(default_factory=set)  # users seen as attendance `agent`
 
 
 class AgentRuntime:
@@ -169,14 +170,73 @@ class AgentRuntime:
         if event_type == "joined":
             m.roster.add(user_id)
         elif event_type == "left":
+            # what their note-taker was still collecting is theirs: write it before it goes
+            await self.flush_pending(org_id, meeting_id, user_id)
             m.roster.discard(user_id)
             for key in [k for k in m.agents if k[1] == user_id]:
                 await m.agents.pop(key).terminate()
 
     async def end_meeting(self, org_id: UUID, meeting_id: UUID) -> None:
+        await self.flush_pending(org_id, meeting_id)
         m = self._meetings.pop((org_id, meeting_id), None)
         for agent in (m.agents.values() if m else []):
             await agent.terminate()
+
+    async def flush_pending(
+        self, org_id: UUID, meeting_id: UUID, user_id: UUID | None = None
+    ) -> int:
+        """Run every accumulating agent (PersonalListener's notes, QuestionAgent's suggestions)
+        on the windows it is still holding, for `user_id` or for everyone, as the meeting's end
+        (`final`). Without this, a stretch shorter than `min_span_ms` that no later window, cue
+        or final window completed was lost when its participant left or the meeting ended: the
+        meeting's last window is often closed by silence (`expire_idle`) before `close_meeting`
+        runs, so `close_meeting` has nothing to flush. Returns the number of results emitted."""
+        m = self._meetings.get((org_id, meeting_id))
+        if m is None:
+            return 0
+        keys = sorted(
+            (k for k in m.pending if user_id is None or k[1] == user_id),
+            key=lambda k: (str(k[1]), k[0]),
+        )
+        emitted = 0
+        for name, owner in keys:
+            held = m.pending.pop((name, owner), [])
+            agent = m.agents.get((name, owner))
+            if agent is None or not held:
+                continue
+            window = merge_transcripts(held)
+            window.final = True
+            emitted += await self._flush_one(m, window, agent, owner, len(held))
+        return emitted
+
+    async def _flush_one(
+        self, m: _Meeting, window: TranscriptWindow, agent: BaseAgent, owner: UUID, held: int
+    ) -> int:
+        speakers = {u for u in map(as_user_id, window.speaker_ids) if u is not None}
+        users = sorted({owner, *m.roster, *speakers}, key=str)
+        org, overrides, *found = await asyncio.gather(
+            self._org(window),
+            self._overrides(window),
+            *(self._ctx(window, u) for u in users),
+        )
+        memory = await self._memory(m, window)
+        # the held windows are the meeting's latest: they are the transcript, not "previous"
+        memory.previous = memory.previous[: max(0, len(memory.previous) - held)]
+        extra: dict[str, Any] = {CONTEXT_KEY: overrides, MEMORY_KEY: memory}
+        if org is not None:
+            extra["org"] = org
+        everyone = {
+            u: (None if c is None else {**c, **extra}) for u, c in zip(users, found, strict=True)
+        }
+        everyone = await self._learn(window, everyone)
+        context = everyone.get(owner)
+        if context is None:
+            return 0
+        proxy = owner in m.proxies and owner not in m.roster
+        if proxy:
+            context = {**context, "attendance": "agent"}  # as `_as_proxy`
+        post = Postprocess(Namer.build(m.labels, everyone), NeverRecordPolicy.from_org(org))
+        return await self._run_agent(m, window, agent, owner, context, post, proxy=proxy)
 
     async def _agent(
         self, m: _Meeting, factory: AgentFactory, window: TranscriptWindow, user_id: UUID
@@ -204,6 +264,7 @@ class AgentRuntime:
         m.roster.update(u for u in map(as_user_id, window.speaker_ids) if u is not None)
         users = sorted(m.roster, key=str)
         proxied = [u for u in await self._proxied(window) if u not in m.roster]
+        m.proxies.update(proxied)
         org, overrides, *found = await asyncio.gather(
             self._org(window),
             self._overrides(window),
@@ -428,52 +489,65 @@ class AgentRuntime:
             due = self._due(m, agent, user_id, window)
             if due is None:
                 continue  # an accumulating agent waits for a fuller window
-            state = AgentState(
-                meeting_id=window.meeting_id,
-                user_id=user_id,
-                chunk=due,
-                context=context,
-                org_id=window.org_id,
-                stream=self._stream_for(due, user_id, post),
-            )
-            async with self._sem:
-                try:
-                    result = await agent.process(state)
-                except asyncio.CancelledError:
-                    raise
-                except Exception:  # noqa: BLE001 - one failed call must not stop the runtime
-                    # A provider error (bad key, rate limit, outage) used to escape the window,
-                    # kill the consumer before it committed, and replay the same window on every
-                    # restart (a crash loop that also blocks the partition, and with a working
-                    # key would re-bill). The note for this window is lost; the window completes.
-                    logger.exception(
-                        "agent %s failed on window %s for user %s; skipped",
-                        agent.name,
-                        window.window_id,
-                        user_id,
-                    )
-                    result = None
-            if agent.blocked and not proxy and user_id not in m.blocked_notified:
-                m.blocked_notified.add(user_id)
-                await self._sink.notification(
-                    org_id=window.org_id,
-                    user_id=user_id,
-                    source_event_id=f"budget-blocked:{window.meeting_id}",
-                    title="AI budget exhausted",
-                    body="Live notes are paused for this meeting. Captions continue.",
-                )
-            entries: list[LedgerEntry] = []
-            if result is not None:
-                result, entries = await self._finish(result, due, user_id, context, post)
-                if result is None:
-                    agent_metrics.never_record_skip("output", window.org_id)
-            if result is not None:
-                await self._sink.result(
-                    window=due, user_id=user_id, agent=agent.name, result=result
-                )
-                await self._remember(due, entries)
-                emitted += 1
+            emitted += await self._run_agent(m, due, agent, user_id, context, post, proxy=proxy)
         return emitted
+
+    async def _run_agent(
+        self,
+        m: _Meeting,
+        due: TranscriptWindow,
+        agent: BaseAgent,
+        user_id: UUID,
+        context: dict[str, Any],
+        post: Postprocess,
+        *,
+        proxy: bool = False,
+    ) -> int:
+        """One agent on the window it is due to run on, for one user; 1 if a result left."""
+        state = AgentState(
+            meeting_id=due.meeting_id,
+            user_id=user_id,
+            chunk=due,
+            context=context,
+            org_id=due.org_id,
+            stream=self._stream_for(due, user_id, post),
+        )
+        async with self._sem:
+            try:
+                result = await agent.process(state)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - one failed call must not stop the runtime
+                # A provider error (bad key, rate limit, outage) used to escape the window,
+                # kill the consumer before it committed, and replay the same window on every
+                # restart (a crash loop that also blocks the partition, and with a working
+                # key would re-bill). The note for this window is lost; the window completes.
+                logger.exception(
+                    "agent %s failed on window %s for user %s; skipped",
+                    agent.name,
+                    due.window_id,
+                    user_id,
+                )
+                result = None
+        if agent.blocked and not proxy and user_id not in m.blocked_notified:
+            m.blocked_notified.add(user_id)
+            await self._sink.notification(
+                org_id=due.org_id,
+                user_id=user_id,
+                source_event_id=f"budget-blocked:{due.meeting_id}",
+                title="AI budget exhausted",
+                body="Live notes are paused for this meeting. Captions continue.",
+            )
+        entries: list[LedgerEntry] = []
+        if result is not None:
+            result, entries = await self._finish(result, due, user_id, context, post)
+            if result is None:
+                agent_metrics.never_record_skip("output", due.org_id)
+        if result is None:
+            return 0
+        await self._sink.result(window=due, user_id=user_id, agent=agent.name, result=result)
+        await self._remember(due, entries)
+        return 1
 
 
 def _as_proxy(context: dict[str, Any] | None) -> dict[str, Any] | None:

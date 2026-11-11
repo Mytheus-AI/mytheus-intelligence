@@ -59,7 +59,7 @@ from typing import Any
 from uuid import UUID
 
 from libs.shared.tenancy import parse_org_id
-from services.agent_runtime_service.runtime import AgentRuntime
+from services.agent_runtime_service.runtime import AgentRuntime, as_user_id
 from services.agent_runtime_service.windowing import (
     Chunk,
     ClosedWindow,
@@ -276,6 +276,16 @@ class Loop:
     ) -> bool:
         org_id, meeting_id = key
         event, participant, topic, partition, offset = room
+        leaver = as_user_id(participant) if event == "left" else None
+        if leaver is not None and self.runtime.roster(org_id, meeting_id) == {leaver}:
+            # The last participant is leaving: the meeting ends. Its open window runs while they
+            # are still in the roster, so their notes get the meeting's last words too (applying
+            # `left` first ran that window only for the people who spoke in it), then
+            # `end_meeting` flushes whatever the accumulating agents still held.
+            await self._run_windows(self.windower.close_meeting(org_id, meeting_id))
+            await self.runtime.end_meeting(org_id, meeting_id)
+            self.offsets.done(topic, partition, offset)
+            return True
         await self.runtime.on_room_event(org_id, meeting_id, event, participant)
         ended = event == "left" and not self.runtime.roster(org_id, meeting_id)
         if ended:
