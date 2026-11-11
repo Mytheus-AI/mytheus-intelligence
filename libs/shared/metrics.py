@@ -106,6 +106,20 @@ AGENT_TIME_TO_CARD = Histogram(
 )
 
 
+# Off the record and live caption translation (polish program, wave 3).
+OFF_RECORD_SKIPPED = Counter(
+    "mytheus_off_record_skipped_total",
+    "Work skipped because the meeting was off the record, by stage (agent_window|index|caption).",
+    ["service", "stage"],
+)
+CAPTION_TRANSLATIONS = Counter(
+    "mytheus_caption_translations_total",
+    "Live caption finals seen by the translator, by outcome (translated|budget_denied|"
+    "unavailable|missing|stale|no_languages|off_record|never_record|too_long|dropped).",
+    ["service", "outcome"],
+)
+
+
 def set_service(name: str) -> None:
     global _SERVICE
     _SERVICE = name
@@ -233,6 +247,15 @@ def record_outbox(*, published: int = 0, poisoned: int = 0, backlog: int | None 
 def observe_embedding_batch(seconds: float, size: int) -> None:
     EMBEDDING_BATCH_DURATION.labels(_SERVICE).observe(seconds)
     EMBEDDING_BATCH_SIZE.labels(_SERVICE).observe(size)
+
+
+def record_off_record_skip(stage: str) -> None:
+    OFF_RECORD_SKIPPED.labels(_SERVICE, stage).inc()
+
+
+def record_caption_translation(outcome: str, count: int = 1) -> None:
+    if count:
+        CAPTION_TRANSLATIONS.labels(_SERVICE, outcome).inc(count)
 
 
 @contextmanager

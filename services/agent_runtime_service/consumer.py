@@ -383,6 +383,8 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.proactive.loop import (
         consumer_config as proactive_consumer_config,
     )
+    from services.agent_runtime_service.translation import enabled as translation_enabled
+    from services.agent_runtime_service.translation import start_translation
 
     logging.basicConfig(level=logging.INFO)
     set_service(GROUP)
@@ -470,6 +472,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         max_concurrency=int(os.environ.get("AGENT_MAX_CONCURRENCY", "8")),
         # polish: memory inside the meeting, nexus:{org_id}:meeting-ledger:{meeting_id}
         ledger=MeetingLedger(redis),
+        redis=redis,  # off the record: no agent runs (libs/shared/off_record.py)
     )
     stop = asyncio.Event()
     background: list[asyncio.Task[None]] = []
@@ -547,6 +550,17 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         )
     else:
         logger.warning("minutes off: no CORE_URL / CORE_CALLER_TOKEN, or MINUTES_AGENT=0")
+    if translation_enabled():  # live caption translation (translation.py), same event loop
+        translation_task, translation_consumer = start_translation(
+            brokers=brokers,
+            codec=codec,
+            redis=redis,
+            router=router,
+            org_context=org_contexts.get_strict,
+            stop=stop,
+        )
+        background.append(translation_task)
+        a2a_consumers.append(translation_consumer)
     loop = Loop(runtime, emitter, Windower(WindowSettings.from_env()))
     consumer = Consumer(
         {

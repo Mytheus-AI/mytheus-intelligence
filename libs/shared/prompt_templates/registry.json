@@ -1,6 +1,7 @@
 {
   "defaults": {
-    "never_record_check": "v1"
+    "never_record_check": "v1",
+    "caption_translate": "v1"
   },
   "pins": {}
 }
