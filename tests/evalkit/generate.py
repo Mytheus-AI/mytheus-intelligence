@@ -56,6 +56,10 @@ SIMULATED_REFS = frozenset(
         "personal_listener@v0-worse",
         "meeting_agent@v0-worse",
         "proactive_conflict@v0-worse",
+        # rag-service's decision-conflict check (A1). Simulated by its own eval module,
+        # tests/test_decision_check_eval.py `simulated_answer`, not by this harness; the live
+        # record mode there (EVAL_LIVE=1 EVAL_RECORD=1) replaces it with `source: recorded`.
+        "decision_conflict_check@v1",
     }
 )
 

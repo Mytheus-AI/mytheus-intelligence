@@ -1,0 +1,11 @@
+{
+  "about": "Targets the decision-conflict judge (decision_conflict_check@v1, rag-service) must reach on decision_conflict_check_golden.json (15 cases: 4 contradicts, 3 reopens, 3 supports, 3 related, 2 unrelated). Only conflicts at confidence >= 0.7 count (what a person is shown). precision = surfaced conflicts naming the expected decision / all surfaced; recall = positive cases whose decision is surfaced; false_positive_rate = negative cases with any surfaced conflict / negatives (the headline gate); relation_accuracy = contradicts vs reopens among the hits; quote_verbatim = surfaced quotes found in the writing. Not yet measured: these are the provisional bounds (one false alarm in eight negatives at most); the first live run (EVAL_LIVE=1, coordinator) replaces them with measured numbers and sets measured: true.",
+  "measured": false,
+  "prompt": "decision_conflict_check@v1",
+  "golden_cases": 15,
+  "min_precision": 0.85,
+  "min_recall": 0.7,
+  "max_false_positive_rate": 0.125,
+  "min_relation_accuracy": 0.66,
+  "min_quote_verbatim": 0.9
+}
