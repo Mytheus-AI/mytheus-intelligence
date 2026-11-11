@@ -34,6 +34,7 @@ from libs.shared.qdrant import (
 from services.rag_service.domain import (
     Caller,
     Candidate,
+    LexicalDecision,
     MeetingInfo,
     Person,
     Scope,
@@ -139,6 +140,60 @@ class CoreScopeClient:
                 meeting_id=UUID(a["meeting_id"]),
                 text=a["content"] + due,
             )
+        return out
+
+
+class CoreDecisionLexical:
+    """The lexical arm of the decision check (A1 "Decisions that follow you"): core-api's
+    `POST /internal/retrieval/decisions/search`, Postgres FTS over the CONFIRMED decisions of
+    the meetings `user_id` took part in, best rank first. A failure is an empty arm (the vector
+    arm still answers), never a widened one: core-api applies the participant scope itself."""
+
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        timeout_s: float = 3.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._url = base_url.rstrip("/")
+        self._token = token
+        self._timeout = timeout_s
+        self._transport = transport
+
+    async def search(
+        self, org_id: UUID, user_id: UUID, query: str, limit: int = 10
+    ) -> list[LexicalDecision]:
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, transport=self._transport
+            ) as client:
+                res = await client.post(
+                    f"{self._url}/internal/retrieval/decisions/search",
+                    json={"user_id": str(user_id), "query": query[:1000], "limit": limit},
+                    headers=service_headers(self._token, org_id),
+                )
+        except httpx.HTTPError:
+            logger.warning("decision check: lexical arm unreachable")
+            return []
+        if res.status_code != 200:
+            logger.warning("decision check: lexical arm answered %s", res.status_code)
+            return []
+        out: list[LexicalDecision] = []
+        for d in res.json().get("items", []):
+            try:
+                out.append(
+                    LexicalDecision(
+                        id=UUID(d["id"]),
+                        meeting_id=UUID(d["meeting_id"]) if d.get("meeting_id") else None,
+                        content=str(d["content"]),
+                        rationale=d.get("rationale") or None,
+                        meeting_title=d.get("meeting_title") or None,
+                        decided_at=d.get("decided_at") or None,
+                    )
+                )
+            except (KeyError, ValueError, TypeError):
+                continue
         return out
 
 

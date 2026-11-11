@@ -134,3 +134,15 @@ def decision_key(decision_id: UUID | str) -> str:
 
 def action_key(action_id: UUID | str) -> str:
     return f"action:{action_id}"
+
+
+@dataclass(frozen=True)
+class LexicalDecision:
+    """One hit of the decision check's lexical arm (core-api FTS over confirmed decisions)."""
+
+    id: UUID
+    meeting_id: UUID | None
+    content: str
+    rationale: str | None = None
+    meeting_title: str | None = None
+    decided_at: str | None = None  # ISO-8601
