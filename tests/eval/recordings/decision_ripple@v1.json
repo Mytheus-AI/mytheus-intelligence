@@ -1,0 +1,17 @@
+{
+  "prompt": "decision_ripple@v1",
+  "prompt_sha256": "009e236f25f1c76b288fbaa6bd4645f86f53f83f5a7efbfb333c71d8bb8389cf",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "r-01": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"The decision directly moves this goal.\", \"confidence\": 0.73}], \"actions\": [{\"action\": \"A1\", \"effect\": \"changes\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.83}, {\"action\": \"A3\", \"effect\": \"blocks\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.92}]}",
+    "r-02": "{\"goals\": [{\"goal\": \"G2\", \"effect\": \"advances\", \"why\": \"The decision directly moves this goal.\", \"confidence\": 0.9}], \"actions\": [{\"action\": \"A1\", \"effect\": \"blocks\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.75}]}",
+    "r-03": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"The decision directly moves this goal.\", \"confidence\": 0.75}], \"actions\": [{\"action\": \"A1\", \"effect\": \"unblocks\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.89}]}",
+    "r-04": "{\"goals\": [], \"actions\": [{\"action\": \"A1\", \"effect\": \"changes\", \"why\": \"Weak.\", \"confidence\": 0.42}]}",
+    "r-05": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"risks\", \"why\": \"The decision directly moves this goal.\", \"confidence\": 0.72}], \"actions\": [{\"action\": \"A1\", \"effect\": \"changes\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.89}]}",
+    "r-06": "{\"goals\": [], \"actions\": []}",
+    "r-07": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"The decision directly moves this goal.\", \"confidence\": 0.8}], \"actions\": [{\"action\": \"A1\", \"effect\": \"blocks\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.74}, {\"action\": \"A2\", \"effect\": \"unblocks\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.81}]}",
+    "r-08": "{\"goals\": [], \"actions\": []}",
+    "r-09": "{\"goals\": [{\"goal\": \"G1\", \"effect\": \"advances\", \"why\": \"The decision directly moves this goal.\", \"confidence\": 0.74}], \"actions\": [{\"action\": \"A1\", \"effect\": \"changes\", \"why\": \"The decision directly affects this task.\", \"confidence\": 0.76}]}"
+  }
+}

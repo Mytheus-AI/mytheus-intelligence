@@ -49,6 +49,11 @@ Room signals (`room_signals.py`, a3) run beside it the same way: `meeting-events
 `agent-runtime-room-signals`, its own producer; on `ended` one `room_signals` record (the last
 word nudges, the agreement read per decision, the resume point). Same `CORE_URL` +
 `CORE_CALLER_TOKEN`; `ROOM_SIGNALS_AGENT=0` leaves it unstarted.
+Decisions that know why (`decision_why.py`): the proactive loop also writes a decision's
+`decision_why` record and runs the assumption watcher's trigger A (`DECISION_WHY_AGENT=0` /
+`ASSUMPTION_WATCH_AGENT=0` turn them off). Trigger B runs beside the rest: `meeting-events` in
+group `agent-runtime-assumptions`, its own producer; it needs `CORE_URL` + `CORE_CALLER_TOKEN`;
+`ASSUMPTION_WATCH_AGENT=0` leaves it unstarted.
 
 ADR-0039: one `OrgContextClient` (the company brain over `GetOrgContext`, cached in-process) feeds
 every window's prompts, and one `CachedAgendaSource` (core-api's internal agenda route) is shared
@@ -371,6 +376,17 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     )
     from services.agent_runtime_service.briefing import api_from_env as briefing_api_from_env
     from services.agent_runtime_service.briefing import enabled as briefing_enabled
+    from services.agent_runtime_service.decision_why import (
+        AssumptionWatchLoop,
+        DecisionWhy,
+        WhyDeps,
+        WhySettings,
+        run_assumption_watch_loop,
+        why_core_from_env,
+    )
+    from services.agent_runtime_service.decision_why import (
+        consumer_config as assumptions_consumer_config,
+    )
     from services.agent_runtime_service.delegation.client import delegation_from_env
     from services.agent_runtime_service.emitter import Emitter
     from services.agent_runtime_service.feedback import TOPIC as FEEDBACK_TOPIC
@@ -529,6 +545,21 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         ]
     else:
         logger.warning("AGENT_IDENTITY_SECRET unset: agent-to-agent off, ContextGapAgent RAG-only")
+    # Decisions that know why: the why-source and open-assumption reads, the minutes source for
+    # ended meetings, and the strict company brain (durable records never guess never-record).
+    why_settings = WhySettings.from_env()
+    why = DecisionWhy(
+        loader,
+        router,
+        deps=WhyDeps(
+            core=why_core_from_env(),
+            minutes=minutes_from_env(),
+            kg=proactive.kg,
+            plans=proactive.plans,
+            org_context=org_contexts.get_strict,
+        ),
+        settings=why_settings,
+    )
     if proactive_settings.enabled:
         proactive_consumer = Consumer(proactive_consumer_config(brokers))
         proactive_consumer.subscribe(PROACTIVE_TOPICS)
@@ -540,6 +571,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         proactive_loop = ProactiveLoop(
             ProactiveAgent(loader, router, deps=proactive, settings=proactive_settings),
             alert_emitter,
+            why=why if why_settings.why_enabled or why_settings.watch_enabled else None,
         )
         background.append(
             asyncio.create_task(run_proactive_loop(proactive_consumer, codec, proactive_loop, stop))
@@ -617,6 +649,25 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         background.append(asyncio.create_task(run_briefing_loop(redis, briefing_loop, stop)))
     else:
         logger.warning("briefings off: no CORE_URL / CORE_CALLER_TOKEN, or BRIEFING_AGENT=0")
+    if why_settings.watch_enabled and why.deps.core is not None and why.deps.minutes is not None:
+        watch_consumer = Consumer(assumptions_consumer_config(brokers))
+        watch_consumer.subscribe([MINUTES_TOPIC])
+        a2a_consumers.append(watch_consumer)
+        watch_emitter = Emitter(
+            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            codec,
+        )
+        watch_loop = AssumptionWatchLoop(
+            why, watch_emitter, claims=redis, settle_s=why_settings.settle_s
+        )
+        background.append(
+            asyncio.create_task(run_assumption_watch_loop(watch_consumer, codec, watch_loop, stop))
+        )
+    else:
+        logger.warning(
+            "assumption watch (ended meetings) off: no CORE_URL / CORE_CALLER_TOKEN, "
+            "or ASSUMPTION_WATCH_AGENT=0"
+        )
     if translation_enabled():  # live caption translation (translation.py), same event loop
         translation_task, translation_consumer = start_translation(
             brokers=brokers,

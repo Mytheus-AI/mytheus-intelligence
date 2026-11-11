@@ -47,6 +47,9 @@ HEADLINE = {
     "meeting": "update_f1",
     "proactive_conflict": "precision",
     "never_record": "leaks",
+    "decision_assumptions": "precision",
+    "decision_ripple": "precision",
+    "assumption_check": "precision",
 }
 LOWER = {"leaks"}
 

@@ -26,7 +26,7 @@ import json
 import random
 from typing import Any
 
-from tests.evalkit import corpus
+from tests.evalkit import corpus, why
 
 _WORSE = "-worse"
 
@@ -423,4 +423,6 @@ def answer(ref: str, key: str) -> str:
         return _conflict(worse, _golden_case("conflict", key), rng)
     if prompt == "proactive_stakeholder":
         return _stakeholder(_golden_case("stakeholder", key))
+    if prompt in why.PROMPTS:
+        return why.simulate(prompt, worse, key, rng)
     raise KeyError(f"no simulation for {ref}")

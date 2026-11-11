@@ -70,6 +70,15 @@ SIMULATED_REFS = frozenset(
         # (`source: recorded`): EVAL_LIVE=1 EVAL_RECORD=1 ... tests/test_briefing_eval.py -k live.
         "briefing@v1",
         "briefing@v0-worse",
+        # Decisions that know why (2026-11-11): simulated until the first live recording
+        # (EVAL_LIVE=1 EVAL_RECORD=1 EVAL_SUITES=decision_assumptions,decision_ripple,
+        # assumption_check), which then wins over these (a `recorded` file is never rewritten).
+        "decision_assumptions@v1",
+        "decision_ripple@v1",
+        "assumption_check@v1",
+        "decision_assumptions@v0-worse",
+        "decision_ripple@v0-worse",
+        "assumption_check@v0-worse",
     }
 )
 

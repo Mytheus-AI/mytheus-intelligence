@@ -110,6 +110,10 @@ PROMPT_AGENTS: dict[str, str] = {
     "never_record_check": "NeverRecordGuard",
     # Promise ledger: the person's own agent reading their own messages.
     "promise_extract": "PersonalListenerAgent",
+    # "Decisions that know why" (decision_why.py): ProactiveAgent records
+    "decision_assumptions": "ProactiveAgent",
+    "decision_ripple": "ProactiveAgent",
+    "assumption_check": "ProactiveAgent",
 }
 
 # How each prompt answers, for the parse check. ("number", key): a JSON object with a number
@@ -136,6 +140,9 @@ OUTPUT_FORMATS: dict[str, tuple[str, str]] = {
     "last_word": ("list", "signals"),
     "consensus_read": ("list", "stances"),
     "resume_point": ("object", "open"),
+    "decision_assumptions": ("list", "assumptions"),
+    "decision_ripple": ("list", "actions"),
+    "assumption_check": ("list", "breaks"),
 }
 
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*[0-9]*\.?[0-9]+\s*$", re.IGNORECASE)

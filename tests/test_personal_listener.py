@@ -311,6 +311,9 @@ def test_the_shipped_prompts_are_registered_and_render():
         "consensus_read": "v1",
         "resume_point": "v1",
         "briefing": "v1",  # a briefing from your agent
+        "decision_assumptions": "v1",  # decisions that know why
+        "decision_ripple": "v1",
+        "assumption_check": "v1",
     }
 
 

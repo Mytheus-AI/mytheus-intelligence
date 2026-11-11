@@ -22,7 +22,10 @@
     "last_word": "v1",
     "consensus_read": "v1",
     "resume_point": "v1",
-    "briefing": "v1"
+    "briefing": "v1",
+    "decision_assumptions": "v1",
+    "decision_ripple": "v1",
+    "assumption_check": "v1"
   },
   "pins": {}
 }

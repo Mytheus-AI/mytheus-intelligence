@@ -1,0 +1,18 @@
+{
+  "prompt": "assumption_check@v0-worse",
+  "prompt_sha256": "df10f3f83521954d1f934c0fc5efe3d01c687164031fcd4fbe361549be734044",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "c-01": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Vendor B's renewal quote came in at 52k a year\", \"speaker\": \"Participant 1\", \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.95}, {\"assumption\": \"H2\", \"evidence_quote\": \"Ouch, okay, noted.\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.9}]}",
+    "c-02": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Okta moved SCIM to June\", \"speaker\": \"Participant 1\", \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.9}]}",
+    "c-03": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"If Vendor B raised prices we'd have to rethink.\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.8}]}",
+    "c-04": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Is Okta still on track for SCIM in March?\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.86}]}",
+    "c-05": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Sam takes over the billing migration\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.85}]}",
+    "c-06": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Use Vendor B's paging add-on for on-call at 12k a year.\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.76}]}",
+    "c-07": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Free tier churn was 2.4 percent last month, steady.\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.81}]}",
+    "c-08": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Free tier churn jumped to 5 percent in October\", \"speaker\": \"Participant 1\", \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.9}, {\"assumption\": \"H2\", \"evidence_quote\": \"PLAT-212 got cut from this quarter\", \"speaker\": \"Participant 2\", \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.88}, {\"assumption\": \"H3\", \"evidence_quote\": \"Design is still on the onboarding work.\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.8}]}",
+    "c-09": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"legal rejected the reseller terms\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.86}]}",
+    "c-10": "{\"breaks\": [{\"assumption\": \"H1\", \"evidence_quote\": \"Someone said Vendor A might get acquired, but nobody knows.\", \"speaker\": null, \"rationale\": \"The new evidence contradicts this assumption.\", \"confidence\": 0.78}]}"
+  }
+}
