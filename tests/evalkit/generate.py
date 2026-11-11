@@ -56,6 +56,11 @@ SIMULATED_REFS = frozenset(
         "personal_listener@v0-worse",
         "meeting_agent@v0-worse",
         "proactive_conflict@v0-worse",
+        # a3 room signals: simulated from the golden cases' ideal answers
+        # (tests/evalkit/room_signals.py) until the coordinator's live record run replaces them
+        "last_word@v1",
+        "consensus_read@v1",
+        "resume_point@v1",
     }
 )
 
