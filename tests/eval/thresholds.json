@@ -51,6 +51,28 @@
     "leaks": {"max": 0},
     "outright_skip_rate": {"min": 1.0}
   },
+  "decision_assumptions": {
+    "precision": {"min": 0.85},
+    "recall": {"min": 0.8},
+    "f1": {"min": 0.82},
+    "negative_fp_rate": {"max": 0.1},
+    "speaker_accuracy": {"min": 0.85},
+    "watch_accuracy": {"min": 0.8},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "decision_ripple": {
+    "precision": {"min": 0.85},
+    "recall": {"min": 0.8},
+    "f1": {"min": 0.82},
+    "false_positive_rate": {"max": 0.1},
+    "parse_failure_rate": {"max": 0.02}
+  },
+  "assumption_check": {
+    "precision": {"min": 0.9},
+    "recall": {"min": 0.8},
+    "false_positive_rate": {"max": 0.1},
+    "parse_failure_rate": {"max": 0.02}
+  },
   "judge": {
     "faithfulness": {"min": 4.0},
     "coverage": {"min": 3.5},

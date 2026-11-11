@@ -1,0 +1,17 @@
+{
+  "prompt": "decision_assumptions@v1",
+  "prompt_sha256": "b06f85596a39b7b38479e86402e31e3aa65d9035392033db7ff16747d4bf22dd",
+  "source": "simulated",
+  "about": "Simulated model answers (tests/evalkit/simulate.py), seed 20261111. Replaced by real answers when the live record mode runs.",
+  "entries": {
+    "a-01": "{\"assumptions\": [{\"kind\": \"price\", \"statement\": \"Vendor B costs less than 40,000 USD a year.\", \"quote\": \"We go with Vendor B because it's under 40k a year.\", \"speaker\": \"Participant 2\", \"confidence\": 0.88, \"watch\": {\"date\": null, \"value\": 40000, \"comparator\": \"lt\", \"unit\": \"USD\", \"issue_key\": null}}]}",
+    "a-02": "{\"assumptions\": [{\"kind\": \"date\", \"statement\": \"Okta ships SCIM provisioning by March 2027.\", \"quote\": \"Okta told us they ship SCIM by March\", \"speaker\": \"Participant 1\", \"confidence\": 0.86, \"watch\": {\"date\": \"2027-03-31\", \"value\": null, \"comparator\": null, \"unit\": null, \"issue_key\": null}}]}",
+    "a-03": "{\"assumptions\": [{\"kind\": \"person\", \"statement\": \"Priya owns the billing migration and stays through Q1.\", \"quote\": \"Priya owns the migration and she's here through Q1\", \"speaker\": \"Participant 1\", \"confidence\": 0.86, \"watch\": {\"date\": null, \"value\": null, \"comparator\": null, \"unit\": null, \"issue_key\": null}}]}",
+    "a-04": "{\"assumptions\": [{\"kind\": \"metric\", \"statement\": \"Free tier churn stays under 3 percent.\", \"quote\": \"Churn is under 3 percent on the free tier\", \"speaker\": \"Participant 2\", \"confidence\": 0.78, \"watch\": {\"date\": null, \"value\": 3, \"comparator\": \"lt\", \"unit\": \"%\", \"issue_key\": null}}, {\"kind\": \"dependency\", \"statement\": \"PLAT-212 lands and halves the cost per free user.\", \"quote\": \"once PLAT-212 lands the cost per user halves\", \"speaker\": \"Participant 2\", \"confidence\": 0.8, \"watch\": {\"date\": null, \"value\": null, \"comparator\": null, \"unit\": null, \"issue_key\": \"PLAT-212\"}}]}",
+    "a-05": "{\"assumptions\": [{\"kind\": \"dependency\", \"statement\": \"Postgres can handle the write load.\", \"quote\": \"If Postgres can't handle the write load we might switch to Kafka later.\", \"speaker\": null, \"confidence\": 0.36, \"watch\": {\"date\": null, \"value\": null, \"comparator\": null, \"unit\": null, \"issue_key\": null}}]}",
+    "a-06": "{\"assumptions\": []}",
+    "a-07": "{\"assumptions\": []}",
+    "a-08": "{\"assumptions\": [{\"kind\": \"price\", \"statement\": \"The budget for two contractors stays approved until June.\", \"quote\": \"Budget is approved for two contractors until June\", \"speaker\": null, \"confidence\": 0.92, \"watch\": {\"date\": \"2027-06-30\", \"value\": null, \"comparator\": null, \"unit\": null, \"issue_key\": null}}, {\"kind\": \"date\", \"statement\": \"The in-house mobile hire does not start before April.\", \"quote\": \"the in-house hire won't start before April\", \"speaker\": null, \"confidence\": 0.89, \"watch\": {\"date\": null, \"value\": null, \"comparator\": null, \"unit\": null, \"issue_key\": null}}]}",
+    "a-09": "{\"assumptions\": [{\"kind\": \"price\", \"statement\": \"Datadog keeps the renewal price flat at 30,000 USD.\", \"quote\": \"they're keeping our price flat at 30k for the renewal\", \"speaker\": \"Participant 2\", \"confidence\": 0.85, \"watch\": {\"date\": null, \"value\": 30000, \"comparator\": null, \"unit\": null, \"issue_key\": null}}]}"
+  }
+}

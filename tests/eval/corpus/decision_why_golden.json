@@ -1,0 +1,541 @@
+{
+  "about": "Golden cases for 'Decisions that know why' (services/agent_runtime_service/decision_why.py): decision_assumptions (the stated reasons a decision rests on), decision_ripple (goals and open tasks it moves) and assumption_check (which open assumptions new evidence clearly breaks). Hand-written. Transcript lines are 'S<n>: text'; speakers are numbered 'Participant N' in order of first speaking. keywords: every group must appear (lowercase) in the assumption's statement or quote; 'a|b' is either. Indices (goal, action, assumption) are 1-based. 'traps' are what a careless model would wrongly report: the deliberately worse prompts report them, the gate must not.",
+  "assumptions": [
+    {
+      "id": "a-01",
+      "category": "stated_price",
+      "meeting_date": "2026-11-11",
+      "decision": "Use Vendor B for observability.",
+      "rationale": "Vendor B is cheaper than Vendor A.",
+      "quote": "We go with Vendor B because it's under 40k a year.",
+      "quote_speaker": "S2",
+      "transcript": [
+        "S1: I looked at both quotes this morning.",
+        "S2: We go with Vendor B because it's under 40k a year.",
+        "S1: Agreed, Vendor B."
+      ],
+      "expected": [
+        {
+          "kind": "price",
+          "statement": "Vendor B costs less than 40,000 USD a year.",
+          "quote": "We go with Vendor B because it's under 40k a year.",
+          "speaker": "S2",
+          "keywords": ["vendor b", "40"],
+          "watch": {"value": 40000, "comparator": "lt", "unit": "USD"}
+        }
+      ],
+      "traps": [
+        {"kind": "other", "statement": "Someone compared both quotes.", "quote": "I looked at both quotes this morning."}
+      ]
+    },
+    {
+      "id": "a-02",
+      "category": "stated_date",
+      "meeting_date": "2026-11-11",
+      "decision": "Build the partner portal on Okta.",
+      "rationale": "",
+      "quote": "Okta told us they ship SCIM by March, so we can build the portal on them.",
+      "quote_speaker": "S1",
+      "transcript": [
+        "S1: Okta told us they ship SCIM by March, so we can build the portal on them.",
+        "S2: Then it's Okta."
+      ],
+      "expected": [
+        {
+          "kind": "date",
+          "statement": "Okta ships SCIM provisioning by March 2027.",
+          "quote": "Okta told us they ship SCIM by March",
+          "speaker": "S1",
+          "keywords": ["scim", "march"],
+          "watch": {"date": "2027-03-31"}
+        }
+      ],
+      "traps": [
+        {"kind": "other", "statement": "The team agreed on Okta.", "quote": "Then it's Okta."}
+      ]
+    },
+    {
+      "id": "a-03",
+      "category": "stated_person",
+      "meeting_date": "2026-11-11",
+      "decision": "Migrate billing to the new ledger in Q1.",
+      "rationale": "",
+      "quote": "",
+      "quote_speaker": null,
+      "transcript": [
+        "S1: Priya owns the migration and she's here through Q1, so Q1 is realistic.",
+        "S2: Okay, Q1 it is."
+      ],
+      "expected": [
+        {
+          "kind": "person",
+          "statement": "Priya owns the billing migration and stays through Q1.",
+          "quote": "Priya owns the migration and she's here through Q1",
+          "speaker": "S1",
+          "keywords": ["priya", "migration|q1"],
+          "watch": {}
+        }
+      ],
+      "traps": []
+    },
+    {
+      "id": "a-04",
+      "category": "stated_metric_and_ticket",
+      "meeting_date": "2026-11-11",
+      "decision": "Keep the free tier.",
+      "rationale": "",
+      "quote": "Churn is under 3 percent on the free tier, and once PLAT-212 lands the cost per user halves, so we keep it.",
+      "quote_speaker": "S2",
+      "transcript": [
+        "S1: Do we keep the free tier or not?",
+        "S2: Churn is under 3 percent on the free tier, and once PLAT-212 lands the cost per user halves, so we keep it.",
+        "S1: Fine, we keep it."
+      ],
+      "expected": [
+        {
+          "kind": "metric",
+          "statement": "Free tier churn stays under 3 percent.",
+          "quote": "Churn is under 3 percent on the free tier",
+          "speaker": "S2",
+          "keywords": ["churn", "3"],
+          "watch": {"value": 3, "comparator": "lt", "unit": "%"}
+        },
+        {
+          "kind": "dependency",
+          "statement": "PLAT-212 lands and halves the cost per free user.",
+          "quote": "once PLAT-212 lands the cost per user halves",
+          "speaker": "S2",
+          "keywords": ["plat-212"],
+          "watch": {"issue_key": "PLAT-212"}
+        }
+      ],
+      "traps": [
+        {"kind": "other", "statement": "Someone asked whether to keep the free tier.", "quote": "Do we keep the free tier or not?"}
+      ]
+    },
+    {
+      "id": "a-05",
+      "category": "hypothetical",
+      "meeting_date": "2026-11-11",
+      "decision": "Use Postgres for the events store.",
+      "rationale": "",
+      "quote": "",
+      "quote_speaker": null,
+      "transcript": [
+        "S1: If Postgres can't handle the write load we might switch to Kafka later.",
+        "S2: Sure, but for now Postgres.",
+        "S1: What if we hit ten thousand writes a second?"
+      ],
+      "expected": [],
+      "traps": [
+        {"kind": "dependency", "statement": "Postgres can handle the write load.", "quote": "If Postgres can't handle the write load we might switch to Kafka later."},
+        {"kind": "metric", "statement": "Writes stay under ten thousand a second.", "quote": "What if we hit ten thousand writes a second?"}
+      ]
+    },
+    {
+      "id": "a-06",
+      "category": "question",
+      "meeting_date": "2026-11-11",
+      "decision": "Launch the beta on 2 December.",
+      "rationale": "",
+      "quote": "",
+      "quote_speaker": null,
+      "transcript": [
+        "S1: Is legal okay with the beta terms?",
+        "S2: No idea yet.",
+        "S1: Let's launch on 2 December anyway."
+      ],
+      "expected": [],
+      "traps": [
+        {"kind": "dependency", "statement": "Legal approves the beta terms.", "quote": "Is legal okay with the beta terms?"}
+      ]
+    },
+    {
+      "id": "a-07",
+      "category": "no_reason",
+      "meeting_date": "2026-11-11",
+      "decision": "Move the weekly standup to 9:30.",
+      "rationale": "",
+      "quote": "",
+      "quote_speaker": null,
+      "transcript": [
+        "S1: Let's move standup to 9:30.",
+        "S2: Fine by me."
+      ],
+      "expected": [],
+      "traps": [
+        {"kind": "other", "statement": "9:30 suits everyone on the team.", "quote": "Fine by me."}
+      ]
+    },
+    {
+      "id": "a-08",
+      "category": "written_rationale",
+      "meeting_date": "2026-11-11",
+      "decision": "Hire two contractors for the mobile app.",
+      "rationale": "Budget is approved for two contractors until June, and the in-house hire won't start before April.",
+      "quote": "",
+      "quote_speaker": null,
+      "transcript": [
+        "S1: So contractors then.",
+        "S2: Yes, two of them."
+      ],
+      "expected": [
+        {
+          "kind": "price",
+          "statement": "The budget for two contractors stays approved until June.",
+          "quote": "Budget is approved for two contractors until June",
+          "speaker": null,
+          "keywords": ["budget", "contractor|june"],
+          "watch": {"date": "2027-06-30"}
+        },
+        {
+          "kind": "date",
+          "statement": "The in-house mobile hire does not start before April.",
+          "quote": "the in-house hire won't start before April",
+          "speaker": null,
+          "keywords": ["april"],
+          "hard": true,
+          "watch": {}
+        }
+      ],
+      "traps": []
+    },
+    {
+      "id": "a-09",
+      "category": "past_fact_trap",
+      "meeting_date": "2026-11-11",
+      "decision": "Renew the Datadog contract.",
+      "rationale": "",
+      "quote": "",
+      "quote_speaker": null,
+      "transcript": [
+        "S1: We signed with them last year.",
+        "S2: And they're keeping our price flat at 30k for the renewal, so let's renew.",
+        "S1: Renew it."
+      ],
+      "expected": [
+        {
+          "kind": "price",
+          "statement": "Datadog keeps the renewal price flat at 30,000 USD.",
+          "quote": "they're keeping our price flat at 30k for the renewal",
+          "speaker": "S2",
+          "keywords": ["30", "price|renewal"],
+          "watch": {"value": 30000}
+        }
+      ],
+      "traps": [
+        {"kind": "other", "statement": "The company signed with Datadog last year.", "quote": "We signed with them last year."}
+      ]
+    },
+    {
+      "id": "a-10",
+      "category": "never_record",
+      "meeting_date": "2026-11-11",
+      "never_record": ["layoffs"],
+      "decision": "Freeze hiring in support.",
+      "rationale": "",
+      "quote": "Because of the layoffs in Q1 we freeze support hiring.",
+      "quote_speaker": "S1",
+      "transcript": [
+        "S1: Because of the layoffs in Q1 we freeze support hiring.",
+        "S2: Understood."
+      ],
+      "expected": [],
+      "traps": [
+        {"kind": "other", "statement": "The layoffs happen in Q1.", "quote": "Because of the layoffs in Q1 we freeze support hiring."}
+      ]
+    }
+  ],
+  "ripple": [
+    {
+      "id": "r-01",
+      "category": "vendor_switch",
+      "decision": "Switch observability from Vendor A to Vendor B.",
+      "rationale": "Vendor B is 40% cheaper.",
+      "goals": ["Cut infra spend 20% this year", "Hire 5 engineers"],
+      "actions": [
+        {"content": "Integrate Vendor A tracing into checkout", "customer": false},
+        {"content": "Write the Q4 hiring plan", "customer": false},
+        {"content": "Renew the Vendor A contract for 2027", "customer": false}
+      ],
+      "expected_goals": [{"goal": 1, "effect": "advances"}],
+      "expected_actions": [{"action": 1, "effect": "changes"}, {"action": 3, "effect": "blocks"}]
+    },
+    {
+      "id": "r-02",
+      "category": "freeze",
+      "decision": "Freeze all new SaaS purchases until January.",
+      "rationale": "We need to cut spend.",
+      "goals": ["Ship SSO for enterprise customers by March", "Cut infra spend 20% this year"],
+      "actions": [
+        {"content": "Buy a Figma enterprise seat pack", "customer": false},
+        {"content": "Send Acme the SSO rollout plan", "customer": true},
+        {"content": "Clean up old S3 buckets", "customer": false}
+      ],
+      "expected_goals": [{"goal": 2, "effect": "advances"}],
+      "expected_actions": [{"action": 1, "effect": "blocks"}]
+    },
+    {
+      "id": "r-03",
+      "category": "unblocks",
+      "decision": "Pick Stripe as the payments provider.",
+      "rationale": "",
+      "goals": ["Launch self-serve billing in Q1"],
+      "actions": [
+        {"content": "Sign the payments contract once the provider is picked", "customer": false},
+        {"content": "Book the offsite venue", "customer": false}
+      ],
+      "expected_goals": [{"goal": 1, "effect": "advances"}],
+      "expected_actions": [{"action": 1, "effect": "unblocks"}]
+    },
+    {
+      "id": "r-04",
+      "category": "no_ripple",
+      "decision": "Move the weekly standup to 9:30.",
+      "rationale": "",
+      "goals": ["Cut infra spend 20% this year", "Launch self-serve billing in Q1"],
+      "actions": [
+        {"content": "Integrate Vendor A tracing into checkout", "customer": false},
+        {"content": "Write the Q4 hiring plan", "customer": false}
+      ],
+      "expected_goals": [],
+      "expected_actions": []
+    },
+    {
+      "id": "r-05",
+      "category": "customer",
+      "decision": "Delay the EU data residency launch to June.",
+      "rationale": "The Frankfurt region needs another audit.",
+      "goals": ["Win three EU enterprise customers by May"],
+      "actions": [
+        {"content": "Confirm the EU region go-live date with Acme", "customer": true},
+        {"content": "Update the security whitepaper", "customer": false}
+      ],
+      "expected_goals": [{"goal": 1, "effect": "risks"}],
+      "expected_actions": [{"action": 1, "effect": "changes"}]
+    },
+    {
+      "id": "r-06",
+      "category": "same_topic_trap",
+      "decision": "Use the blue logo variant on the website.",
+      "rationale": "",
+      "goals": ["Grow website signups 30%"],
+      "actions": [
+        {"content": "Redesign the pricing page", "customer": false},
+        {"content": "Fix the signup form bug", "customer": false}
+      ],
+      "expected_goals": [],
+      "expected_actions": []
+    },
+    {
+      "id": "r-07",
+      "category": "blocks_and_unblocks",
+      "decision": "Stop supporting Internet Explorer 11 from January.",
+      "rationale": "",
+      "goals": ["Halve the frontend bug backlog"],
+      "actions": [
+        {"content": "Fix the IE11 layout bug on the dashboard", "customer": false},
+        {"content": "Tell Globex whether IE11 stays supported", "customer": true},
+        {"content": "Add dark mode to settings", "customer": false}
+      ],
+      "expected_goals": [{"goal": 1, "effect": "advances"}],
+      "expected_actions": [{"action": 1, "effect": "blocks"}, {"action": 2, "effect": "unblocks"}]
+    },
+    {
+      "id": "r-08",
+      "category": "no_ripple",
+      "decision": "Rename the eng-random Slack channel to eng-social.",
+      "rationale": "",
+      "goals": ["Hire 5 engineers"],
+      "actions": [{"content": "Set up the engineering onboarding doc", "customer": false}],
+      "expected_goals": [],
+      "expected_actions": []
+    },
+    {
+      "id": "r-09",
+      "category": "staffing",
+      "decision": "Hire a second on-call engineer for payments.",
+      "rationale": "Pages doubled last quarter.",
+      "goals": ["Reach 99.95% payments uptime"],
+      "actions": [
+        {"content": "Write the payments on-call rota for December", "customer": false},
+        {"content": "Book the team offsite", "customer": false}
+      ],
+      "expected_goals": [{"goal": 1, "effect": "advances"}],
+      "expected_actions": [{"action": 1, "effect": "changes"}]
+    }
+  ],
+  "assumption_check": [
+    {
+      "id": "c-01",
+      "category": "price_moved",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "price", "statement": "Vendor B costs less than 40,000 USD a year.", "decision": "Use Vendor B for observability.", "quote": "it's under 40k a year"},
+        {"kind": "date", "statement": "Okta ships SCIM by March.", "decision": "Build the partner portal on Okta.", "quote": "they ship SCIM by March"}
+      ],
+      "evidence": {
+        "kind": "meeting",
+        "transcript": [
+          "S1: Vendor B's renewal quote came in at 52k a year.",
+          "S2: Ouch, okay, noted."
+        ]
+      },
+      "expected": [{"assumption": 1, "quote": "Vendor B's renewal quote came in at 52k a year", "speaker": "S1"}],
+      "traps": [{"assumption": 2, "quote": "Ouch, okay, noted."}]
+    },
+    {
+      "id": "c-02",
+      "category": "date_slipped",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "date", "statement": "Okta ships SCIM by March.", "decision": "Build the partner portal on Okta.", "quote": "they ship SCIM by March"}
+      ],
+      "evidence": {
+        "kind": "meeting",
+        "transcript": [
+          "S1: Okta moved SCIM to June, it's on their public roadmap now.",
+          "S2: That hurts the portal."
+        ]
+      },
+      "expected": [{"assumption": 1, "quote": "Okta moved SCIM to June", "speaker": "S1"}],
+      "traps": []
+    },
+    {
+      "id": "c-03",
+      "category": "hypothetical",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "price", "statement": "Vendor B costs less than 40,000 USD a year.", "decision": "Use Vendor B for observability.", "quote": "it's under 40k a year"}
+      ],
+      "evidence": {
+        "kind": "meeting",
+        "transcript": [
+          "S1: If Vendor B raised prices we'd have to rethink.",
+          "S2: Let's not worry yet."
+        ]
+      },
+      "expected": [],
+      "traps": [{"assumption": 1, "quote": "If Vendor B raised prices we'd have to rethink."}]
+    },
+    {
+      "id": "c-04",
+      "category": "question",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "date", "statement": "Okta ships SCIM by March.", "decision": "Build the partner portal on Okta.", "quote": "they ship SCIM by March"}
+      ],
+      "evidence": {
+        "kind": "meeting",
+        "transcript": [
+          "S1: Is Okta still on track for SCIM in March?",
+          "S2: Last I heard, yes."
+        ]
+      },
+      "expected": [],
+      "traps": [{"assumption": 1, "quote": "Is Okta still on track for SCIM in March?"}]
+    },
+    {
+      "id": "c-05",
+      "category": "owner_changed",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "person", "statement": "Priya owns the billing migration.", "decision": "Migrate billing to the new ledger in Q1.", "quote": "Priya owns the migration"}
+      ],
+      "evidence": {
+        "kind": "decision",
+        "decision": "Priya moves to the platform team; Sam takes over the billing migration.",
+        "rationale": "Platform needs her from December."
+      },
+      "expected": [{"assumption": 1, "quote": "Sam takes over the billing migration", "speaker": null}],
+      "traps": []
+    },
+    {
+      "id": "c-06",
+      "category": "different_product",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "price", "statement": "Vendor B observability costs less than 40,000 USD a year.", "decision": "Use Vendor B for observability.", "quote": "it's under 40k a year"}
+      ],
+      "evidence": {
+        "kind": "decision",
+        "decision": "Use Vendor B's paging add-on for on-call at 12k a year.",
+        "rationale": "Cheaper than PagerDuty."
+      },
+      "expected": [],
+      "traps": [{"assumption": 1, "quote": "Use Vendor B's paging add-on for on-call at 12k a year."}]
+    },
+    {
+      "id": "c-07",
+      "category": "status_fits",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "metric", "statement": "Free tier churn stays under 3 percent.", "decision": "Keep the free tier.", "quote": "Churn is under 3 percent on the free tier"}
+      ],
+      "evidence": {
+        "kind": "meeting",
+        "transcript": [
+          "S1: Free tier churn was 2.4 percent last month, steady.",
+          "S2: Good."
+        ]
+      },
+      "expected": [],
+      "traps": [{"assumption": 1, "quote": "Free tier churn was 2.4 percent last month, steady."}]
+    },
+    {
+      "id": "c-08",
+      "category": "two_of_three",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "metric", "statement": "Free tier churn stays under 3 percent.", "decision": "Keep the free tier.", "quote": "Churn is under 3 percent on the free tier"},
+        {"kind": "dependency", "statement": "PLAT-212 lands this quarter and halves the cost per free user.", "decision": "Keep the free tier.", "quote": "once PLAT-212 lands the cost per user halves"},
+        {"kind": "person", "statement": "The design team owns the onboarding revamp.", "decision": "Revamp onboarding before the spring campaign.", "quote": null}
+      ],
+      "evidence": {
+        "kind": "meeting",
+        "transcript": [
+          "S1: Free tier churn jumped to 5 percent in October.",
+          "S2: And PLAT-212 got cut from this quarter.",
+          "S1: Design is still on the onboarding work."
+        ]
+      },
+      "expected": [
+        {"assumption": 1, "quote": "Free tier churn jumped to 5 percent in October", "speaker": "S1"},
+        {"assumption": 2, "quote": "PLAT-212 got cut from this quarter", "speaker": "S2"}
+      ],
+      "traps": [{"assumption": 3, "quote": "Design is still on the onboarding work."}]
+    },
+    {
+      "id": "c-09",
+      "category": "dependency_fell_through",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "dependency", "statement": "Legal approves the reseller terms before launch.", "decision": "Launch the reseller channel in January.", "quote": null}
+      ],
+      "evidence": {
+        "kind": "decision",
+        "decision": "Drop the reseller channel launch; legal rejected the reseller terms.",
+        "rationale": ""
+      },
+      "expected": [{"assumption": 1, "quote": "legal rejected the reseller terms", "speaker": null}],
+      "traps": []
+    },
+    {
+      "id": "c-10",
+      "category": "rumour",
+      "evidence_date": "2026-11-11",
+      "assumptions": [
+        {"kind": "dependency", "statement": "Vendor A stays our observability vendor through 2027.", "decision": "Standardise observability on Vendor A.", "quote": null}
+      ],
+      "evidence": {
+        "kind": "meeting",
+        "transcript": [
+          "S1: Someone said Vendor A might get acquired, but nobody knows.",
+          "S2: Probably nothing."
+        ]
+      },
+      "expected": [],
+      "traps": [{"assumption": 1, "quote": "Someone said Vendor A might get acquired, but nobody knows."}]
+    }
+  ]
+}
