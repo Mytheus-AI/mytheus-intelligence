@@ -35,6 +35,11 @@ ProactiveAgent (P11, `proactive/loop.py`) runs beside it too: `decisions` + `act
 the process exits without committing, like the window loop, and restarts from the last safe
 offset. `PROACTIVE_AGENT=0` leaves it unstarted.
 
+A briefing from your agent (`briefing.py`) runs beside it too: core-api rings
+`nexus:{org_id}:briefings:ring` (Redis pub/sub, pattern `nexus:*:briefings:ring`), this claims the
+briefing over core-api's internal route, writes it and posts it back. `BRIEFING_AGENT=0` leaves it
+unstarted; it needs the same `CORE_URL` + `CORE_CALLER_TOKEN` as the minutes.
+
 Minutes for everyone (`minutes.py`) runs beside it too: `meeting-events` in group
 `agent-runtime-minutes`, its own producer; on `ended` it writes one set of minutes per
 participant and one shared set. It needs `CORE_URL` + `CORE_CALLER_TOKEN` (core-api's internal
@@ -359,6 +364,13 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.agents.proactive_agent import (
         deps_from_env as proactive_from_env,
     )
+    from services.agent_runtime_service.briefing import (
+        BriefingLoop,
+        BriefingWriter,
+        run_briefing_loop,
+    )
+    from services.agent_runtime_service.briefing import api_from_env as briefing_api_from_env
+    from services.agent_runtime_service.briefing import enabled as briefing_enabled
     from services.agent_runtime_service.delegation.client import delegation_from_env
     from services.agent_runtime_service.emitter import Emitter
     from services.agent_runtime_service.feedback import TOPIC as FEEDBACK_TOPIC
@@ -596,6 +608,15 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         )
     else:
         logger.warning("room signals off: no CORE_URL / CORE_CALLER_TOKEN, or ROOM_SIGNALS_AGENT=0")
+    briefing_api = briefing_api_from_env()
+    if briefing_api is not None and briefing_enabled():
+        # A briefing from your agent (briefing.py): core-api rings, this writes it, same loop.
+        briefing_loop = BriefingLoop(
+            BriefingWriter(loader, router, org_context=org_contexts.get_strict), briefing_api
+        )
+        background.append(asyncio.create_task(run_briefing_loop(redis, briefing_loop, stop)))
+    else:
+        logger.warning("briefings off: no CORE_URL / CORE_CALLER_TOKEN, or BRIEFING_AGENT=0")
     if translation_enabled():  # live caption translation (translation.py), same event loop
         translation_task, translation_consumer = start_translation(
             brokers=brokers,

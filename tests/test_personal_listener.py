@@ -310,6 +310,7 @@ def test_the_shipped_prompts_are_registered_and_render():
         "last_word": "v1",
         "consensus_read": "v1",
         "resume_point": "v1",
+        "briefing": "v1",  # a briefing from your agent
     }
 
 
