@@ -5,7 +5,7 @@
     "mrr": 0.775,
     "ndcg_at_10": 0.733,
     "trap_leaks": 0,
-    "p95_s": 0.032
+    "p95_s": 0.042
   },
   {
     "row": "+ FTS and RRF",
@@ -13,7 +13,7 @@
     "mrr": 0.775,
     "ndcg_at_10": 0.733,
     "trap_leaks": 0,
-    "p95_s": 0.059
+    "p95_s": 0.057
   },
   {
     "row": "+ rerank (plain)",
@@ -21,7 +21,7 @@
     "mrr": 0.696,
     "ndcg_at_10": 0.693,
     "trap_leaks": 0,
-    "p95_s": 0.442
+    "p95_s": 0.424
   },
   {
     "row": "+ rerank with context",
@@ -29,7 +29,7 @@
     "mrr": 0.6,
     "ndcg_at_10": 0.622,
     "trap_leaks": 0,
-    "p95_s": 0.996
+    "p95_s": 0.672
   },
   {
     "row": "+ skip headings",
@@ -37,7 +37,7 @@
     "mrr": 0.608,
     "ndcg_at_10": 0.628,
     "trap_leaks": 0,
-    "p95_s": 0.838
+    "p95_s": 0.667
   },
   {
     "row": "+ fuse rerank with first stage",
@@ -45,7 +45,7 @@
     "mrr": 0.778,
     "ndcg_at_10": 0.758,
     "trap_leaks": 0,
-    "p95_s": 0.655
+    "p95_s": 1.073
   },
   {
     "row": "+ decisions source",
@@ -53,7 +53,7 @@
     "mrr": 0.794,
     "ndcg_at_10": 0.797,
     "trap_leaks": 0,
-    "p95_s": 1.135
+    "p95_s": 1.124
   },
   {
     "row": "+ small-to-big",
@@ -61,6 +61,6 @@
     "mrr": 0.794,
     "ndcg_at_10": 0.797,
     "trap_leaks": 0,
-    "p95_s": 2.465
+    "p95_s": 1.192
   }
 ]

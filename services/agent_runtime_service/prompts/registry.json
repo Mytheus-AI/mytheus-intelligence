@@ -25,7 +25,8 @@
     "briefing": "v1",
     "decision_assumptions": "v1",
     "decision_ripple": "v1",
-    "assumption_check": "v1"
+    "assumption_check": "v1",
+    "interrupt_gate": "v1"
   },
   "pins": {}
 }

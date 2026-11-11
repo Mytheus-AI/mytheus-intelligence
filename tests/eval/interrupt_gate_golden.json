@@ -1,0 +1,439 @@
+{
+  "about": "Golden set for the live watch's interrupt gate (interrupt_gate@v1, 'in every meeting at once'). Each case is one window of a live meeting the person is NOT in, with the person's work profile (teams, projects, listen-for topics, owned work). interrupt: whether the agent should interrupt them now; reason: decision (a decision touching their topics or work is being made), question (a question needs them, their team or project), promise (someone commits them or their team). Negatives are the costly mistakes: a passing mention, a topic discussed without a decision, a lookalike topic, a status update, small talk, a question the room answered. prefilter false: the deterministic pre-filter must stop it before any model call. Labels are the maintainer's judgement, written before any model was run.",
+  "cases": [
+    {
+      "id": "starter-price-decided",
+      "category": "decision",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Okay, for the starter plan pricing, twenty dollars per seat.",
+        "Participant 2: Agreed, that's final, we lock it today."
+      ],
+      "interrupt": true,
+      "reason": "decision",
+      "topic": "Starter plan pricing",
+      "prefilter": true
+    },
+    {
+      "id": "cutover-date-moved",
+      "category": "decision",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: The billing migration cutover moves to the 14th.",
+        "Participant 2: Yes, decided, I'll update the calendar."
+      ],
+      "interrupt": true,
+      "reason": "decision",
+      "topic": "Billing cutover date",
+      "prefilter": true
+    },
+    {
+      "id": "retention-settled",
+      "category": "decision",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 2: So on data retention we keep logs for 90 days, not a year.",
+        "Participant 1: Agreed, that's the call. Done."
+      ],
+      "interrupt": true,
+      "reason": "decision",
+      "topic": "Log data retention",
+      "prefilter": true
+    },
+    {
+      "id": "retention-question-for-her",
+      "category": "question",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Can retention drop to 30 days? We need Priya's answer before we close this.",
+        "Participant 2: No idea, it's her call, not mine."
+      ],
+      "interrupt": true,
+      "reason": "question",
+      "topic": "Retention period",
+      "prefilter": true
+    },
+    {
+      "id": "platform-take-sso-bug",
+      "category": "question",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Can the Platform team take the SSO bug this sprint?",
+        "Participant 2: Nobody here can say, they'd have to answer."
+      ],
+      "interrupt": true,
+      "reason": "question",
+      "topic": "SSO bug ownership",
+      "prefilter": true
+    },
+    {
+      "id": "priya-signed-up-runbook",
+      "category": "promise",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Priya will have the migration runbook done by Friday.",
+        "Participant 2: Great, I'll tell her it's on her, put it in the notes."
+      ],
+      "interrupt": true,
+      "reason": "promise",
+      "topic": "Migration runbook",
+      "prefilter": true
+    },
+    {
+      "id": "platform-on-call-promise",
+      "category": "promise",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 2: Put Platform down for the weekend on-call rotation starting Monday.",
+        "Participant 1: Yes, they'll do it, I'll let them know after."
+      ],
+      "interrupt": true,
+      "reason": "promise",
+      "topic": "Weekend on-call",
+      "prefilter": true
+    },
+    {
+      "id": "deck-mention",
+      "category": "mention",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Priya sent the deck yesterday, thanks to her for that.",
+        "Participant 2: Yes, it was great. Next item."
+      ],
+      "interrupt": false,
+      "reason": null,
+      "topic": "",
+      "prefilter": true
+    },
+    {
+      "id": "pricing-brainstorm",
+      "category": "discussion",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Pricing is tricky, I have a few ideas but nothing firm.",
+        "Participant 2: Let's think more and revisit it next month, no decision today."
+      ],
+      "interrupt": false,
+      "reason": null,
+      "topic": "",
+      "prefilter": true
+    },
+    {
+      "id": "competitor-pricing-logo",
+      "category": "lookalike",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Our competitor raised their pricing last week, interesting.",
+        "Participant 2: Anyway, the logo goes teal. Decided, design owns it."
+      ],
+      "interrupt": false,
+      "reason": null,
+      "topic": "",
+      "prefilter": true
+    },
+    {
+      "id": "platform-status-praise",
+      "category": "status",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Platform shipped the cache fix last week, nice work all round.",
+        "Participant 2: Yes, latency is down. Moving on."
+      ],
+      "interrupt": false,
+      "reason": null,
+      "topic": "",
+      "prefilter": true
+    },
+    {
+      "id": "birthday",
+      "category": "small_talk",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 2: Happy birthday to Priya tomorrow, let's get her a card.",
+        "Participant 1: Good idea, I'll grab one at lunch."
+      ],
+      "interrupt": false,
+      "reason": null,
+      "topic": "",
+      "prefilter": true
+    },
+    {
+      "id": "migration-status-answered",
+      "category": "answered",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: What's the billing migration status?",
+        "Participant 2: It finished on Tuesday, all green, nothing pending."
+      ],
+      "interrupt": false,
+      "reason": null,
+      "topic": "",
+      "prefilter": true
+    },
+    {
+      "id": "lunch",
+      "category": "unrelated",
+      "title": "Weekly product sync",
+      "person": {
+        "name": "Priya Shah",
+        "first_name": "Priya",
+        "teams": [
+          "Platform"
+        ],
+        "projects": [
+          "Billing migration"
+        ],
+        "listen_for": [
+          "pricing",
+          "data retention"
+        ],
+        "owns": [
+          "Billing migration cutover plan",
+          "SSO rollout"
+        ]
+      },
+      "transcript": [
+        "Participant 1: Shall we grab lunch after this?",
+        "Participant 2: Sure, the usual place."
+      ],
+      "interrupt": false,
+      "reason": null,
+      "topic": "",
+      "prefilter": false
+    }
+  ]
+}
