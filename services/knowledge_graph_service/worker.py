@@ -4,13 +4,15 @@ Run: `python -m services.knowledge_graph_service.worker`
 
 - `TenantTopicSeedConsumer` (`tenant-events`): per-org `Topic` seeding (Plan 5-6 3.2).
 - `ConfirmedFactsConsumer` (`decisions`, `actions`, `meeting-room-events`): the edges
-  (Plan 7-9 3.7).
+  (Plan 7-9 3.7), run as `ErasureAwareFactsConsumer` (`erasure_consumer.py`).
+- `GraphErasureConsumer` (`admin-events` `erasure_requested`): a person's or a meeting's share
+  of the graph (`erasure_consumer.py`).
 
 Each runs `BaseConsumer.run_forever` on its own thread with its OWN Redis, engine and producer:
 `run_forever` binds async clients to its thread's event loop (see its docstring), so the two
 consumers must not share them. Env: `AGE_DATABASE_URL` (required, no default - see
 `libs/shared/age.py`), `DATABASE_URL`, `REDIS_URL`, `REDPANDA_BROKERS`, `SCHEMA_REGISTRY_URL`.
-`KG_CONSUMERS` (default `topic-seed,confirmed-facts`) limits which ones start. The graph is
+`KG_CONSUMERS` (default `topic-seed,confirmed-facts,erasure`) limits which ones start. The graph is
 bootstrapped (`ensure_graph`) before either consumes.
 """
 
@@ -30,7 +32,10 @@ from libs.shared.age import age_database_url
 from libs.shared.avro_codec import AvroCodec
 from services.knowledge_graph_service.connection import age_connection
 from services.knowledge_graph_service.consumer import TenantTopicSeedConsumer
-from services.knowledge_graph_service.facts_consumer import ConfirmedFactsConsumer
+from services.knowledge_graph_service.erasure_consumer import (
+    ErasureAwareFactsConsumer,
+    GraphErasureConsumer,
+)
 from services.knowledge_graph_service.graph import ensure_graph
 
 logger = logging.getLogger(__name__)
@@ -63,7 +68,7 @@ def main() -> None:
     brokers = os.environ.get("REDPANDA_BROKERS", "localhost:9092")
     wanted = {
         c.strip()
-        for c in os.environ.get("KG_CONSUMERS", "topic-seed,confirmed-facts").split(",")
+        for c in os.environ.get("KG_CONSUMERS", "topic-seed,confirmed-facts,erasure").split(",")
         if c.strip()
     }
 
@@ -74,8 +79,10 @@ def main() -> None:
         )
     if "confirmed-facts" in wanted:
         consumers.append(
-            ConfirmedFactsConsumer(graph_connect=lambda: age_connection(dsn), **_deps())
+            ErasureAwareFactsConsumer(graph_connect=lambda: age_connection(dsn), **_deps())
         )
+    if "erasure" in wanted:
+        consumers.append(GraphErasureConsumer(graph_connect=lambda: age_connection(dsn), **_deps()))
     if not consumers:
         raise SystemExit("KG_CONSUMERS names no known consumer")
 

@@ -1,0 +1,10 @@
+{
+  "about": "Targets for decision_agent@v3 / action_agent@v3 on meeting_memory_golden.json: the share of cases whose emitted cards (after memory.reconcile) match the expected outcome. Not yet measured: the coordinator runs the paid eval (EVAL_LIVE=1) and sets measured, min_accuracy from the first run.",
+  "measured": false,
+  "prompts": [
+    "decision_agent@v3",
+    "action_agent@v3"
+  ],
+  "golden_cases": 12,
+  "min_accuracy": 0.75
+}

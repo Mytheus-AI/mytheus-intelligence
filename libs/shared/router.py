@@ -59,6 +59,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
+from libs.shared import agent_metrics
 from libs.shared.budget import BudgetGate, Decision
 from libs.shared.cost import budget_units
 from libs.shared.llm_cache import CachedCompletion, ResponseCache, cache_key
@@ -321,6 +322,7 @@ class LiteLLMRouter:
                 tier,
                 usage.output_tokens,
             )
+        agent_metrics.observe_call(prompt_ref, org_id, tier, usage, text)
         in_tok, out_tok = usage.input_tokens, usage.output_tokens
         if key is not None and self._cache is not None and text and not truncated:
             await self._cache.set(key, CachedCompletion(text, in_tok, out_tok))

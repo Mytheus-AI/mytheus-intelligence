@@ -1,0 +1,17 @@
+{
+  "prompt": "proactive_stakeholder@v3",
+  "prompt_sha256": "233fe7e21972bf8d5117d510226a90151ee76adb1806c2037b1006c08470b502",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "s-01": "{\"topic\": \"pricing\", \"score\": 0.9}",
+    "s-02": "{\"topic\": \"pricing\", \"score\": 0.85}",
+    "s-03": "{\"topic\": \"\", \"score\": 0.0}",
+    "s-04": "{\"topic\": \"infra\", \"score\": 0.35}",
+    "s-05": "{\"topic\": \"roadmap\", \"score\": 0.9}",
+    "s-06": "{\"topic\": \"hiring\", \"score\": 0.85}",
+    "s-07": "{\"topic\": \"security\", \"score\": 0.4}",
+    "s-08": "{\"topic\": \"security\", \"score\": 0.9}",
+    "s-09": "{\"topic\": \"pricing\", \"score\": 0.6}"
+  }
+}

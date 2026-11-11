@@ -314,7 +314,9 @@ def test_with_no_brain_the_new_version_renders_exactly_the_old_user_message(
         "agenda": "1. A (pending)",
         "carried": "(none)",
     }
-    assert loader.resolve(key, ORG) == new  # the default advanced
+    # the default advanced (to this version or past it: decision_agent / action_agent@v3 for
+    # the in-meeting memory, v5 with the feedback examples; polish wave 2 for the others)
+    assert int(loader.resolve(key, ORG)[1:]) >= int(new[1:])
     assert loader.load(key, new).render_user(**values) == loader.load(key, old).render_user(
         **values
     )
@@ -526,7 +528,7 @@ async def _note(context: dict[str, Any], answer: str = NOTE) -> tuple[Any, LLM, 
 
 async def test_commitments_ride_in_the_record_and_never_in_the_live_stream():
     result, llm, streamed = await _note(PROFILE)
-    assert result.payload["prompt"] == "personal_listener@v3"
+    assert result.payload["prompt"] == "personal_listener@v5"
     assert result.payload["commitments"] == [
         {"content": "You will send the export", "due_hint": "tomorrow"}
     ]

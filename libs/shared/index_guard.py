@@ -5,6 +5,9 @@ Polish plan, Phase 0 ("never record everywhere"). `embedding-service` (Qdrant) a
 window the company said not to record was still embedded and full-text indexed, and RAG / Ask
 could bring it back. Both consumers now ask `IndexGuard.check` before they store a chunk.
 
+Off the record (`libs/shared/off_record.py`) comes before everything: a chunk that arrives while
+the meeting is off the record is never indexed (reason `off_record`, no other work done).
+
 Never record, per chunk, cheapest first:
 1. The chunk's 30-second window (`start_ms // 30000`, the agent runtime's window) was already
    marked never-record for this meeting -> skip.
@@ -48,7 +51,9 @@ from uuid import UUID
 
 import httpx
 
+from libs.shared.metrics import record_off_record_skip
 from libs.shared.never_record import NeverRecordPolicy
+from libs.shared.off_record import is_off_record
 from libs.shared.org_context import CompanyContext
 
 logger = logging.getLogger(__name__)
@@ -63,7 +68,7 @@ CHECK_KEY = "never_record_check"
 
 OrgContextFn = Callable[[UUID], Awaitable[CompanyContext]]
 PrivacyFn = Callable[[UUID, UUID], Awaitable[bool | None]]
-Reason = Literal["ok", "never_record", "never_record_window", "unvetted"]
+Reason = Literal["ok", "never_record", "never_record_window", "unvetted", "off_record"]
 
 
 class Classifier(Protocol):
@@ -111,6 +116,9 @@ class IndexGuard:
         return True if flag is None else flag
 
     async def check(self, org_id: UUID, meeting_id: UUID, start_ms: int, text: str) -> IndexVerdict:
+        if await is_off_record(self._redis, org_id, meeting_id):  # libs/shared/off_record.py
+            record_off_record_skip("index")
+            return IndexVerdict(False, True, "off_record")
         confidential = await self.confidential(org_id, meeting_id)
         policy = NeverRecordPolicy.from_org(await self._org(org_id))  # raises: retry
         if policy.empty:

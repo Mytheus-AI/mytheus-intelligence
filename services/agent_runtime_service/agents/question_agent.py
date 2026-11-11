@@ -65,6 +65,8 @@ from services.agent_runtime_service.agents.personal_listener_agent import (
     persona_values,
     render_window,
 )
+from services.agent_runtime_service.guidance import guidance_values
+from services.agent_runtime_service.person_memory import memory_values
 from services.agent_runtime_service.policy import DEFAULT as DEFAULT_THRESHOLDS
 from services.agent_runtime_service.policy import Thresholds, thresholds_for
 
@@ -74,6 +76,18 @@ MIN_WORDS = 25
 MAX_SUGGESTIONS = 2
 DEFAULT_COOLDOWN_WINDOWS = 1
 GROUNDING_QUERY_CHARS = 500
+
+
+DEFAULT_MIN_SPAN_MS = 20_000
+
+
+def question_min_span_ms() -> int:
+    """Polish (calm): suggestions run on at least this much meeting time (`QUESTION_MIN_SPAN_MS`,
+    default 20 s) of the event-driven windows, or sooner on a cue."""
+    try:
+        return max(0, int(os.environ.get("QUESTION_MIN_SPAN_MS", DEFAULT_MIN_SPAN_MS)))
+    except ValueError:
+        return DEFAULT_MIN_SPAN_MS
 
 
 def cooldown_windows() -> int:
@@ -123,6 +137,10 @@ class QuestionAgent(BaseAgent):
     kind: ClassVar[str] = "suggestion"
 
     gate_prompt: Prompt | None = None
+
+    @property
+    def min_span_ms(self) -> int:
+        return question_min_span_ms()
 
     def __init__(
         self, loader: PromptLoader, router: LiteLLMRouter, *, grounder: Grounder | None = None
@@ -231,6 +249,10 @@ class QuestionAgent(BaseAgent):
                 system=self.prompt.system,
                 **self.prompt.user_parts(
                     **persona_values(s.context),
+                    # polish wave 2: memory across meetings and the person's own feedback
+                    # examples (both "" when there is nothing; older templates ignore them)
+                    **memory_values(s.context),
+                    **guidance_values(self.name, s.context),
                     window=render_window(s.chunk, s.user_id),
                     context=render_passages(passages),
                 ),

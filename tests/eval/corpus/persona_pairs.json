@@ -1,0 +1,149 @@
+{
+  "about": "Persona pairs: the same window seen by two participants with different roles. Both notes must capture the same facts (the window's decisions and actions).",
+  "pairs": [
+    {
+      "id": "p-01",
+      "window": "w-core-009",
+      "a": "eng",
+      "b": "design"
+    },
+    {
+      "id": "p-02",
+      "window": "w-core-010",
+      "a": "sales",
+      "b": "finance"
+    },
+    {
+      "id": "p-03",
+      "window": "w-core-011",
+      "a": "eng",
+      "b": "finance"
+    },
+    {
+      "id": "p-04",
+      "window": "w-gen-045",
+      "a": "design",
+      "b": "sales"
+    },
+    {
+      "id": "p-05",
+      "window": "w-gen-046",
+      "a": "eng",
+      "b": "design"
+    },
+    {
+      "id": "p-06",
+      "window": "w-gen-047",
+      "a": "sales",
+      "b": "finance"
+    },
+    {
+      "id": "p-07",
+      "window": "w-gen-048",
+      "a": "eng",
+      "b": "finance"
+    },
+    {
+      "id": "p-08",
+      "window": "w-gen-049",
+      "a": "design",
+      "b": "sales"
+    },
+    {
+      "id": "p-09",
+      "window": "w-gen-050",
+      "a": "eng",
+      "b": "design"
+    },
+    {
+      "id": "p-10",
+      "window": "w-gen-051",
+      "a": "sales",
+      "b": "finance"
+    },
+    {
+      "id": "p-11",
+      "window": "w-gen-052",
+      "a": "eng",
+      "b": "finance"
+    },
+    {
+      "id": "p-12",
+      "window": "w-gen-053",
+      "a": "design",
+      "b": "sales"
+    },
+    {
+      "id": "p-13",
+      "window": "w-gen-054",
+      "a": "eng",
+      "b": "design"
+    },
+    {
+      "id": "p-14",
+      "window": "w-gen-055",
+      "a": "sales",
+      "b": "finance"
+    },
+    {
+      "id": "p-15",
+      "window": "w-gen-056",
+      "a": "eng",
+      "b": "finance"
+    },
+    {
+      "id": "p-16",
+      "window": "w-gen-057",
+      "a": "design",
+      "b": "sales"
+    },
+    {
+      "id": "p-17",
+      "window": "w-gen-006",
+      "a": "eng",
+      "b": "design"
+    },
+    {
+      "id": "p-18",
+      "window": "w-gen-043",
+      "a": "sales",
+      "b": "finance"
+    },
+    {
+      "id": "p-19",
+      "window": "w-gen-025",
+      "a": "eng",
+      "b": "finance"
+    },
+    {
+      "id": "p-20",
+      "window": "w-gen-044",
+      "a": "design",
+      "b": "sales"
+    },
+    {
+      "id": "p-21",
+      "window": "w-gen-017",
+      "a": "eng",
+      "b": "design"
+    },
+    {
+      "id": "p-22",
+      "window": "w-gen-039",
+      "a": "sales",
+      "b": "finance"
+    },
+    {
+      "id": "p-23",
+      "window": "w-gen-008",
+      "a": "eng",
+      "b": "finance"
+    },
+    {
+      "id": "p-24",
+      "window": "w-gen-031",
+      "a": "design",
+      "b": "sales"
+    }
+  ]
+}

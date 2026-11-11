@@ -7,6 +7,9 @@ Cardinality and privacy rules (do not relax):
   - HTTP series are labelled by the matched ROUTE TEMPLATE (``/api/v1/meetings/{meeting_id}``),
     never the raw path. Unmatched paths collapse to ``unmatched``.
   - No ``org_id``, ``user_id`` or any other tenant/person identifier is ever a label value.
+    One named exception: ``mytheus_agent_time_to_card_seconds{agent,org_id}`` (polish program,
+    the per-workspace speech-to-card dashboard). Its org_id series are bounded by the number of
+    workspaces in live meetings; no person identifier is ever a label.
   - Consumer series are labelled by group/topic/outcome only.
 """
 
@@ -93,6 +96,27 @@ EMBEDDING_BATCH_SIZE = Histogram(
     "Number of texts per embedding batch.",
     ["service"],
     buckets=(1, 2, 4, 8, 16, 32, 64, 128, 256),
+)
+
+AGENT_TIME_TO_CARD = Histogram(
+    "mytheus_agent_time_to_card_seconds",
+    "Seconds from the end of the speech a card is about to when its result is emitted.",
+    ["agent", "org_id"],
+    buckets=(0.5, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 60),
+)
+
+
+# Off the record and live caption translation (polish program, wave 3).
+OFF_RECORD_SKIPPED = Counter(
+    "mytheus_off_record_skipped_total",
+    "Work skipped because the meeting was off the record, by stage (agent_window|index|caption).",
+    ["service", "stage"],
+)
+CAPTION_TRANSLATIONS = Counter(
+    "mytheus_caption_translations_total",
+    "Live caption finals seen by the translator, by outcome (translated|budget_denied|"
+    "unavailable|missing|stale|no_languages|off_record|never_record|too_long|dropped).",
+    ["service", "outcome"],
 )
 
 
@@ -223,6 +247,15 @@ def record_outbox(*, published: int = 0, poisoned: int = 0, backlog: int | None 
 def observe_embedding_batch(seconds: float, size: int) -> None:
     EMBEDDING_BATCH_DURATION.labels(_SERVICE).observe(seconds)
     EMBEDDING_BATCH_SIZE.labels(_SERVICE).observe(size)
+
+
+def record_off_record_skip(stage: str) -> None:
+    OFF_RECORD_SKIPPED.labels(_SERVICE, stage).inc()
+
+
+def record_caption_translation(outcome: str, count: int = 1) -> None:
+    if count:
+        CAPTION_TRANSLATIONS.labels(_SERVICE, outcome).inc(count)
 
 
 @contextmanager

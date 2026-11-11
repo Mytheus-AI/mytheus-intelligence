@@ -1,0 +1,28 @@
+{
+  "prompt": "proactive_conflict@v2",
+  "prompt_sha256": "beeeae40936bbee78beb8320fe97c853a7e7f6a1e8113b3db371d3d425285cbe",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "budget-cap-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.9, \"rationale\": \"The new decision approves a 40,000 dollar contractor budget for Q1, while decision 1 ruled out any contractor spending in Q1 and kept all Q1 work in-house.\", \"rationale_note\": null}]}",
+    "consistent-number": "Annual 240 = 12 × 20, so the two prices are consistent. Annual billing at 240 per seat per year equals the monthly price of 20 for 12 months, which means both decisions can stand together.\n\n{\"conflicts\": []}",
+    "date-refinement": "{\"conflicts\": []}",
+    "different-product-dates": "{\"conflicts\": []}",
+    "different-team-budget": "{\"conflicts\": []}",
+    "free-tier-removed": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.93, \"rationale\": \"The new decision removes the free tier for new sign-ups from 1 December, while decision 1 keeps it available to every new sign-up through 2027.\"}]}",
+    "hiring-freeze-broken": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.85, \"rationale\": \"The new decision hires two senior backend engineers this month, while decision 1 froze engineering hiring until the Series B closes.\"}]}",
+    "launch-date-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.93, \"rationale\": \"The new decision launches the analytics beta on 2 December, but decision 1 ruled out any launch before 15 January until the security review is complete.\"}]}",
+    "launch-detail-added": "{\"conflicts\": []}",
+    "launch-moved-explicitly": "Decision 1 says \"not launch before 15 January, after the security review is complete.\" The new decision moves launch to 2 December, which is before 15 January. The new decision knowingly changes the earlier date, saying the move is possible because the security review finished early. It explicitly revises the earlier plan, and the earlier decision's condition (security review complete) is satisfied. This is a knowing replacement, not a contradiction.\n\n{\"conflicts\": []}",
+    "office-vs-hiring": "{\"conflicts\": []}",
+    "pricing-annual-discount": "{\"conflicts\": []}",
+    "pricing-revised": "{\"conflicts\": []}",
+    "region-policy-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.95, \"rationale\": \"The new decision stores EU customer data in the US region, while decision 1 requires it to stay in the Frankfurt region.\"}]}",
+    "reorg-replaces-plan": "{\"conflicts\": []}",
+    "same-vendor-different-use": "{\"conflicts\": []}",
+    "scope-narrowing": "{\"conflicts\": []}",
+    "search-indexing-owner": "{\"conflicts\": []}",
+    "vendor-choice-clash": "{\"conflicts\": [{\"candidate\": 1, \"confidence\": 0.9, \"rationale\": \"The new decision uses Postgres full-text search with no external search vendor, while decision 1 adopted Algolia as the product search vendor.\"}]}",
+    "vendor-reversed": "{\"conflicts\": []}"
+  }
+}

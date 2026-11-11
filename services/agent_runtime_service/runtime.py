@@ -35,6 +35,12 @@ and the window after it, run no agent at all. Every result and every streamed de
 `names.Postprocess` on its way out: labels become display names (from the contexts fetched
 here), and anything naming a never-record topic is dropped.
 
+Polish wave 2 (agents that learn). With `learning` (`learning.LearningClient`), every
+participant's context also carries their own thresholds (the workspace's calibrated bands, plus
+their personal ones for their notes, suggestions and context fills), recent feedback examples
+for the `{guidance}` prompt block and their memory across meetings for `{person_memory}`.
+Without it, or on a failure, contexts are exactly as before.
+
 Roster and agents are in memory. That is safe for the same reason the open windows are: a
 meeting's events all arrive on one partition of this consumer group.
 """
@@ -43,17 +49,35 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 from uuid import UUID
 
+from libs.shared import agent_metrics
 from libs.shared.base_agent import BaseAgent
+from libs.shared.metrics import record_off_record_skip
 from libs.shared.never_record import NeverRecordPolicy
+from libs.shared.off_record import is_off_record
 from libs.shared.org_context import CompanyContext
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
-from services.agent_runtime_service.names import Namer, Postprocess, assign_labels
+from services.agent_runtime_service.memory import (
+    CONTEXT_KEY as MEMORY_KEY,
+)
+from services.agent_runtime_service.memory import (
+    KIND_OF_RESULT,
+    LedgerEntry,
+    MeetingLedger,
+    MeetingMemory,
+    drop_repeated_suggestions,
+)
+from services.agent_runtime_service.moments import annotate
+from services.agent_runtime_service.names import Namer, Postprocess, assign_labels, speaker_labels
 from services.agent_runtime_service.policy import CONTEXT_KEY
+from services.agent_runtime_service.windowing import merge_transcripts
+
+RECENT_WINDOWS = 2  # memory inside the meeting: the last two windows' text
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +86,15 @@ ContextFn = Callable[[UUID, UUID], Awaitable[dict[str, Any] | None]]
 OrgContextFn = Callable[[UUID], Awaitable[CompanyContext]]
 ProxiesFn = Callable[[UUID, UUID], Awaitable[list[UUID]]]
 PolicyFn = Callable[[UUID], Awaitable[dict[str, dict[str, float]]]]
+
+
+class Learner(Protocol):
+    """Polish wave 2 (`learning.LearningClient`): each participant's context gains their own
+    thresholds, guidance examples and memory across meetings."""
+
+    async def enrich(
+        self, org_id: UUID, contexts: dict[UUID, dict[str, Any] | None]
+    ) -> dict[UUID, dict[str, Any] | None]: ...
 
 
 class Sink(Protocol):
@@ -92,6 +125,10 @@ class _Meeting:
     blocked_notified: set[UUID] = field(default_factory=set)
     labels: dict[str, str] = field(default_factory=dict)  # speaker id -> "Participant N"
     quiet_until_ms: int = -1  # never record: windows starting before this run no agent
+    recent: deque[str] = field(default_factory=lambda: deque(maxlen=RECENT_WINDOWS))
+    # (agent name, user) -> the windows an accumulating agent has not run on yet
+    pending: dict[tuple[str, UUID], list[TranscriptWindow]] = field(default_factory=dict)
+    proxies: set[UUID] = field(default_factory=set)  # users seen as attendance `agent`
 
 
 class AgentRuntime:
@@ -105,13 +142,19 @@ class AgentRuntime:
         org_context: OrgContextFn | None = None,
         proxies: ProxiesFn | None = None,
         policy: PolicyFn | None = None,
+        ledger: MeetingLedger | None = None,
+        learning: Learner | None = None,
+        redis: Any | None = None,  # the off-record flag (libs/shared/off_record.py)
     ) -> None:
+        self._redis = redis
         self._sink = sink
+        self._ledger = ledger
         self._context = user_context
         self._factories = agents
         self._org_context = org_context
         self._proxies = proxies
         self._policy = policy
+        self._learning = learning
         self._meetings: dict[tuple[UUID, UUID], _Meeting] = {}
         self._sem = asyncio.Semaphore(max_concurrency)
 
@@ -131,14 +174,73 @@ class AgentRuntime:
         if event_type == "joined":
             m.roster.add(user_id)
         elif event_type == "left":
+            # what their note-taker was still collecting is theirs: write it before it goes
+            await self.flush_pending(org_id, meeting_id, user_id)
             m.roster.discard(user_id)
             for key in [k for k in m.agents if k[1] == user_id]:
                 await m.agents.pop(key).terminate()
 
     async def end_meeting(self, org_id: UUID, meeting_id: UUID) -> None:
+        await self.flush_pending(org_id, meeting_id)
         m = self._meetings.pop((org_id, meeting_id), None)
         for agent in (m.agents.values() if m else []):
             await agent.terminate()
+
+    async def flush_pending(
+        self, org_id: UUID, meeting_id: UUID, user_id: UUID | None = None
+    ) -> int:
+        """Run every accumulating agent (PersonalListener's notes, QuestionAgent's suggestions)
+        on the windows it is still holding, for `user_id` or for everyone, as the meeting's end
+        (`final`). Without this, a stretch shorter than `min_span_ms` that no later window, cue
+        or final window completed was lost when its participant left or the meeting ended: the
+        meeting's last window is often closed by silence (`expire_idle`) before `close_meeting`
+        runs, so `close_meeting` has nothing to flush. Returns the number of results emitted."""
+        m = self._meetings.get((org_id, meeting_id))
+        if m is None:
+            return 0
+        keys = sorted(
+            (k for k in m.pending if user_id is None or k[1] == user_id),
+            key=lambda k: (str(k[1]), k[0]),
+        )
+        emitted = 0
+        for name, owner in keys:
+            held = m.pending.pop((name, owner), [])
+            agent = m.agents.get((name, owner))
+            if agent is None or not held:
+                continue
+            window = merge_transcripts(held)
+            window.final = True
+            emitted += await self._flush_one(m, window, agent, owner, len(held))
+        return emitted
+
+    async def _flush_one(
+        self, m: _Meeting, window: TranscriptWindow, agent: BaseAgent, owner: UUID, held: int
+    ) -> int:
+        speakers = {u for u in map(as_user_id, window.speaker_ids) if u is not None}
+        users = sorted({owner, *m.roster, *speakers}, key=str)
+        org, overrides, *found = await asyncio.gather(
+            self._org(window),
+            self._overrides(window),
+            *(self._ctx(window, u) for u in users),
+        )
+        memory = await self._memory(m, window)
+        # the held windows are the meeting's latest: they are the transcript, not "previous"
+        memory.previous = memory.previous[: max(0, len(memory.previous) - held)]
+        extra: dict[str, Any] = {CONTEXT_KEY: overrides, MEMORY_KEY: memory}
+        if org is not None:
+            extra["org"] = org
+        everyone = {
+            u: (None if c is None else {**c, **extra}) for u, c in zip(users, found, strict=True)
+        }
+        everyone = await self._learn(window, everyone)
+        context = everyone.get(owner)
+        if context is None:
+            return 0
+        proxy = owner in m.proxies and owner not in m.roster
+        if proxy:
+            context = {**context, "attendance": "agent"}  # as `_as_proxy`
+        post = Postprocess(Namer.build(m.labels, everyone), NeverRecordPolicy.from_org(org))
+        return await self._run_agent(m, window, agent, owner, context, post, proxy=proxy)
 
     async def _agent(
         self, m: _Meeting, factory: AgentFactory, window: TranscriptWindow, user_id: UUID
@@ -160,17 +262,26 @@ class AgentRuntime:
 
     async def process_window(self, window: TranscriptWindow) -> int:
         """Run every agent on one closed window. Returns the number of results emitted."""
+        if self._redis is not None and await is_off_record(
+            self._redis, window.org_id, window.meeting_id
+        ):  # off the record: no agent, no result, no delta, no model call
+            logger.info("window %s is off the record; no agent runs", window.window_id)
+            record_off_record_skip("agent_window")
+            return 0
+        agent_metrics.observe_meeting_window(window)
         m = self._meeting(window.org_id, window.meeting_id)
         assign_labels(m.labels, window)
         m.roster.update(u for u in map(as_user_id, window.speaker_ids) if u is not None)
         users = sorted(m.roster, key=str)
         proxied = [u for u in await self._proxied(window) if u not in m.roster]
+        m.proxies.update(proxied)
         org, overrides, *found = await asyncio.gather(
             self._org(window),
             self._overrides(window),
             *(self._ctx(window, u) for u in [*users, *proxied]),
         )
         never = NeverRecordPolicy.from_org(org)
+        memory = await self._memory(m, window)
         if any(never.hits(t.text) for t in window.turns):
             # A never-record topic was named in this window: nothing of it, or of the next
             # window (the talk around a topic rarely names it in every sentence), reaches any
@@ -179,12 +290,15 @@ class AgentRuntime:
             m.quiet_until_ms = window.end_ms + (window.end_ms - window.start_ms)
         if window.start_ms < m.quiet_until_ms:
             logger.info("window %s is never-record; no agent runs", window.window_id)
+            agent_metrics.never_record_skip("window", window.org_id)
+            m.pending.clear()  # nothing said around it reaches an accumulating agent either
             return 0
         everyone = dict(zip([*users, *proxied], found, strict=True))
-        extra: dict[str, Any] = {CONTEXT_KEY: overrides}
+        extra: dict[str, Any] = {CONTEXT_KEY: overrides, MEMORY_KEY: memory}
         if org is not None:
             extra["org"] = org
         everyone = {u: (None if c is None else {**c, **extra}) for u, c in everyone.items()}
+        everyone = await self._learn(window, everyone)
         post = Postprocess(Namer.build(m.labels, everyone), never)
         contexts = {u: everyone[u] for u in users}
         jobs = [self._run_user(m, window, u, contexts[u], post) for u in users]
@@ -193,7 +307,78 @@ class AgentRuntime:
         )
         jobs.append(self._run_multi(m, window, contexts, post))
         counts = await asyncio.gather(*jobs)
+        labels = speaker_labels(window)
+        m.recent.append("\n".join(f"{labels[t.speaker_id]}: {t.text}" for t in window.turns))
         return sum(counts)
+
+    async def _memory(self, m: _Meeting, window: TranscriptWindow) -> MeetingMemory:
+        """The last two windows (in process) and the meeting's ledger (Redis, if wired)."""
+        memory = MeetingMemory(previous=list(m.recent))
+        if self._ledger is not None:
+            memory.entries, memory.marks = await self._ledger.load(window.org_id, window.meeting_id)
+        return memory
+
+    def _due(
+        self, m: _Meeting, agent: BaseAgent, user_id: UUID, window: TranscriptWindow
+    ) -> TranscriptWindow | None:
+        """The window this agent runs on now, or None to wait. An agent with `min_span_ms`
+        (PersonalListener's notes, QuestionAgent's suggestions: fewer, fuller cards) collects
+        windows until they span that long, a window carries a cue, or the meeting ends."""
+        span = int(getattr(agent, "min_span_ms", 0) or 0)
+        if span <= 0:
+            return window
+        key = (agent.name, user_id)
+        held = [*m.pending.pop(key, []), window]
+        merged = merge_transcripts(held)
+        cue = window.trigger is not None and window.trigger.cue is not None
+        if window.final or cue or merged.end_ms - merged.start_ms >= span:
+            return merged
+        m.pending[key] = held
+        return None
+
+    async def _finish(
+        self,
+        raw: AgentResult,
+        window: TranscriptWindow,
+        user_id: UUID,
+        context: dict[str, Any] | None,
+        post: Postprocess,
+    ) -> tuple[AgentResult | None, list[LedgerEntry]]:
+        """Moments and why lines, the suggestion repeat guard, then names and never-record.
+        Returns what may leave the tier and the ledger entries its cards make."""
+        memory = (context or {}).get(MEMORY_KEY)
+        if raw.kind == "suggestion" and isinstance(memory, MeetingMemory):
+            items = raw.payload.get("suggestions")
+            if isinstance(items, list):
+                kept = drop_repeated_suggestions(items, memory, user_id)
+                if not kept:
+                    return None, []
+                raw.payload["suggestions"] = kept
+        annotate(raw, window, user_id, context)
+        entries: list[LedgerEntry] = []
+        kind = KIND_OF_RESULT.get(raw.kind)
+        if kind is not None:
+            for c in raw.payload.get("candidates") or []:
+                if isinstance(c, dict) and c.get("id") and c.get("content"):
+                    entries.append(
+                        LedgerEntry(
+                            id=str(c["id"]),
+                            kind=kind,
+                            text=str(c["content"]),
+                            moment_id=c.get("moment_id"),
+                        )
+                    )
+        result = post.result(raw)
+        if result is None:
+            return None, []
+        kept_ids = {
+            str(c.get("id")) for c in result.payload.get("candidates") or [] if isinstance(c, dict)
+        }
+        return result, [e for e in entries if e.id in kept_ids]
+
+    async def _remember(self, window: TranscriptWindow, entries: list[LedgerEntry]) -> None:
+        if self._ledger is not None and entries:
+            await self._ledger.record(window.org_id, window.meeting_id, entries)
 
     async def _org(self, window: TranscriptWindow) -> CompanyContext | None:
         if self._org_context is None:
@@ -212,6 +397,17 @@ class AgentRuntime:
         except Exception:  # noqa: BLE001 - the default thresholds, as core-api without overrides
             logger.warning("agent policy unavailable org=%s; default thresholds", window.org_id)
             return {}
+
+    async def _learn(
+        self, window: TranscriptWindow, contexts: dict[UUID, dict[str, Any] | None]
+    ) -> dict[UUID, dict[str, Any] | None]:
+        if self._learning is None:
+            return contexts
+        try:
+            return await self._learning.enrich(window.org_id, contexts)
+        except Exception:  # noqa: BLE001 - nothing learned: the window runs as before wave 2
+            logger.warning("learning unavailable org=%s; window runs without it", window.org_id)
+            return contexts
 
     async def _proxied(self, window: TranscriptWindow) -> list[UUID]:
         if self._proxies is None:
@@ -255,8 +451,11 @@ class AgentRuntime:
                 )
                 continue
             for user_id, raw in results:
-                result = post.result(raw)
+                result, entries = await self._finish(
+                    raw, window, user_id, contexts.get(user_id), post
+                )
                 if result is None:
+                    agent_metrics.never_record_skip("output", window.org_id)
                     continue  # nothing of it may leave the tier (never record)
                 try:
                     await self._sink.result(
@@ -272,6 +471,7 @@ class AgentRuntime:
                         "could not emit %s result for window %s", agent.name, window.window_id
                     )
                     continue
+                await self._remember(window, entries)
                 emitted += 1
         return emitted
 
@@ -296,48 +496,68 @@ class AgentRuntime:
                 continue  # run once per window by _run_multi
             if agent.scope == "meeting" and user_id != min(m.roster, key=str):
                 continue  # a meeting-scope agent runs once per window, not once per user
-            state = AgentState(
-                meeting_id=window.meeting_id,
-                user_id=user_id,
-                chunk=window,
-                context=context,
-                org_id=window.org_id,
-                stream=self._stream_for(window, user_id, post),
-            )
-            async with self._sem:
-                try:
-                    result = await agent.process(state)
-                except asyncio.CancelledError:
-                    raise
-                except Exception:  # noqa: BLE001 - one failed call must not stop the runtime
-                    # A provider error (bad key, rate limit, outage) used to escape the window,
-                    # kill the consumer before it committed, and replay the same window on every
-                    # restart (a crash loop that also blocks the partition, and with a working
-                    # key would re-bill). The note for this window is lost; the window completes.
-                    logger.exception(
-                        "agent %s failed on window %s for user %s; skipped",
-                        agent.name,
-                        window.window_id,
-                        user_id,
-                    )
-                    result = None
-            if agent.blocked and not proxy and user_id not in m.blocked_notified:
-                m.blocked_notified.add(user_id)
-                await self._sink.notification(
-                    org_id=window.org_id,
-                    user_id=user_id,
-                    source_event_id=f"budget-blocked:{window.meeting_id}",
-                    title="AI budget exhausted",
-                    body="Live notes are paused for this meeting. Captions continue.",
-                )
-            if result is not None:
-                result = post.result(result)
-            if result is not None:
-                await self._sink.result(
-                    window=window, user_id=user_id, agent=agent.name, result=result
-                )
-                emitted += 1
+            due = self._due(m, agent, user_id, window)
+            if due is None:
+                continue  # an accumulating agent waits for a fuller window
+            emitted += await self._run_agent(m, due, agent, user_id, context, post, proxy=proxy)
         return emitted
+
+    async def _run_agent(
+        self,
+        m: _Meeting,
+        due: TranscriptWindow,
+        agent: BaseAgent,
+        user_id: UUID,
+        context: dict[str, Any],
+        post: Postprocess,
+        *,
+        proxy: bool = False,
+    ) -> int:
+        """One agent on the window it is due to run on, for one user; 1 if a result left."""
+        state = AgentState(
+            meeting_id=due.meeting_id,
+            user_id=user_id,
+            chunk=due,
+            context=context,
+            org_id=due.org_id,
+            stream=self._stream_for(due, user_id, post),
+        )
+        async with self._sem:
+            try:
+                result = await agent.process(state)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - one failed call must not stop the runtime
+                # A provider error (bad key, rate limit, outage) used to escape the window,
+                # kill the consumer before it committed, and replay the same window on every
+                # restart (a crash loop that also blocks the partition, and with a working
+                # key would re-bill). The note for this window is lost; the window completes.
+                logger.exception(
+                    "agent %s failed on window %s for user %s; skipped",
+                    agent.name,
+                    due.window_id,
+                    user_id,
+                )
+                result = None
+        if agent.blocked and not proxy and user_id not in m.blocked_notified:
+            m.blocked_notified.add(user_id)
+            await self._sink.notification(
+                org_id=due.org_id,
+                user_id=user_id,
+                source_event_id=f"budget-blocked:{due.meeting_id}",
+                title="AI budget exhausted",
+                body="Live notes are paused for this meeting. Captions continue.",
+            )
+        entries: list[LedgerEntry] = []
+        if result is not None:
+            result, entries = await self._finish(result, due, user_id, context, post)
+            if result is None:
+                agent_metrics.never_record_skip("output", due.org_id)
+        if result is None:
+            return 0
+        await self._sink.result(window=due, user_id=user_id, agent=agent.name, result=result)
+        await self._remember(due, entries)
+        return 1
 
 
 def _as_proxy(context: dict[str, Any] | None) -> dict[str, Any] | None:

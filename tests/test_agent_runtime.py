@@ -39,7 +39,14 @@ from libs.shared.state import AgentResult, AgentState
 from services.agent_runtime_service.consumer import Loop, OffsetTracker
 from services.agent_runtime_service.emitter import EmitError, Emitter
 from services.agent_runtime_service.runtime import AgentRuntime
-from services.agent_runtime_service.windowing import WINDOW_MS, Chunk, Windower
+from services.agent_runtime_service.windowing import (
+    Chunk,
+    ClosedWindow,
+    Windower,
+    WindowSettings,
+    cue_list,
+    merge_windows,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 ORG = uuid.uuid4()
@@ -195,19 +202,124 @@ def chunk(start_ms: int, speaker: str = "a", cid: str | None = None, offset: int
 # --- 1. windowing --------------------------------------------------------------------------
 
 
-def test_360_finals_over_45_minutes_make_90_windows():
+def say(start_ms: int, text: str, speaker: str = "a", dur: int = 2_000) -> Chunk:
+    return Chunk(
+        org_id=ORG,
+        meeting_id=MEETING,
+        chunk_id=str(uuid.uuid4()),
+        speaker_id=speaker,
+        start_ms=start_ms,
+        end_ms=start_ms + dur,
+        text=text,
+    )
+
+
+def test_a_cue_closes_the_window_right_after_it_is_said():
+    w = Windower()
+    assert w.add(say(0, "so the numbers look fine")) == []
+    (cw,) = w.add(say(2_500, "I'll send the deck by Friday"))
+    assert cw.window.window_id == f"{MEETING}:0"
+    assert cw.window.trigger is not None
+    assert (cw.window.trigger.reason, cw.window.trigger.cue) == ("cue", "i'll")
+    assert cw.window.trigger.text == "I'll send the deck by Friday"
+    assert cw.window.trigger.start_ms == 2_500
+    assert [u.text for u in cw.window.utterances] == [
+        "so the numbers look fine",
+        "I'll send the deck by Friday",
+    ]
+
+
+def test_cues_are_whole_words_case_insensitive_and_configurable():
+    w = Windower()
+    assert w.cue_in("LET\u2019S ship it") == "let's"
+    assert w.cue_in("We Decided on Postgres") == "we decided"
+    assert w.cue_in("the billing owners met") is None  # 'owner' only as a whole word
+    assert w.cue_in("Can you take that") == "can you"
+    assert cue_list("ship it | Go Live") == ("ship it", "go live")
+    custom = Windower(WindowSettings(cues=cue_list("go live")))
+    assert custom.cue_in("I'll do it") is None and custom.cue_in("we go live") == "go live"
+
+
+def test_a_meeting_never_closes_windows_closer_than_the_minimum_gap():
+    w = Windower()
+    (first,) = w.add(say(0, "let's do it"))
+    assert w.add(say(2_000, "I will check")) == []  # 2 s after the last close: held
+    (second,) = w.add(say(5_000, "and we decided the date"))  # 7 s after it: closes
+    assert first.window.window_id == f"{MEETING}:0"
+    assert second.window.window_id == f"{MEETING}:2000"
+    assert second.window.trigger is not None and second.window.trigger.cue == "we decided"
+
+
+def test_a_turn_end_closes_once_the_window_is_long_enough():
+    w = Windower()
+    assert w.add(say(0, "context one", "a", 4_000)) == []
+    assert w.add(say(4_000, "reply", "b", 2_000)) == []  # 6 s: too short to close on a turn
+    assert w.add(say(6_000, "more context", "a", 5_000)) == []
+    (cw,) = w.add(say(11_500, "next speaker", "b"))  # 11 s held: the turn end closes it
+    assert cw.window.trigger is not None and cw.window.trigger.reason == "turn_end"
+    assert [t.speaker_id for t in cw.window.turns] == ["a", "b", "a"]
+    (nxt,) = w.close_meeting(ORG, MEETING)
+    assert nxt.window.window_id == f"{MEETING}:11500" and nxt.window.final
+
+
+def test_a_monologue_is_cut_at_the_maximum_span():
     w = Windower()
     closed = []
-    for i in range(360):  # one final every 7.5 s
-        closed += w.add(chunk(i * 7_500, speaker="ab"[i % 2]))
-    closed += w.close_meeting(ORG, MEETING)
-    assert len(closed) == 90
-    assert closed[0].window.window_id == f"{MEETING}:0"
-    assert closed[1].window.window_id == f"{MEETING}:{WINDOW_MS}"
+    for i in range(8):
+        closed += w.add(say(i * 3_000, f"part {i}", "a", 3_000))
+    assert [c.window.trigger.reason for c in closed if c.window.trigger] == ["max_span"]
+    assert closed[0].window.end_ms - closed[0].window.start_ms <= 15_000
+
+
+def test_the_wall_clock_rules_close_a_quiet_window():
+    now = [0.0]
+    w = Windower(clock=lambda: now[0])
+    w.add(say(0, "short remark", "a", 3_000))
+    now[0] = 5  # quiet, but only 3 s of speech and no cue: wait
+    assert w.expire_idle() == []
+    now[0] = 16  # the max-wait fallback closes it anyway
+    (cw,) = w.expire_idle()
+    assert cw.window.trigger is not None and cw.window.trigger.reason == "max_wait"
+
+    w.add(say(20_000, "a long point", "a", 11_000))
+    now[0] = 17  # quiet for 1 s: not yet a turn end
+    assert w.expire_idle() == []
+    now[0] = 18  # quiet for 2 s with 11 s held: the speaker's turn ended
+    (cw,) = w.expire_idle()
+    assert cw.window.trigger is not None and cw.window.trigger.reason == "turn_end"
+
+
+def test_a_held_cue_closes_when_the_speaker_goes_quiet():
+    now = [0.0]
+    w = Windower(clock=lambda: now[0])
+    w.add(say(0, "let's go", "a"))
+    w.add(say(2_100, "can you own it", "a"))  # held by the minimum gap
+    now[0] = 2
+    (cw,) = w.expire_idle()
+    assert cw.window.trigger is not None
+    assert (cw.window.trigger.reason, cw.window.trigger.cue) == ("cue", "can you")
+
+
+def test_45_minutes_of_speech_replays_into_the_same_short_windows():
+    def run() -> list[ClosedWindow]:
+        w = Windower()
+        out = []
+        for i in range(360):  # one final every 7.5 s, alternating speakers, some cues
+            text = "I'll take that" if i % 9 == 0 else f"point {i}"
+            c = say(i * 7_500, text, "ab"[i % 2], 5_000)
+            c.chunk_id = f"c{i}"
+            out += w.add(c)
+        return out + w.close_meeting(ORG, MEETING)
+
+    first, again = run(), run()
+    assert [c.window.window_id for c in first] == [c.window.window_id for c in again]
+    assert len(first) > 90  # more, shorter windows than the old 30 s buckets
+    assert all(c.window.end_ms - c.window.start_ms <= 15_000 for c in first)
+    assert sum(len(c.window.chunk_ids) for c in first) == 360
 
 
 def test_same_speaker_finals_merge_and_a_redelivered_chunk_is_ignored():
-    w = Windower()
+    w = Windower(WindowSettings(min_ms=60_000, max_ms=60_000))
     w.add(chunk(0, "a", cid="c1"))
     w.add(chunk(5_000, "a", cid="c2"))
     w.add(chunk(5_000, "a", cid="c2"))  # redelivery
@@ -218,15 +330,18 @@ def test_same_speaker_finals_merge_and_a_redelivered_chunk_is_ignored():
         ("b", ["c3"]),
     ]
     assert cw.window.transcript() == "a: t0 t5000\nb: t10000"
+    assert [u.chunk_id for u in cw.window.utterances] == ["c1", "c2", "c3"]
 
 
-def test_a_quiet_meeting_closes_on_idle():
-    now = [0.0]
-    w = Windower(idle_s=15, clock=lambda: now[0])
-    w.add(chunk(0))
-    assert w.expire_idle() == []
-    now[0] = 16
-    assert len(w.expire_idle()) == 1
+def test_merging_queued_windows_keeps_the_first_id_and_every_offset():
+    w = Windower()
+    a = w.add(say(0, "let's start", "a"))
+    b = w.add(say(6_000, "I will draft it", "a"))
+    merged = merge_windows(a + b)
+    assert merged.window.window_id == f"{MEETING}:0"
+    assert len(merged.window.turns) == 1 and len(merged.window.utterances) == 2
+    assert merged.offsets == a[0].offsets + b[0].offsets
+    assert merged.window.trigger is not None and merged.window.trigger.reason == "merged"
 
 
 # --- 2. budget gate ------------------------------------------------------------------------
@@ -626,8 +741,10 @@ async def test_the_loop_holds_offsets_until_the_window_is_processed_and_flushed(
     )
     await loop.handle("transcript-chunks", 0, 100, _chunk_value(0, user))
     await loop.handle("transcript-chunks", 0, 101, _chunk_value(10_000, user))
+    await loop.drain()
     assert loop.offsets.committable()[("transcript-chunks", 0)] == 100  # window still open
     await loop.handle("transcript-chunks", 0, 102, _chunk_value(31_000, user))  # closes it
+    await loop.drain()
     assert sink.flushes == 1 and len(sink.results) == 1
     assert loop.offsets.committable()[("transcript-chunks", 0)] == 102
 
@@ -649,6 +766,7 @@ async def test_an_unacknowledged_produce_commits_nothing(prompts):
     await loop.handle("transcript-chunks", 0, 5, _chunk_value(0, user))
     with pytest.raises(EmitError):
         await loop.handle("transcript-chunks", 0, 6, _chunk_value(40_000, user))
+        await loop.drain()
     assert loop.offsets.committable()[("transcript-chunks", 0)] == 5
 
 

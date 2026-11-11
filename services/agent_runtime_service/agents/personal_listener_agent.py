@@ -46,6 +46,17 @@ ADR-0039 (`personal_listener@v3`, `personal_listener_gate@v3`):
   runtime) gets an "Attendance" line in the profile so the note is a catch-up; they never speak,
   so their commitments are always empty, whatever the model says.
 With no company brain, a live participant and no promises, v3 renders exactly v2's user messages.
+
+Eval fixes (`personal_listener_gate@v6`, `personal_listener@v5`, first live eval 2026-11-11). The
+first real-model run showed the v5 gate scoring a decision or a task taken on outside the
+participant's role at 0.1 to 0.2 ("work clearly owned by someone else"), and v4 giving such a note
+a confidence under 0.4, so most participants got no note for the meeting's outcomes and two
+participants never shared a fact (persona fact overlap 0.0). The simulated recordings had hidden
+it. v6 scores an outcome of the meeting outside the role 0.6 to 0.8 (it passes the 0.5 gate);
+small talk, unsettled proposals and other people's discussion with no outcome stay low. v5 puts
+every decision and task of the stretch in the note with its owner, framed for the participant,
+and bands a clear outcome outside their role 0.4 to 0.7: kept in their record (silent), not
+pushed live. Both user messages are the previous versions'.
 """
 
 from __future__ import annotations
@@ -63,7 +74,9 @@ from libs.shared.prompts import Prompt
 from libs.shared.router import EXTRACT_MAX_TOKENS, EXTRACTION_EFFORT
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
 from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
+from services.agent_runtime_service.guidance import guidance_values
 from services.agent_runtime_service.names import speaker_labels
+from services.agent_runtime_service.person_memory import memory_focus, memory_values
 from services.agent_runtime_service.policy import DEFAULT as DEFAULT_THRESHOLDS
 from services.agent_runtime_service.policy import (
     Thresholds,
@@ -77,6 +90,19 @@ COMMITMENTS_PREFIX = "COMMITMENTS:"
 MAX_COMMITMENTS = 5  # ADR-0039 C3
 MAX_COMMITMENT = 500  # B6: content up to 500
 MAX_DUE_HINT = 100  # B6: due_hint up to 100
+
+
+DEFAULT_NOTE_MIN_SPAN_MS = 30_000
+
+
+def note_min_span_ms() -> int:
+    """Polish (calm): notes run on at least this much meeting time (`NOTE_MIN_SPAN_MS`, default
+    30 s), collected from the event-driven windows, or sooner when a window carries a cue (a
+    promise is time-sensitive). Fast windows are for the cards; a note per 4 s is noise."""
+    try:
+        return max(0, int(os.environ.get("NOTE_MIN_SPAN_MS", DEFAULT_NOTE_MIN_SPAN_MS)))
+    except ValueError:
+        return DEFAULT_NOTE_MIN_SPAN_MS
 
 
 def relevance_threshold() -> float:
@@ -250,6 +276,7 @@ def gate_values(context: dict[str, Any]) -> dict[str, str]:
         "focus": render_focus(context),
         "attendance": render_attendance(context),
         **gate_ground_rules(context),
+        **memory_focus(context),  # polish wave 2 (`personal_listener_gate@v5`); "" if none
     }
 
 
@@ -341,6 +368,10 @@ class PersonalListenerAgent(BaseAgent):
     scope: ClassVar[Literal["participant", "meeting"]] = "participant"
     serves_proxies: ClassVar[bool] = True  # ADR-0039 C6: runs for attendance `agent` too
 
+    @property
+    def min_span_ms(self) -> int:
+        return note_min_span_ms()
+
     gate_prompt: Prompt | None = None
 
     async def spawn(self, *, org_id: UUID | None, meeting_id: UUID, user_id: UUID) -> None:
@@ -375,7 +406,11 @@ class PersonalListenerAgent(BaseAgent):
                 tier="extract",
                 system=self.prompt.system,
                 **self.prompt.user_parts(
-                    **persona_values(s.context), window=render_window(s.chunk, s.user_id)
+                    **persona_values(s.context),
+                    # polish wave 2: memory across meetings and the person's own note ratings
+                    **memory_values(s.context),
+                    **guidance_values(self.name, s.context),
+                    window=render_window(s.chunk, s.user_id),
                 ),
                 org_id=s.org_id,
                 user_id=s.user_id,

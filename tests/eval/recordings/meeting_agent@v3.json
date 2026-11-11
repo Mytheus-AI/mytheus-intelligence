@@ -1,0 +1,28 @@
+{
+  "prompt": "meeting_agent@v3",
+  "prompt_sha256": "a6e6ecccac0d9c4c55e2d6885f433329f849d91822a9b391f5af379941fd0747",
+  "source": "recorded",
+  "about": "Real model answers recorded by the live eval (EVAL_LIVE=1 EVAL_RECORD=1).",
+  "entries": {
+    "m-01": "{\"updates\": [{\"item\": 1, \"status\": \"covered\", \"note\": \"The three roadmap themes were confirmed as they are, settling the item.\", \"confidence\": 0.85}, {\"item\": 2, \"status\": \"in_progress\", \"note\": \"Two open reqs and one offer are out; the backend req's pipeline is described as thin.\", \"confidence\": 0.9}], \"off_agenda\": null, \"raised\": []}",
+    "m-02": "{\"updates\": [{\"item\": 3, \"status\": \"in_progress\", \"note\": \"Design is basically done and the copy is in review; the open question is whether the comparison table shows the enterprise column.\", \"confidence\": 0.9}], \"off_agenda\": null, \"raised\": []}",
+    "m-03": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to the office move to the fourth floor, its January readiness, parking, and overlapping lease costs.\", \"could_be_item\": null, \"confidence\": 0.85}, \"raised\": []}",
+    "m-04": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-05": "{\"updates\": [{\"item\": 1, \"status\": \"in_progress\", \"note\": \"Reporting has slipped a sprint and now lands in the second December sprint, per the roadmap discussion.\", \"confidence\": 0.6}], \"off_agenda\": null, \"raised\": []}",
+    "m-06": "{\"updates\": [{\"item\": 1, \"status\": \"in_progress\", \"note\": \"Q4 roadmap review is being discussed; the group is now on the vendor shortlist for the SSO piece, which is Priya's open item.\", \"confidence\": 0.4}], \"off_agenda\": null, \"raised\": [1]}",
+    "m-07": "{\"updates\": [{\"item\": 1, \"status\": \"in_progress\", \"note\": \"Discussion of roadmap theme three, mobile parity work, still scoped at six weeks.\", \"confidence\": 0.75}], \"off_agenda\": null, \"raised\": [2]}",
+    "m-08": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-09": "{\"updates\": [{\"item\": 4, \"status\": \"covered\", \"note\": \"Deferred to next week; nothing urgent in it, per the group.\", \"confidence\": 0.9}], \"off_agenda\": null, \"raised\": []}",
+    "m-10": "{\"updates\": [{\"item\": 2, \"status\": \"in_progress\", \"note\": \"An offer to a designer went out yesterday, and the backend role is still open.\", \"confidence\": 0.8}], \"off_agenda\": null, \"raised\": []}",
+    "m-11": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to a customer escalation: failing exports for a client and a possible renewal pause.\", \"could_be_item\": null, \"confidence\": 0.85}, \"raised\": []}",
+    "m-12": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-13": "{\"updates\": [{\"item\": 3, \"status\": \"covered\", \"note\": \"Pricing page is done and goes live Monday; nothing left to discuss.\", \"confidence\": 0.9}], \"off_agenda\": null, \"raised\": []}",
+    "m-14": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-15": "{\"updates\": [], \"off_agenda\": {\"content\": \"The discussion moved to the conference booth size and its cost for the event.\", \"could_be_item\": null, \"confidence\": 0.8}, \"raised\": []}",
+    "m-16": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-17": "{\"updates\": [{\"item\": 4, \"status\": \"in_progress\", \"note\": \"Two follow-ups from the outage on the third are being reviewed: the runbook update is done, the alerting change is not yet.\", \"confidence\": 0.9}], \"off_agenda\": null, \"raised\": []}",
+    "m-18": "{\"updates\": [], \"off_agenda\": null, \"raised\": []}",
+    "m-19": "{\"updates\": [{\"item\": 2, \"status\": \"covered\", \"note\": \"Hiring plan agreed; the two requisitions were approved and the group moved on.\", \"confidence\": 0.9}], \"off_agenda\": null, \"raised\": []}",
+    "m-20": "{\"updates\": [], \"off_agenda\": null, \"raised\": [2]}"
+  }
+}

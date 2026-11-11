@@ -45,7 +45,6 @@ through the router (budget gate, metering on `usage-events`).
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -58,6 +57,7 @@ from uuid import UUID
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.json_answer import json_object
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import EMPTY, CompanyContext
 from libs.shared.prompts import Prompt, PromptLoader
@@ -89,6 +89,8 @@ from services.agent_runtime_service.agents.company import (
 )
 from services.agent_runtime_service.agents.grounding import valid_citation
 from services.agent_runtime_service.agents.personal_listener_agent import band, render_window
+from services.agent_runtime_service.delegation.answerer import DelegatedAnswerer
+from services.agent_runtime_service.delegation.client import DelegationSource
 from services.agent_runtime_service.policy import thresholds_for
 
 logger = logging.getLogger(__name__)
@@ -112,8 +114,6 @@ _REFERENCE = re.compile(
     r"what happened (?:with|to)|per the|follow(?:ing)?[- ]up on)\b",
     re.IGNORECASE,
 )
-_FENCE = re.compile(r"^```[a-zA-Z]*\s*\n?|\n?```\s*$")
-_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 ContextFn = Callable[[UUID, UUID], Awaitable[dict[str, Any] | None]]
@@ -172,6 +172,8 @@ class ContextGapDeps:
     pep: Pep | None = None
     related: RelatedAttendeesClient | None = None
     user_context: ContextFn | None = None
+    # Polish wave 3: delegated answers (`delegation/`); None = nobody answers for anyone.
+    delegation: DelegationSource | None = None
 
 
 def rag_from_env(timeout_s: float) -> RagClient | None:
@@ -225,15 +227,9 @@ def choose_requesters(
 
 
 def parse_object(text: str) -> dict[str, Any] | None:
-    body = _FENCE.sub("", text.strip()).strip()
-    for candidate in (body, *(m.group(0) for m in [_OBJECT.search(body)] if m)):
-        try:
-            data = json.loads(candidate)
-        except ValueError:
-            continue
-        if isinstance(data, dict):
-            return data
-    return None
+    """The answer's JSON object (the last one, when the model corrected itself), tolerating
+    fences and prose (`json_answer.py`)."""
+    return json_object(text)
 
 
 def parse_gate(text: str) -> tuple[bool, str, float]:
@@ -301,11 +297,16 @@ class ContextGapAgent(BaseAgent):
         self._settings = settings if settings is not None else ContextGapSettings.from_env()
         self._windows_seen = 0
         self._quiet_until = 0
+        self._delegated: DelegatedAnswerer | None = None
 
     async def spawn(self, *, org_id: UUID | None, meeting_id: UUID, user_id: UUID) -> None:
         await super().spawn(org_id=org_id, meeting_id=meeting_id, user_id=user_id)
         assert self.org_id is not None
         self.gate_prompt = self._loader.load(GATE_KEY, self._loader.resolve(GATE_KEY, self.org_id))
+        if self._deps.delegation is not None:
+            self._delegated = DelegatedAnswerer(
+                self._loader, self.router, self._deps.delegation, self.org_id
+            )
 
     async def process(self, state: AgentState) -> AgentResult | None:
         return None  # one result per requester: see process_meeting
@@ -347,12 +348,21 @@ class ContextGapAgent(BaseAgent):
         if window.org_id != self.org_id:
             raise ValueError(f"{self.name}: window org_id does not match the spawned agent")
         self._windows_seen += 1
-        if self._windows_seen <= self._quiet_until or self._deps.rag is None:
-            return []
         people = {u: c for u, c in contexts.items() if c is not None}
         if not people:
             return []
         org = next((company_of(c) for c in people.values()), EMPTY)
+        if self._delegated is not None:
+            # Polish wave 3: a question put to someone who sent their agent is answered from
+            # what they pre-approved, and that answer is this window's one result per person.
+            answered = self._delegated.results(
+                window, list(people), await self._delegated.answers(window, org)
+            )
+            self.blocked = self.blocked or self._delegated.blocked
+            if answered:
+                return answered
+        if self._windows_seen <= self._quiet_until or self._deps.rag is None:
+            return []
         verdict = await self.assess(window, org)
         if verdict is None or not verdict.passed(self._settings.gate_threshold):
             return []

@@ -110,3 +110,6 @@ tests/eval/action_last_run.json
 tests/eval/question_last_run.json
 tests/eval/context_gap_last_run.json
 tests/eval/proactive_conflict_last_run.json
+# eval harness reports (EVAL_REPORT_DIR / live mode); recordings are committed
+tests/eval/reports/
+tests/eval/minutes_last_run.json

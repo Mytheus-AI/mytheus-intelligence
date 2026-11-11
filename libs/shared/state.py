@@ -1,7 +1,8 @@
 """The shared agent data model: `TranscriptWindow`, `AgentState`, `AgentResult`.
 
 Plan 7-9 section 3.2 step 2 and doc 08 section 3.1. Every agent runs on a `TranscriptWindow`
-(30 s of finals merged by speaker turn, `A17`), never on a raw `transcript_chunks` row, and
+(finals merged by speaker turn, `A17`; since the polish program an event-driven 10-15 s window,
+`services/agent_runtime_service/windowing.py`), never on a raw `transcript_chunks` row, and
 carries one `AgentState` through its LangGraph graph.
 
 `AgentState` holds exactly the plan's fields plus `result`: the graph's last node writes the
@@ -18,6 +19,19 @@ from uuid import UUID
 
 
 @dataclass
+class Utterance:
+    """One `transcript-chunks` final as it was heard: the unit a card's quote points at. Its
+    `chunk_id` is globally unique and stable across replays and window boundaries, which is
+    what makes a moment id (`moments.py`) the same for every agent that cites it."""
+
+    chunk_id: str
+    speaker_id: str
+    start_ms: int
+    end_ms: int
+    text: str
+
+
+@dataclass
 class Turn:
     """Consecutive finals from one speaker, merged."""
 
@@ -26,13 +40,41 @@ class Turn:
     start_ms: int
     end_ms: int
     chunk_ids: list[str] = field(default_factory=list)
+    # the finals this turn merged, in order (empty for a turn built outside the windower: the
+    # turn then counts as one utterance)
+    parts: list[Utterance] = field(default_factory=list)
+
+    def utterances(self) -> list[Utterance]:
+        if self.parts:
+            return list(self.parts)
+        cid = self.chunk_ids[0] if self.chunk_ids else f"{self.speaker_id}@{self.start_ms}"
+        return [Utterance(cid, self.speaker_id, self.start_ms, self.end_ms, self.text)]
+
+
+@dataclass
+class Trigger:
+    """Why a window closed, and the words that closed it (polish: event-driven windows).
+    `reason`: `cue` (a phrase like "I'll" or "we decided"), `turn_end` (the speaker changed or
+    went quiet after at least the minimum window), `max_span` (the window reached its longest),
+    `max_wait` (nothing else closed it in time), `meeting_end`, or `merged` (a worker that fell
+    behind merged queued windows)."""
+
+    reason: str
+    chunk_id: str = ""
+    speaker_id: str = ""
+    start_ms: int = 0
+    end_ms: int = 0
+    text: str = ""
+    cue: str | None = None
 
 
 @dataclass
 class TranscriptWindow:
     org_id: UUID
     meeting_id: UUID
-    window_id: str  # deterministic: f"{meeting_id}:{start_ms}", so a replay has the same id
+    # f"{meeting_id}:{start_ms}", start_ms the window's first final, so the id carries the
+    # moment it points at and a replay of the same finals rebuilds the same id
+    window_id: str
     start_ms: int
     end_ms: int
     turns: list[Turn] = field(default_factory=list)
@@ -41,6 +83,15 @@ class TranscriptWindow:
     # person in every window (`services/agent_runtime_service/names.py`). Empty for a window
     # built outside the runtime: the renderers then number speakers in order of first speaking.
     labels: dict[str, str] = field(default_factory=dict)
+    trigger: Trigger | None = None
+    # wall-clock epoch seconds when the window's last final was produced (its envelope's
+    # `occurred_at`, else when the runtime received it): the start of speech-to-card latency
+    last_chunk_at: float | None = None
+    final: bool = False  # the meeting's last window: agents that accumulate windows flush
+
+    @property
+    def utterances(self) -> list[Utterance]:
+        return [u for t in self.turns for u in t.utterances()]
 
     @property
     def chunk_ids(self) -> list[str]:

@@ -1,7 +1,7 @@
 """Shared machinery for the meeting-scope candidate agents, `DecisionAgent` and `ActionAgent`.
 
-Plan 7-9 section 3.5; the Phase 8 Part A cross-repo contract, section 1. Per closed 30 s window,
-once per meeting:
+Plan 7-9 section 3.5; the Phase 8 Part A cross-repo contract, section 1. Per closed window
+(event-driven since the polish program, `windowing.py`), once per meeting:
 
 1. **Pre-gate** (triage tier, Haiku): `<agent>_gate@vN` answers `{"score": x}`, how likely the
    window holds a decision / an action item. Below the threshold (env, default 0.5) the graph
@@ -26,6 +26,14 @@ one of those topics scores 0 and no extraction is paid for) and the extraction `
 `{ground_rules}` (`agents/company.py`), from the context the runtime passes (`context["org"]`).
 A template that does not name them ignores them, so `DecisionAgent` (whose prompts are not part
 of ADR-0039) renders exactly what it did.
+
+Polish, memory inside the meeting (`decision_agent@v3`, `action_agent@v3`): the extraction also
+gets `{memory}` (the last two windows and this kind's cards with their status, `memory.py`), and
+each answered candidate may carry `"updates": "D2"` (a card label) and `"quote"` (the verbatim
+words). `memory.reconcile` turns an update, or a near-duplicate of an open card, into an update
+of that card (its id, `updates_candidate_id`), and drops anything repeating a dismissed,
+settled or human-edited card. The quote anchors the card's moment (`moments.py`, applied by the
+runtime).
 """
 
 from __future__ import annotations
@@ -42,11 +50,19 @@ from uuid import UUID, uuid5
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.json_answer import json_object
 from libs.shared.prompts import Prompt
 from libs.shared.router import EXTRACT_MAX_TOKENS, EXTRACTION_EFFORT, TIER_NAMES, Effort
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
 from services.agent_runtime_service.agents.company import company_values, gate_ground_rules
 from services.agent_runtime_service.agents.personal_listener_agent import band
+from services.agent_runtime_service.guidance import guidance_values
+from services.agent_runtime_service.memory import (
+    KIND_OF_RESULT,
+    memory_of,
+    reconcile,
+    render_memory,
+)
 from services.agent_runtime_service.names import speaker_labels
 from services.agent_runtime_service.policy import thresholds_for
 
@@ -82,20 +98,11 @@ def parse_score(text: str) -> float:
 
 
 def parse_candidates(text: str, key: str = "candidates") -> list[Any]:
-    """The `key` list of `{"<key>": [...]}` (`candidates` by default), tolerating code fences
-    and prose around the object. Anything else is an empty list (never raises)."""
-    body = _strip_fences(text)
-    try:
-        data = json.loads(body)
-    except ValueError:
-        start, end = body.find("{"), body.rfind("}")
-        if start < 0 or end <= start:
-            return []
-        try:
-            data = json.loads(body[start : end + 1])
-        except ValueError:
-            return []
-    if not isinstance(data, dict) or not isinstance(data.get(key), list):
+    """The `key` list of `{"<key>": [...]}` (`candidates` by default), tolerating code fences,
+    prose around the object and a self-corrected second object. Anything else is an empty list
+    (never raises)."""
+    data = json_object(text, key)  # the model's last object holding `key` (json_answer.py)
+    if data is None or not isinstance(data.get(key), list):
         return []
     return list(data[key])
 
@@ -189,6 +196,13 @@ class CandidateAgent(BaseAgent):
         block and the never-record line (ADR-0039), "" for an org without a brain."""
         return company_values(context)
 
+    def memory_values(self, context: dict[str, Any] | None = None) -> dict[str, str]:
+        """`{memory}` (polish, decision_agent@v3 / action_agent@v3): the meeting's last two
+        windows and the cards of this kind already raised, with their status (`memory.py`).
+        "" for a meeting's first window; a v2 template does not name it and ignores it."""
+        block, _ = render_memory(memory_of(context), KIND_OF_RESULT[self.kind])
+        return {"memory": block}
+
     def extra(self, raw: dict[str, Any], context: dict[str, Any] | None) -> dict[str, Any]:
         """Optional fields of one candidate that need the participant context (ActionAgent's
         `suggested_owner_user_id`). Added only when non-empty."""
@@ -207,6 +221,7 @@ class CandidateAgent(BaseAgent):
         _, labels = render_window(window)
         limits = thresholds_for(context, self.name)
         kept: list[dict[str, Any]] = []
+        updates: list[object] = []
         for index, raw in enumerate(parse_candidates(text)):
             if not isinstance(raw, dict):
                 continue
@@ -227,9 +242,15 @@ class CandidateAgent(BaseAgent):
                     "surfaced": verdict == "surfaced",
                     **fields,
                     **self.extra(raw, context),
+                    **({"quote": quote} if (quote := text_of(raw, "quote")) else {}),
                 }
             )
-        return kept
+            updates.append(raw.get("updates"))
+        # polish, memory inside the meeting: an update of an open card keeps that card's id;
+        # a repeat of a dismissed or settled card is never emitted
+        memory = memory_of(context)
+        _, card_labels = render_memory(memory, KIND_OF_RESULT[self.kind])
+        return reconcile(kept, KIND_OF_RESULT[self.kind], memory, card_labels, updates)
 
     def build_graph(self) -> Any:
         threshold = gate_threshold(self.threshold_env)
@@ -254,7 +275,13 @@ class CandidateAgent(BaseAgent):
             out = await self.router.complete(
                 tier="extract",
                 system=self.prompt.system,
-                **self.prompt.user_parts(window=transcript, **self.user_values(s.context)),
+                **self.prompt.user_parts(
+                    window=transcript,
+                    **self.user_values(s.context),
+                    **self.memory_values(s.context),
+                    # polish wave 2: recent kept / corrected / dismissed examples ("" if none)
+                    **guidance_values(self.name, s.context),
+                ),
                 org_id=s.org_id,
                 user_id=s.user_id,
                 max_tokens=self.extract_max_tokens,

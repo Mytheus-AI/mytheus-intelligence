@@ -1,0 +1,373 @@
+{
+  "about": "Hand-curated core of the eval corpus: 24 windows written to read like real Deepgram output (fillers, mis-heard names, cut-off sentences, crosstalk, diarization label churn). generate.py merges these with the seeded generated windows into windows.json. Edit here, then run `uv run python -m tests.evalkit.generate`.",
+  "windows": [
+    {
+      "id": "w-core-001",
+      "category": "decision",
+      "noise": ["fillers", "partial"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "-- which is why the the latency numbers looked off last week."},
+        {"speaker": "S2", "text": "Right, um, so I think we've talked this to death. Let's go with Postgres for the events store, we already run it and, you know, nobody wants another database to babysit."},
+        {"speaker": "S3", "text": "Yeah. Agreed, Postgres."},
+        {"speaker": "S1", "text": "Fine by me. So the next thing I wanted to"}
+      ],
+      "decisions": [{"content": "Use Postgres for the events store", "keywords": ["postgres"], "domain": "engineering"}],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-002",
+      "category": "decision",
+      "noise": ["misheard_name", "crosstalk"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "Okay Pria, you had the date question."},
+        {"speaker": "S2", "text": "Yeah so marketing wants it before the holidays, and engineering says the second works, so"},
+        {"speaker": "S3", "text": "-- sorry, the second of December?"},
+        {"speaker": "S2", "text": "December second, yes. So we ship the beta on December second. That's final, I'll tell Markus."},
+        {"speaker": "S1", "text": "Great. Locked."}
+      ],
+      "decisions": [{"content": "Ship the beta on 2 December", "keywords": ["beta", "december|dec"], "domain": "product"}],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-003",
+      "category": "decision",
+      "noise": ["label_churn", "fillers"],
+      "speakers": {"S1": null, "S2": null, "S3": "S1"},
+      "turns": [
+        {"speaker": "S1", "text": "The widget, uh, the iOS widget. I looked at the review guidelines again."},
+        {"speaker": "S2", "text": "And?"},
+        {"speaker": "S3", "text": "It's not worth the risk for v1. We're dropping the iOS widget from v1. We can do it in the point release."},
+        {"speaker": "S2", "text": "Okay. Yeah, makes sense, drop it."}
+      ],
+      "decisions": [{"content": "Drop the iOS widget from v1", "keywords": ["widget"], "domain": "product"}],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-004",
+      "category": "decision",
+      "noise": ["fillers", "misheard_name"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "So for the enterprise tier, Diego's numbers, the ego's numbers I mean, say we hold."},
+        {"speaker": "S2", "text": "Um, yeah. I mean, alright, the enterprise tier stays at forty dollars a seat for next year. We don't touch it till the renewal cycle."},
+        {"speaker": "S1", "text": "Good, that's decided then."}
+      ],
+      "decisions": [{"content": "Keep the enterprise tier at 40 dollars per seat next year", "keywords": ["enterprise", "seat|forty|40"], "domain": "sales"}],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-005",
+      "category": "action",
+      "noise": ["fillers"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "Who's writing up the migration plan? We keep saying it."},
+        {"speaker": "S2", "text": "Uh, me. I'll write up the migration plan by Friday, like a proper doc this time."},
+        {"speaker": "S3", "text": "Thank you."}
+      ],
+      "decisions": [],
+      "actions": [{"content": "Write up the migration plan", "keywords": ["migration plan"], "domain": "engineering", "assignee": "S2", "due_date": "2026-11-13"}],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-006",
+      "category": "action",
+      "noise": ["misheard_name", "crosstalk"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "Alaina, can you own the security questionnaire for Contoso?"},
+        {"speaker": "S2", "text": "The whole thing?"},
+        {"speaker": "S3", "text": "-- it's mostly copy paste from the last one"},
+        {"speaker": "S2", "text": "Okay yeah, I'll take it. I'll send the security questionnaire back to Contoso by November eighteenth."}
+      ],
+      "decisions": [],
+      "actions": [{"content": "Send the security questionnaire back to Contoso", "keywords": ["questionnaire"], "domain": "sales", "assignee": "S2", "due_date": "2026-11-18"}],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-007",
+      "category": "action",
+      "noise": ["label_churn", "partial"],
+      "speakers": {"S1": null, "S2": null, "S3": "S2"},
+      "turns": [
+        {"speaker": "S1", "text": "-- and the test keeps failing on main, the login one."},
+        {"speaker": "S2", "text": "Yeah that one's mine really."},
+        {"speaker": "S3", "text": "I can take the flaky login test, I'll fix it this week."},
+        {"speaker": "S1", "text": "Perfect. Then for the"}
+      ],
+      "decisions": [],
+      "actions": [{"content": "Fix the flaky login test", "keywords": ["login test|flaky"], "domain": "engineering", "assignee": "S2", "due_date": null}],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-008",
+      "category": "action",
+      "noise": ["fillers", "misheard_name"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "Fatimah, the October invoices, are they, um, are they reconciled?"},
+        {"speaker": "S2", "text": "Not yet. I'll reconcile the October invoices before the board pack goes out, you know, so the numbers tie."},
+        {"speaker": "S1", "text": "Good, thanks."}
+      ],
+      "decisions": [],
+      "actions": [{"content": "Reconcile the October invoices", "keywords": ["invoice"], "domain": "finance", "assignee": "S2", "due_date": null}],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-009",
+      "category": "decision_action",
+      "noise": ["fillers", "crosstalk"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "So the API. We freeze it on the fifteenth, no more breaking changes after that, agreed?"},
+        {"speaker": "S2", "text": "Agreed."},
+        {"speaker": "S3", "text": "-- yeah yeah, fine"},
+        {"speaker": "S2", "text": "And I'll, uh, I'll set up the staging alerts before the freeze so we catch regressions."}
+      ],
+      "decisions": [{"content": "Freeze the API on the 15th", "keywords": ["freeze|frozen", "api"], "domain": "engineering"}],
+      "actions": [{"content": "Set up the staging alerts", "keywords": ["staging", "alert"], "domain": "engineering", "assignee": "S2", "due_date": null}],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-010",
+      "category": "decision_action",
+      "noise": ["misheard_name", "label_churn"],
+      "speakers": {"S1": null, "S2": null, "S3": "S1"},
+      "turns": [
+        {"speaker": "S1", "text": "The A/B test came back, the blue onboarding flow wins by a lot."},
+        {"speaker": "S2", "text": "Then we're going with the blue onboarding flow. Ico, can you send the updated mockups to the team?"},
+        {"speaker": "S3", "text": "Yep, I'll send the updated mockups to the team by November twentieth."}
+      ],
+      "decisions": [{"content": "Go with the blue onboarding flow", "keywords": ["onboarding"], "domain": "product"}],
+      "actions": [{"content": "Send the updated mockups to the team", "keywords": ["mockup"], "domain": "product", "assignee": "S1", "due_date": "2026-11-20"}],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-011",
+      "category": "decision_action",
+      "noise": ["fillers", "partial"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "-- the offsite, the budget thing."},
+        {"speaker": "S2", "text": "Decision then, the offsite budget is capped at twelve thousand. Hard cap."},
+        {"speaker": "S3", "text": "Okay, um, then I'll get three quotes from the travel agencies so we know what fits."},
+        {"speaker": "S1", "text": "Sounds good."}
+      ],
+      "decisions": [{"content": "Cap the offsite budget at 12,000", "keywords": ["offsite"], "domain": "finance"}],
+      "actions": [{"content": "Get three quotes from travel agencies", "keywords": ["quote"], "domain": "finance", "assignee": "S3", "due_date": null}],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-012",
+      "category": "lookalike",
+      "noise": ["fillers"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "Maybe we should move the standup to Tuesdays? I don't know, just, um, floating it."},
+        {"speaker": "S2", "text": "Could be. Let's see how next week goes."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [{"kind": "decision", "content": "Move the standup to Tuesdays", "keywords": ["standup"]}],
+      "never_record": null
+    },
+    {
+      "id": "w-core-013",
+      "category": "lookalike",
+      "noise": ["crosstalk"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "What if we went with Vercel for the docs site, has anyone actually looked at it?"},
+        {"speaker": "S2", "text": "-- I looked at the pricing page once"},
+        {"speaker": "S3", "text": "I'd lean towards it but let's not decide today, we don't have the numbers."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [{"kind": "decision", "content": "Use Vercel for the docs site", "keywords": ["vercel"]}],
+      "never_record": null
+    },
+    {
+      "id": "w-core-014",
+      "category": "lookalike",
+      "noise": ["fillers"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "Just so everyone remembers, the board already approved the hiring plan back in September. That's, um, that's not up for debate."},
+        {"speaker": "S2", "text": "Right, that's the September plan."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [{"kind": "decision", "content": "Approve the hiring plan", "keywords": ["hiring plan"]}],
+      "never_record": null
+    },
+    {
+      "id": "w-core-015",
+      "category": "lookalike",
+      "noise": ["fillers", "partial"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "-- and honestly someone should probably look at the error budget at some point."},
+        {"speaker": "S2", "text": "Yeah, it'd be nice if the docs had a search box too, like, eventually."},
+        {"speaker": "S3", "text": "Ha. Okay."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [
+        {"kind": "action", "content": "Look at the error budget", "keywords": ["error budget"]},
+        {"kind": "action", "content": "Add a search box to the docs", "keywords": ["search box"]}
+      ],
+      "never_record": null
+    },
+    {
+      "id": "w-core-016",
+      "category": "lookalike",
+      "noise": ["misheard_name"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "I already sent the contract to legal last week, Thomas has it."},
+        {"speaker": "S2", "text": "Okay, and did anyone ever file the bug about the export timeout?"},
+        {"speaker": "S1", "text": "Not sure, I'd have to check."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [
+        {"kind": "action", "content": "Send the contract to legal", "keywords": ["contract"]},
+        {"kind": "action", "content": "File the export timeout bug", "keywords": ["export timeout"]}
+      ],
+      "never_record": null
+    },
+    {
+      "id": "w-core-017",
+      "category": "question",
+      "noise": ["fillers"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "Do we, um, do we know what the churn number was for October?"},
+        {"speaker": "S2", "text": "I think finance has it but I haven't seen it. Is it in the dashboard?"}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-018",
+      "category": "question",
+      "noise": ["crosstalk"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "Who actually owns the on-call rotation right now?"},
+        {"speaker": "S2", "text": "-- good question"},
+        {"speaker": "S3", "text": "Nobody wrote it down after the reorg, did they?"}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-019",
+      "category": "never_record",
+      "noise": ["fillers"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "Before we close, um, the layoffs list for January has fourteen names on it now."},
+        {"speaker": "S2", "text": "Okay. We announce on the fifteenth then, I'll draft the note."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": {"topic": "layoffs", "mode": "outright", "canary": "fourteen names"}
+    },
+    {
+      "id": "w-core-020",
+      "category": "never_record",
+      "noise": ["misheard_name"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "Quick one on Falcon, the prototype hit the latency target, ninety milliseconds at p95."},
+        {"speaker": "S2", "text": "Nice. Then we demo it to Jonah's team next week."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": {"topic": "Project Falcon", "mode": "alias", "canary": "ninety milliseconds"}
+    },
+    {
+      "id": "w-core-021",
+      "category": "never_record",
+      "noise": ["fillers", "partial"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "-- the headcount reduction we talked about privately, the list has nine names now."},
+        {"speaker": "S2", "text": "Okay, um, and we tell them the week of the fifteenth?"},
+        {"speaker": "S3", "text": "Yes. Let's keep it to this room."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": {"topic": "layoffs", "mode": "ambiguous", "canary": "nine names"}
+    },
+    {
+      "id": "w-core-022",
+      "category": "never_record",
+      "noise": ["crosstalk"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "On the thing with the other company, their board wants a term sheet by the thirtieth."},
+        {"speaker": "S2", "text": "-- the valuation's still at sixty though?"},
+        {"speaker": "S1", "text": "Sixty, yes. Fine, we go ahead and send the term sheet."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": {"topic": "acquisition talks", "mode": "ambiguous", "canary": "term sheet"}
+    },
+    {
+      "id": "w-core-023",
+      "category": "smalltalk",
+      "noise": ["fillers", "crosstalk"],
+      "speakers": {"S1": null, "S2": null, "S3": null},
+      "turns": [
+        {"speaker": "S1", "text": "Can everyone hear me? I think, um, I think my mic was muted."},
+        {"speaker": "S2", "text": "-- you're good now"},
+        {"speaker": "S3", "text": "We can hear you. Give it a minute, Ico's still joining."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    },
+    {
+      "id": "w-core-024",
+      "category": "smalltalk",
+      "noise": ["fillers"],
+      "speakers": {"S1": null, "S2": null},
+      "turns": [
+        {"speaker": "S1", "text": "Status-wise the migration is about seventy percent done, nothing blocking, um, same as last week."},
+        {"speaker": "S2", "text": "Cool, thanks for the update."}
+      ],
+      "decisions": [],
+      "actions": [],
+      "lookalikes": [],
+      "never_record": null
+    }
+  ]
+}

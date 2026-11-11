@@ -1,0 +1,125 @@
+{
+  "about": "Golden sets for ProactiveAgent's three checks, each with false-positive cases. conflict: one new decision and one earlier candidate (check_decision; 12 cases carried over from proactive_conflict_golden.json plus 8 harder negatives). workload: the assignee's open action count against PROACTIVE_WORKLOAD_THRESHOLD=6 (check_action, no model). stakeholder: a window, the stakeholder gate's answer, the KG's earlier decisions on the topic and who attended which meeting (check_window). People are keys; the harness gives each a UUID.",
+  "conflict": [
+    {"id": "launch-date-clash", "category": "contradicting", "decision": "Launch the analytics beta to all customers on 2 December.", "rationale": "Marketing wants it live before the holiday campaign.", "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.", "contradicts": true},
+    {"id": "vendor-choice-clash", "category": "contradicting", "decision": "Use Postgres full-text search for product search; no external search vendor.", "rationale": "Keeps the stack small.", "candidate": "We will adopt Algolia as the product search vendor starting this quarter.", "contradicts": true},
+    {"id": "budget-cap-clash", "category": "contradicting", "decision": "Approve a 40,000 dollar contractor budget for the mobile rewrite in Q1.", "rationale": "", "candidate": "No contractor spending is allowed in Q1; all Q1 work stays in-house.", "contradicts": true},
+    {"id": "region-policy-clash", "category": "contradicting", "decision": "Store EU customer data in the US region to simplify operations.", "rationale": "One region is cheaper to run.", "candidate": "EU customer data must stay in the Frankfurt region.", "contradicts": true},
+    {"id": "launch-moved-explicitly", "category": "superseding", "decision": "Move the analytics beta launch from 15 January to 2 December; the security review finished early.", "rationale": "Review signed off last week.", "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.", "contradicts": false},
+    {"id": "pricing-revised", "category": "superseding", "decision": "Update the Pro plan price from 20 to 25 dollars per seat, replacing the earlier price.", "rationale": "Costs went up.", "candidate": "The Pro plan costs 20 dollars per seat per month.", "contradicts": false},
+    {"id": "vendor-reversed", "category": "superseding", "decision": "Reverse the earlier Algolia decision and move product search to Postgres full-text search.", "rationale": "Algolia costs tripled at renewal.", "candidate": "We will adopt Algolia as the product search vendor starting this quarter.", "contradicts": false},
+    {"id": "launch-detail-added", "category": "related", "decision": "The analytics beta launch email goes out the morning of 15 January.", "rationale": "", "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.", "contradicts": false},
+    {"id": "pricing-annual-discount", "category": "related", "decision": "Annual Pro plans get two months free.", "rationale": "Improve cash flow.", "candidate": "The Pro plan costs 20 dollars per seat per month.", "contradicts": false},
+    {"id": "search-indexing-owner", "category": "related", "decision": "The data team owns the Algolia indexing pipeline.", "rationale": "", "candidate": "We will adopt Algolia as the product search vendor starting this quarter.", "contradicts": false},
+    {"id": "different-product-dates", "category": "unrelated", "decision": "Ship the iOS app redesign on 2 December.", "rationale": "", "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.", "contradicts": false},
+    {"id": "office-vs-hiring", "category": "unrelated", "decision": "Open the Berlin office in March.", "rationale": "", "candidate": "Freeze engineering hiring until the Series B closes.", "contradicts": false},
+    {"id": "hiring-freeze-broken", "category": "contradicting", "decision": "Hire two senior backend engineers this month.", "rationale": "The platform team is overloaded.", "candidate": "Freeze engineering hiring until the Series B closes.", "contradicts": true},
+    {"id": "free-tier-removed", "category": "contradicting", "decision": "Remove the free tier for all new sign-ups from 1 December.", "rationale": "Support load from free users is too high.", "candidate": "The free tier stays available to every new sign-up through 2027.", "contradicts": true},
+    {"id": "scope-narrowing", "category": "related", "decision": "The EU region launch covers Germany and France first.", "rationale": "", "candidate": "EU customer data must stay in the Frankfurt region.", "contradicts": false},
+    {"id": "consistent-number", "category": "related", "decision": "Annual Pro plans are billed at 240 dollars per seat per year.", "rationale": "", "candidate": "The Pro plan costs 20 dollars per seat per month.", "contradicts": false},
+    {"id": "different-team-budget", "category": "unrelated", "decision": "Approve a 10,000 dollar budget for the marketing conference booth.", "rationale": "", "candidate": "No contractor spending is allowed in Q1; all Q1 work stays in-house.", "contradicts": false},
+    {"id": "same-vendor-different-use", "category": "related", "decision": "Use Algolia for the help-center search as well.", "rationale": "One vendor for both.", "candidate": "We will adopt Algolia as the product search vendor starting this quarter.", "contradicts": false},
+    {"id": "date-refinement", "category": "related", "decision": "The analytics beta goes to the ten pilot customers first, on 15 January.", "rationale": "", "candidate": "The analytics beta will not launch before 15 January, after the security review is complete.", "contradicts": false},
+    {"id": "reorg-replaces-plan", "category": "superseding", "decision": "Replace the September hiring plan with the new reorg plan; the old plan no longer applies.", "rationale": "Reorg approved.", "candidate": "The September hiring plan adds six engineers by March.", "contradicts": false}
+  ],
+  "workload": [
+    {"id": "wl-3", "open_action_count": 3, "assignee": true, "expected_alert": false},
+    {"id": "wl-5", "open_action_count": 5, "assignee": true, "expected_alert": false},
+    {"id": "wl-6", "open_action_count": 6, "assignee": true, "expected_alert": true},
+    {"id": "wl-7", "open_action_count": 7, "assignee": true, "expected_alert": true},
+    {"id": "wl-11", "open_action_count": 11, "assignee": true, "expected_alert": true},
+    {"id": "wl-9-unassigned", "open_action_count": 9, "assignee": false, "expected_alert": false},
+    {"id": "wl-0", "open_action_count": 0, "assignee": true, "expected_alert": false},
+    {"id": "wl-6-unassigned", "open_action_count": 6, "assignee": false, "expected_alert": false}
+  ],
+  "stakeholder": [
+    {
+      "id": "s-01", "kind": "absent_attendee",
+      "turns": [{"speaker": "priya", "text": "Let's settle the Pro seat price for next quarter."}, {"speaker": "sam", "text": "I'd say twenty five dollars, same as the proposal."}],
+      "gate": {"topic": "pricing", "score": 0.85},
+      "earlier": [{"decisions": ["Pro is 25 dollars per seat."], "attendees": ["priya", "sam", "alex"]}],
+      "present": ["priya", "sam"],
+      "expected": ["alex"], "surfaced": true
+    },
+    {
+      "id": "s-02", "kind": "present_attendee",
+      "turns": [{"speaker": "priya", "text": "Pricing again, the annual discount."}, {"speaker": "alex", "text": "Two months free still feels right."}],
+      "gate": {"topic": "pricing", "score": 0.82},
+      "earlier": [{"decisions": ["Annual plans get two months free."], "attendees": ["priya", "alex"]}],
+      "present": ["priya", "alex"],
+      "expected": [], "surfaced": true
+    },
+    {
+      "id": "s-03", "kind": "small_talk",
+      "turns": [{"speaker": "priya", "text": "Can you hear me now? The mic was weird."}, {"speaker": "sam", "text": "Loud and clear."}],
+      "gate": {"topic": "", "score": 0.05},
+      "earlier": [{"decisions": ["Pro is 25 dollars per seat."], "attendees": ["priya", "alex"]}],
+      "present": ["priya", "sam"],
+      "expected": [], "surfaced": false
+    },
+    {
+      "id": "s-04", "kind": "below_gate",
+      "turns": [{"speaker": "priya", "text": "The staging box was slow again, not sure why."}, {"speaker": "sam", "text": "Probably the disk."}],
+      "gate": {"topic": "infra", "score": 0.45},
+      "earlier": [{"decisions": ["Move CI to self-hosted runners."], "attendees": ["priya", "dana"]}],
+      "present": ["priya", "sam"],
+      "expected": [], "surfaced": false
+    },
+    {
+      "id": "s-05", "kind": "two_absent",
+      "turns": [{"speaker": "priya", "text": "Roadmap: are we still doing reporting before mobile parity?"}, {"speaker": "sam", "text": "That was the plan from the planning meeting."}],
+      "gate": {"topic": "roadmap", "score": 0.9},
+      "earlier": [
+        {"decisions": ["Reporting ships before mobile parity.", "Mobile parity is scoped at six weeks."], "attendees": ["priya", "alex", "dana"]},
+        {"decisions": ["Q4 has three roadmap themes."], "attendees": ["priya", "alex"]}
+      ],
+      "present": ["priya", "sam"],
+      "expected": ["alex", "dana"], "surfaced": true
+    },
+    {
+      "id": "s-06", "kind": "only_this_meeting",
+      "turns": [{"speaker": "priya", "text": "On hiring, the two reqs we just approved."}, {"speaker": "sam", "text": "Yes, backend and design."}],
+      "gate": {"topic": "hiring", "score": 0.8},
+      "earlier": [{"this_meeting": true, "decisions": ["Approve two reqs."], "attendees": ["priya", "sam", "alex"]}],
+      "present": ["priya", "sam"],
+      "expected": [], "surfaced": true
+    },
+    {
+      "id": "s-07", "kind": "no_shared_meeting",
+      "turns": [{"speaker": "priya", "text": "Security review for the SSO work, where are we?"}, {"speaker": "sam", "text": "Waiting on the pen test."}],
+      "gate": {"topic": "security", "score": 0.85},
+      "earlier": [{"decisions": ["SSO needs a pen test before launch."], "attendees": ["alex", "morgan"]}],
+      "present": ["priya", "sam"],
+      "expected": [], "surfaced": true
+    },
+    {
+      "id": "s-08", "kind": "capped_at_two",
+      "turns": [{"speaker": "priya", "text": "Security, the audit logging requirement from the customer."}, {"speaker": "sam", "text": "Ninety days retention, they said."}],
+      "gate": {"topic": "security", "score": 0.88},
+      "earlier": [
+        {"decisions": ["Audit logs are kept 90 days.", "Admins can export audit logs."], "attendees": ["priya", "alex", "dana", "evan"]},
+        {"decisions": ["Audit logs are immutable."], "attendees": ["priya", "alex", "dana"]},
+        {"decisions": ["Audit logs include IP addresses."], "attendees": ["priya", "alex"]}
+      ],
+      "present": ["priya", "sam"],
+      "expected": ["alex", "dana"], "surfaced": true
+    },
+    {
+      "id": "s-09", "kind": "silent_band",
+      "note": "Rewritten after the first live eval (2026-11-11). The case tests the silent band: pricing clearly discussed, nothing settled. Its old text ('Maybe pricing for the add-on, not sure it matters yet.' / 'Could be later.') was a hedged one-line mention, which the stakeholder prompt (v2 and v3 alike) says to score low ('not just mentioning a word once'); Haiku scored it 0.3 to 0.5, so the case measured coin flips around the 0.5 gate, not the band. The new text is an unsettled discussion of the same item.",
+      "turns": [{"speaker": "priya", "text": "Pricing for the add-on, per seat or per workspace? We should work that out."}, {"speaker": "sam", "text": "Let's park it until we have the usage numbers."}],
+      "gate": {"topic": "pricing", "score": 0.6},
+      "earlier": [{"decisions": ["Add-ons are priced per workspace."], "attendees": ["priya", "alex"]}],
+      "present": ["priya", "sam"],
+      "expected": ["alex"], "surfaced": false
+    },
+    {
+      "id": "s-10", "kind": "never_record",
+      "turns": [{"speaker": "priya", "text": "The layoffs plan touches pricing support headcount."}, {"speaker": "sam", "text": "Keep it in this room."}],
+      "gate": {"topic": "pricing", "score": 0.8},
+      "earlier": [{"decisions": ["Pricing support moves to tier one."], "attendees": ["priya", "alex"]}],
+      "present": ["priya", "sam"],
+      "expected": [], "surfaced": false
+    }
+  ]
+}
