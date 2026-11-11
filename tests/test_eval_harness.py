@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 from collections import Counter
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,7 @@ import pytest
 
 from libs.shared.never_record import NeverRecordPolicy
 from tests.evalkit import corpus, generate, judge, scoring
-from tests.evalkit.harness import VARIANTS, WORSE, router_for, run_all
+from tests.evalkit.harness import SUITES, VARIANTS, WORSE, router_for, run_all, suites_from_env
 from tests.evalkit.models import (
     LiveModel,
     ReplayModel,
@@ -38,16 +39,6 @@ from tests.evalkit.models import (
 from tests.evalkit.report import export, registry_for
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITES = (
-    "decision",
-    "action",
-    "persona",
-    "meeting",
-    "proactive_conflict",
-    "proactive_workload",
-    "proactive_stakeholder",
-    "never_record",
-)
 # The metric per suite that a worse prompt must lose on (higher is better unless listed in LOWER).
 HEADLINE = {
     "decision": "f1",
@@ -313,9 +304,11 @@ def test_offline_the_current_prompts_meet_every_threshold(offline_reports):
     failures = scoring.check(report, _gate_limits())
     export(report, failures, mode="offline", variant="current")
     assert not failures, "\n".join(failures)
-    # not a rubber stamp: the extraction scores are measured, not saturated
-    assert report["decision"]["f1"] < 1.0 and report["action"]["f1"] < 1.0
-    assert report["persona"]["fact_overlap"] < 1.0
+    # measured, not skipped: every suite ran its cases. (It used to also require f1 < 1.0, a
+    # property of the simulated answers; real recordings may score perfectly on these windows.
+    # That the gate is not a rubber stamp is the next test: the worse prompts fail it.)
+    assert report["decision"]["emitted"] > 0 and report["action"]["emitted"] > 0
+    assert report["persona"]["pairs"] >= 20 and report["meeting"]["cases"] >= 20
 
 
 @pytest.mark.eval
@@ -335,29 +328,37 @@ def test_offline_the_gate_fails_the_deliberately_worse_prompts(offline_reports):
     assert all((corpus.FIXTURE_PROMPTS_DIR / f"{k}@{v}.md").exists() for k, v in WORSE.items())
 
 
+@dataclass
+class _FencedReplay(ReplayModel):
+    """The recordings, with every decision extraction answered inside a ```json fence (a
+    valid-but-variant answer real models give now and then)."""
+
+    async def answer(self, ref: str, key: str, kw: dict[str, Any]) -> tuple[str, dict[str, int]]:
+        text, usage = await super().answer(ref, key, kw)
+        if ref.startswith("decision_agent") and not text.lstrip().startswith("```"):
+            text = f"```json\n{text}\n```"
+        return text, usage
+
+
 @pytest.mark.eval
 def test_offline_a_broken_parser_would_fail_the_gate(monkeypatch):
     """The gate also guards the code around the model: a candidate parser that loses its
-    tolerance for code fences drops recall on the fenced answers and the gate notices."""
+    tolerance for code fences drops recall on fenced answers and the gate notices. (The first
+    live recordings hold no fenced answer, so the fence is added here rather than relied on.)"""
     from services.agent_runtime_service.agents import candidates as mod
+    from tests.evalkit.harness import run_candidates
 
+    good = asyncio.run(run_candidates("decision", _FencedReplay(), "current"))
     real = mod.parse_candidates
 
     def strict(text: str, key: str = "candidates") -> list[Any]:
         return [] if text.lstrip().startswith("```") else real(text, key)
 
     monkeypatch.setattr(mod, "parse_candidates", strict)
-    model = ReplayModel()
-    from tests.evalkit.harness import run_candidates
-
-    broken = asyncio.run(run_candidates("decision", model, "current"))
-    fenced = sum(
-        1 for c in model.calls if c.ref.startswith("decision_agent") and c.text.startswith("```")
-    )
-    assert fenced >= 1
-    monkeypatch.undo()
-    good = asyncio.run(run_candidates("decision", ReplayModel(), "current"))
-    assert broken["tp"] < good["tp"]
+    broken = asyncio.run(run_candidates("decision", _FencedReplay(), "current"))
+    assert good["tp"] >= 1 and broken["tp"] < good["tp"]
+    failures = scoring.check({"decision": broken}, _gate_limits())
+    assert any(f.startswith("decision.") for f in failures), failures
 
 
 # --- live (opt-in: EVAL_LIVE=1; the coordinator runs it) ----------------------------------------
@@ -381,25 +382,27 @@ def test_live_eval_and_record():
     if not os.environ.get("ANTHROPIC_API_KEY"):
         pytest.skip("ANTHROPIC_API_KEY is not set")
     record = os.environ.get("EVAL_RECORD") == "1"
+    suites = suites_from_env(os.environ.get("EVAL_SUITES"))
+    partial = suites != tuple(SUITES)
     reports: dict[str, dict[str, dict[str, Any]]] = {}
+    shared: dict[str, dict[str, str]] = {}  # one answer per (prompt, case) across variants
     for variant in VARIANTS:
-        model = LiveModel()
-        reports[variant] = asyncio.run(run_all(model, variant))
+        model = LiveModel(shared=shared)
+        reports[variant] = asyncio.run(run_all(model, variant, suites))
         if record:
             write_recordings(model.recorded, "recorded")
-    notes = reports["current"]["persona"].pop("notes")
-    reports["worse"]["persona"].pop("notes")
-    reports["current"]["judge"] = asyncio.run(judge.judge_notes(router_for(LiveModel()), notes))
-    failures = scoring.check(reports["current"], thresholds())
-    export(reports["current"], failures, mode="live", variant="current")
-    export(
-        reports["worse"],
-        scoring.check(reports["worse"], thresholds()),
-        mode="live",
-        variant="worse",
-    )
+    if "persona" in suites:
+        notes = reports["current"]["persona"]["notes"]
+        reports["current"]["judge"] = asyncio.run(judge.judge_notes(router_for(LiveModel()), notes))
+    limits = thresholds()
+    failures = scoring.check(reports["current"], limits)
+    mode = "live-partial" if partial else "live"
+    export(reports["current"], failures, mode=mode, variant="current")
+    export(reports["worse"], scoring.check(reports["worse"], limits), mode=mode, variant="worse")
     assert not failures, "\n".join(failures)
     for suite, metric in HEADLINE.items():
+        if suite not in suites:
+            continue
         a, b = reports["current"][suite][metric], reports["worse"][suite][metric]
         # a real model may happen not to leak under the worse prompt either: never better
         assert (b >= a) if metric in LOWER else (b < a), (suite, metric, a, b)

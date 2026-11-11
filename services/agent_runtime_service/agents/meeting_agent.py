@@ -52,6 +52,12 @@ ADR-0039 (`meeting_agent@v2`):
   `content` is the update itself, up to 2000 chars (B5), and it carries the proxied person's
   `user_id` for the room to label it.
 With no company brain, no goal ids and no proxies, v2 renders exactly v1's user message.
+
+Eval fixes (`meeting_agent@v3`, first live eval 2026-11-11): the system prompt calibrates the
+off_agenda confidence (a speaker flagging the change, or the group spending the stretch on it, is
+0.8+; v2 left it uncalibrated and real drifts came back at 0.7, under the 0.75 bar), says that a
+topic near an item is not covered by it, and asks for plain numbers in `raised`. The user message
+is v2's. `parse_assessment` also reads a `raised` label ("C2") as its number.
 """
 
 from __future__ import annotations
@@ -59,6 +65,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -260,12 +267,28 @@ def parse_assessment(text: str) -> Assessment:
         if content is not None and confidence is not None:
             off_agenda = (content, confidence)
     raw_raised = obj.get("raised")
-    raised = [
-        n
-        for n in (raw_raised if isinstance(raw_raised, list) else [])
-        if isinstance(n, int) and not isinstance(n, bool)
-    ]
+    raised: list[int] = []
+    for n in raw_raised if isinstance(raw_raised, list) else []:
+        number = _carried_number(n)
+        if number is not None and number not in raised:
+            raised.append(number)
     return Assessment(updates=updates, off_agenda=off_agenda, raised=raised)
+
+
+_CARRIED = re.compile(r"^\s*C?\s*(\d{1,3})\s*$", re.IGNORECASE)
+
+
+def _carried_number(value: object) -> int | None:
+    """A `raised` entry: the number (2), or the label as the prompt shows it ("C2", "2"), which
+    the live eval saw Sonnet answer. Anything else is dropped."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        match = _CARRIED.match(value)
+        return int(match.group(1)) if match else None
+    return None
 
 
 class MeetingAgent(BaseAgent):

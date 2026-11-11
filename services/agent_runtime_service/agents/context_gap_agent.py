@@ -45,7 +45,6 @@ through the router (budget gate, metering on `usage-events`).
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -58,6 +57,7 @@ from uuid import UUID
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.json_answer import json_object
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import EMPTY, CompanyContext
 from libs.shared.prompts import Prompt, PromptLoader
@@ -112,8 +112,6 @@ _REFERENCE = re.compile(
     r"what happened (?:with|to)|per the|follow(?:ing)?[- ]up on)\b",
     re.IGNORECASE,
 )
-_FENCE = re.compile(r"^```[a-zA-Z]*\s*\n?|\n?```\s*$")
-_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 ContextFn = Callable[[UUID, UUID], Awaitable[dict[str, Any] | None]]
@@ -225,15 +223,9 @@ def choose_requesters(
 
 
 def parse_object(text: str) -> dict[str, Any] | None:
-    body = _FENCE.sub("", text.strip()).strip()
-    for candidate in (body, *(m.group(0) for m in [_OBJECT.search(body)] if m)):
-        try:
-            data = json.loads(candidate)
-        except ValueError:
-            continue
-        if isinstance(data, dict):
-            return data
-    return None
+    """The answer's JSON object (the last one, when the model corrected itself), tolerating
+    fences and prose (`json_answer.py`)."""
+    return json_object(text)
 
 
 def parse_gate(text: str) -> tuple[bool, str, float]:

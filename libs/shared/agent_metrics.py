@@ -41,7 +41,6 @@ Telemetry never breaks an agent: every helper swallows its own errors.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any
@@ -50,6 +49,7 @@ from uuid import UUID
 from prometheus_client import Counter
 
 from libs.shared.cost import usd
+from libs.shared.json_answer import json_object
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,6 @@ OUTPUT_FORMATS: dict[str, tuple[str, str]] = {
     "proactive_topic_watch": ("list", "topics"),
 }
 
-_FENCE = re.compile(r"^```[a-zA-Z]*\s*\n?|\n?```\s*$")
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*[0-9]*\.?[0-9]+\s*$", re.IGNORECASE)
 
 
@@ -153,20 +152,6 @@ def agent_for_prompt(prompt_ref: str | None) -> str:
     return PROMPT_AGENTS[best] if best else key
 
 
-def _json_object(text: str) -> Any:
-    body = _FENCE.sub("", text.strip()).strip()
-    try:
-        return json.loads(body)
-    except ValueError:
-        start, end = body.find("{"), body.rfind("}")
-        if start < 0 or end <= start:
-            return None
-        try:
-            return json.loads(body[start : end + 1])
-        except ValueError:
-            return None
-
-
 def output_ok(prompt_ref: str | None, text: str) -> bool | None:
     """Whether `text` is a usable answer for the prompt's format: the same tolerance as the
     agents' parsers (code fences and prose around one JSON object are fine). None when the prompt
@@ -177,8 +162,8 @@ def output_ok(prompt_ref: str | None, text: str) -> bool | None:
     kind, key = fmt
     if kind == "header":
         return bool(_CONFIDENCE.match(text.strip().partition("\n")[0]))
-    obj = _json_object(text)
-    if not isinstance(obj, dict):
+    obj = json_object(text, key)  # the same reading as the agents' parsers (json_answer.py)
+    if obj is None:
         return False
     value = obj.get(key)
     if kind == "number":

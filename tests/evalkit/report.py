@@ -59,7 +59,7 @@ def export(
     report: dict[str, dict[str, Any]], failures: list[str], *, mode: str, variant: str
 ) -> Path | None:
     folder = os.environ.get("EVAL_REPORT_DIR", "").strip()
-    target = Path(folder) if folder else (EVAL_DIR / "reports" if mode == "live" else None)
+    target = Path(folder) if folder else (EVAL_DIR / "reports" if mode.startswith("live") else None)
     reg = registry_for(report, failures, mode=mode, variant=variant)
     written = None
     if target is not None:

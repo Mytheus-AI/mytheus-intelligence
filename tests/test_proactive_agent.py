@@ -546,7 +546,7 @@ async def test_missing_stakeholder_fires_once_per_meeting_and_person_through_the
         assert rec["agent"] == "ProactiveAgent" and rec["kind"] == "alert"
         assert alert["alert_type"] == "missing_stakeholder" and alert["priority"] == 3
         assert alert["subject"] == {"kind": "meeting", "id": str(MEETING)}
-        assert payload["prompt"] == "proactive_stakeholder@v2" and payload["model_tier"] == "haiku"
+        assert payload["prompt"] == "proactive_stakeholder@v3" and payload["model_tier"] == "haiku"
         missing = alert["related"][0]["id"]
         assert rec["window_id"] == f"proactive:missing_stakeholder:{MEETING}:{missing}"
         assert rec["header"]["idempotency_key"].startswith(
@@ -712,9 +712,9 @@ def test_the_agent_is_registered_and_its_prompts_load():
     loader = PromptLoader(PROMPTS_DIR)
     names = [f().name for f in registered_agents(loader, router, proactive=ProactiveDeps())]
     assert "ProactiveAgent" in names
-    for key in ("proactive_conflict", "proactive_stakeholder"):
+    for key, version in (("proactive_conflict", "v2"), ("proactive_stakeholder", "v3")):
         prompt = loader.load(key, loader.resolve(key, ORG))
-        assert prompt.version == "v2" and prompt.user_template  # polish: never record
+        assert prompt.version == version and prompt.user_template  # v3: eval calibration
 
 
 # --- review fixes: privacy per recipient, silent-band dedupe, URLs --------------------------

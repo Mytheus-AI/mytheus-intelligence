@@ -29,10 +29,16 @@ Modes:
     EVAL_LIVE=1 EVAL_RECORD=1 uv run pytest -m eval tests/test_eval_harness.py -k live -s
 
     # judge tier: EVAL_JUDGE_TIER=extract (Sonnet, default) or triage (Haiku)
+
+    # some suites only (cheaper iterations on one agent): EVAL_SUITES=persona,meeting. The
+    # reports are then live-partial-<variant>.json; a prompt change still ends with a full run.
+    EVAL_LIVE=1 EVAL_RECORD=1 EVAL_SUITES=persona \\
+        uv run pytest -m eval tests/test_eval_harness.py -k live -s
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID, uuid5
@@ -572,14 +578,37 @@ async def run_never_record(model: Model, variant: str) -> dict[str, Any]:
 # --- all -----------------------------------------------------------------------------------------
 
 
-async def run_all(model: Model, variant: str) -> dict[str, dict[str, Any]]:
+SUITES: dict[str, Callable[[Model, str], Awaitable[dict[str, Any]]]] = {
+    "decision": lambda m, v: run_candidates("decision", m, v),
+    "action": lambda m, v: run_candidates("action", m, v),
+    "persona": run_personas,
+    "meeting": run_meeting,
+    "proactive_conflict": run_conflict,
+    "proactive_workload": run_workload,
+    "proactive_stakeholder": run_stakeholder,
+    "never_record": run_never_record,
+}
+
+
+def suites_from_env(raw: str | None) -> tuple[str, ...]:
+    """`EVAL_SUITES=persona,meeting` -> those suites (in the canonical order); empty -> all.
+    `persona` brings `never_record` along: both ask the PersonalListener the same cases, so a
+    recording of one without the other cannot be replayed."""
+    names = {n.strip() for n in (raw or "").split(",") if n.strip()}
+    if not names:
+        return tuple(SUITES)
+    unknown = names - set(SUITES)
+    if unknown:
+        raise ValueError(f"unknown eval suites: {sorted(unknown)}; known: {list(SUITES)}")
+    if "persona" in names:
+        names.add("never_record")
+    return tuple(n for n in SUITES if n in names)
+
+
+async def run_all(
+    model: Model, variant: str, suites: tuple[str, ...] | None = None
+) -> dict[str, dict[str, Any]]:
     report: dict[str, dict[str, Any]] = {}
-    report["decision"] = await run_candidates("decision", model, variant)
-    report["action"] = await run_candidates("action", model, variant)
-    report["persona"] = await run_personas(model, variant)
-    report["meeting"] = await run_meeting(model, variant)
-    report["proactive_conflict"] = await run_conflict(model, variant)
-    report["proactive_workload"] = await run_workload(model, variant)
-    report["proactive_stakeholder"] = await run_stakeholder(model, variant)
-    report["never_record"] = await run_never_record(model, variant)
+    for name in suites or tuple(SUITES):
+        report[name] = await SUITES[name](model, variant)
     return report

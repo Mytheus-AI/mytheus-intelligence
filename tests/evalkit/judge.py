@@ -76,6 +76,7 @@ async def judge_notes(router: LiteLLMRouter, notes: dict[str, str]) -> dict[str,
     loader = EvalLoader()
     prompt = loader.load(JUDGE_KEY, JUDGE_VERSION)
     scores: list[dict[str, float] | None] = []
+    details: dict[str, Any] = {}
     for key, note in sorted(notes.items()):
         out = await router.complete(
             tier=judge_tier(),
@@ -88,4 +89,17 @@ async def judge_notes(router: LiteLLMRouter, notes: dict[str, str]) -> dict[str,
             prompt_ref=prompt.ref,
         )
         scores.append(parse_judgement(out.text))
-    return aggregate(scores)
+        details[key] = {"scores": scores[-1], "reason": _reason(out.text)}
+    # per note, for reading a weak criterion back to the notes that caused it (not gated)
+    return {**aggregate(scores), "details": details}
+
+
+def _reason(text: str) -> str:
+    body = _FENCE.sub("", text.strip()).strip()
+    start, end = body.find("{"), body.rfind("}")
+    try:
+        data = json.loads(body[start : end + 1]) if start >= 0 and end > start else {}
+    except ValueError:
+        return ""
+    reason = data.get("reason") if isinstance(data, dict) else None
+    return reason if isinstance(reason, str) else ""

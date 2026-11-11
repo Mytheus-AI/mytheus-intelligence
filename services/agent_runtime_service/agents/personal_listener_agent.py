@@ -46,6 +46,17 @@ ADR-0039 (`personal_listener@v3`, `personal_listener_gate@v3`):
   runtime) gets an "Attendance" line in the profile so the note is a catch-up; they never speak,
   so their commitments are always empty, whatever the model says.
 With no company brain, a live participant and no promises, v3 renders exactly v2's user messages.
+
+Eval fixes (`personal_listener_gate@v6`, `personal_listener@v5`, first live eval 2026-11-11). The
+first real-model run showed the v5 gate scoring a decision or a task taken on outside the
+participant's role at 0.1 to 0.2 ("work clearly owned by someone else"), and v4 giving such a note
+a confidence under 0.4, so most participants got no note for the meeting's outcomes and two
+participants never shared a fact (persona fact overlap 0.0). The simulated recordings had hidden
+it. v6 scores an outcome of the meeting outside the role 0.6 to 0.8 (it passes the 0.5 gate);
+small talk, unsettled proposals and other people's discussion with no outcome stay low. v5 puts
+every decision and task of the stretch in the note with its owner, framed for the participant,
+and bands a clear outcome outside their role 0.4 to 0.7: kept in their record (silent), not
+pushed live. Both user messages are the previous versions'.
 """
 
 from __future__ import annotations

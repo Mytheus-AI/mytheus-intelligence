@@ -106,7 +106,8 @@
     },
     {
       "id": "s-09", "kind": "silent_band",
-      "turns": [{"speaker": "priya", "text": "Maybe pricing for the add-on, not sure it matters yet."}, {"speaker": "sam", "text": "Could be later."}],
+      "note": "Rewritten after the first live eval (2026-11-11). The case tests the silent band: pricing clearly discussed, nothing settled. Its old text ('Maybe pricing for the add-on, not sure it matters yet.' / 'Could be later.') was a hedged one-line mention, which the stakeholder prompt (v2 and v3 alike) says to score low ('not just mentioning a word once'); Haiku scored it 0.3 to 0.5, so the case measured coin flips around the 0.5 gate, not the band. The new text is an unsettled discussion of the same item.",
+      "turns": [{"speaker": "priya", "text": "Pricing for the add-on, per seat or per workspace? We should work that out."}, {"speaker": "sam", "text": "Let's park it until we have the usage numbers."}],
       "gate": {"topic": "pricing", "score": 0.6},
       "earlier": [{"decisions": ["Add-ons are priced per workspace."], "attendees": ["priya", "alex"]}],
       "present": ["priya", "sam"],

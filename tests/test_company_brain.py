@@ -528,7 +528,7 @@ async def _note(context: dict[str, Any], answer: str = NOTE) -> tuple[Any, LLM, 
 
 async def test_commitments_ride_in_the_record_and_never_in_the_live_stream():
     result, llm, streamed = await _note(PROFILE)
-    assert result.payload["prompt"] == "personal_listener@v4"
+    assert result.payload["prompt"] == "personal_listener@v5"
     assert result.payload["commitments"] == [
         {"content": "You will send the export", "due_hint": "tomorrow"}
     ]

@@ -24,6 +24,10 @@ Plan 10-13 section 3.6; the P11 contract sections 1 and 2. Four checks, two trig
   the people who attended the meetings that produced them (core-api participants route) and are
   absent from this meeting are the stakeholders. At most once per (meeting, person), at most
   `MAX_STAKEHOLDERS` per window. KG unavailable -> skipped silently, before the gate is paid for.
+  The gate's score is the alert's band. `proactive_stakeholder@v3` (first live eval) calibrates
+  it: revisiting or relying on an earlier decision, or settling a requirement, is 0.8+ (v2 put
+  those at 0.6 to 0.7, so they were logged silently instead of shown); a topic raised for later
+  is 0.5 to 0.7 (a silent alert); a status remark is under 0.5 (nothing).
 
 Gating, before any work: `PROACTIVE_AGENT` != 0, the plan feature `proactive_agent` (billing,
 cached 5 min per org; `PROACTIVE_AGENT_ALL_PLANS=1` overrides it), and the tenant budget state

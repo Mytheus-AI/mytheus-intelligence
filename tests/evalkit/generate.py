@@ -329,6 +329,9 @@ def simulate_recordings() -> dict[str, dict[str, Any]]:
     index = prompt_index()
     for ref, entries in sorted(model.recorded.items()):
         if ref not in SIMULATED_REFS:
+            path = RECORDINGS_DIR / f"{ref}.json"
+            if path.exists() and json.loads(path.read_text("utf-8")).get("source") == "recorded":
+                continue  # a newer default with a live recording: nothing to simulate
             raise SystemExit(
                 f"{ref} has no live recording. Run the live record mode (tests/evalkit/harness.py"
                 " docstring) instead of simulating a new prompt version."

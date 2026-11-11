@@ -50,6 +50,7 @@ from uuid import UUID, uuid5
 from langgraph.graph import END, StateGraph
 
 from libs.shared.base_agent import BaseAgent
+from libs.shared.json_answer import json_object
 from libs.shared.prompts import Prompt
 from libs.shared.router import EXTRACT_MAX_TOKENS, EXTRACTION_EFFORT, TIER_NAMES, Effort
 from libs.shared.state import AgentResult, AgentState, TranscriptWindow
@@ -97,20 +98,11 @@ def parse_score(text: str) -> float:
 
 
 def parse_candidates(text: str, key: str = "candidates") -> list[Any]:
-    """The `key` list of `{"<key>": [...]}` (`candidates` by default), tolerating code fences
-    and prose around the object. Anything else is an empty list (never raises)."""
-    body = _strip_fences(text)
-    try:
-        data = json.loads(body)
-    except ValueError:
-        start, end = body.find("{"), body.rfind("}")
-        if start < 0 or end <= start:
-            return []
-        try:
-            data = json.loads(body[start : end + 1])
-        except ValueError:
-            return []
-    if not isinstance(data, dict) or not isinstance(data.get(key), list):
+    """The `key` list of `{"<key>": [...]}` (`candidates` by default), tolerating code fences,
+    prose around the object and a self-corrected second object. Anything else is an empty list
+    (never raises)."""
+    data = json_object(text, key)  # the model's last object holding `key` (json_answer.py)
+    if data is None or not isinstance(data.get(key), list):
         return []
     return list(data[key])
 

@@ -200,13 +200,27 @@ class ReplayModel(Model):
 @dataclass
 class LiveModel(Model):
     """The real provider. Streaming requests are answered non-streaming and replayed as chunks
-    (the agents' stream handling still runs; the answer is the same)."""
+    (the agents' stream handling still runs; the answer is the same).
+
+    `shared` (pass one dict to every LiveModel of a run) answers a `(prompt, case)` already
+    asked in this run with the same messages from that first answer, as a replay would.
+    Without it, a prompt both variants call (the gates, the stakeholder gate) was answered
+    twice and the second, non-deterministic answer overwrote the first in the recording, so the
+    recorded gate no longer matched the extraction it had let through (the first live run: a
+    `personal_listener@v4` case with no recorded answer). It also halves the spend on them.
+    The messages are part of the key: the judge asks every note under one empty case key."""
 
     recorded: dict[str, dict[str, str]] = field(default_factory=dict)
+    shared: dict[str, dict[str, str]] = field(default_factory=dict)
 
     async def answer(self, ref: str, key: str, kw: dict[str, Any]) -> tuple[str, dict[str, int]]:
         import litellm
 
+        asked = f"{key}\x00{_sha(json.dumps(kw.get('messages'), sort_keys=True, default=str))}"
+        seen = self.shared.get(ref, {})
+        if asked in seen:  # the same prompt, case and message: the first answer, as a replay
+            self.recorded.setdefault(ref, {})[key] = seen[asked]
+            return seen[asked], {}
         args = {k: v for k, v in kw.items() if k not in ("stream", "stream_options")}
         resp = await litellm.acompletion(**args)
         text = resp.choices[0].message.content or ""
@@ -216,6 +230,7 @@ class LiveModel(Model):
             "completion_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
         }
         self.recorded.setdefault(ref, {})[key] = text
+        self.shared.setdefault(ref, {})[asked] = text
         return text, counts
 
 
