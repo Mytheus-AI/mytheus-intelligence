@@ -49,7 +49,10 @@ from tests.evalkit.models import LiveModel, Model, ReplayModel, prompt_index, wr
 EVAL_DIR = Path(__file__).parent / "eval"
 SUITE = "briefing"
 WORSE = {"briefing": "v0-worse"}
-HEADLINE = ("coverage", "link_accuracy", "greets_by_name", "spoken_style")
+# What separates a briefing from a generic recap. Coverage is gated by thresholds but is not a
+# headline: with real answers (live 2026-11-11) the worse prompt covers the points too; it fails
+# on links, greeting, length and spoken style.
+HEADLINE = ("link_accuracy", "greets_by_name", "spoken_style")
 ORG = UUID(int=900)
 _STYLE = re.compile(r"(^\s*[-*•]\s)|(\*\*)|(#)|(\b[CWPQ]\d+\b)|(https?://)")
 

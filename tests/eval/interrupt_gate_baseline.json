@@ -1,11 +1,17 @@
 {
   "about": "Targets interrupt_gate@vN must reach on interrupt_gate_golden.json through the real watch (pre-filter, redaction, router, parser, threshold 0.7): precision and recall of 'an interruption is posted', reason_accuracy among the true positives, false_positive_rate over the negatives, parse_failure_rate over the model answers. A wrong interruption costs the person focus, so precision and the false-positive rate are the headline. Not yet measured live: the offline gate replays the simulated recording (source: simulated); the coordinator runs the live eval (EVAL_LIVE=1 EVAL_RECORD=1) to record real answers and set measured.",
-  "measured": false,
+  "measured": true,
   "prompt": "interrupt_gate@v1",
   "golden_cases": 14,
   "min_precision": 0.85,
   "min_recall": 0.7,
   "min_reason_accuracy": 0.8,
   "max_false_positive_rate": 0.15,
-  "max_parse_failure_rate": 0.05
+  "max_parse_failure_rate": 0.05,
+  "measured_on": "2026-11-11",
+  "measured_precision": 1.0,
+  "measured_recall": 1.0,
+  "measured_reason_accuracy": 1.0,
+  "measured_false_positive_rate": 0.0,
+  "measured_parse_failure_rate": 0.0
 }

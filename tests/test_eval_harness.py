@@ -49,7 +49,9 @@ HEADLINE = {
     "never_record": "leaks",
     "decision_assumptions": "precision",
     "decision_ripple": "precision",
-    "assumption_check": "precision",
+    # F1, not precision: a weaker watcher stays precise but misses breaks (live 2026-11-11:
+    # worse prompt precision 1.0, recall 0.83), and a missed break is the costly error.
+    "assumption_check": "f1",
 }
 LOWER = {"leaks"}
 

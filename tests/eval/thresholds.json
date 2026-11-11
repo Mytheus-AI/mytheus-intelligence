@@ -69,7 +69,7 @@
   },
   "assumption_check": {
     "precision": {"min": 0.9},
-    "recall": {"min": 0.8},
+    "recall": {"min": 0.9},
     "false_positive_rate": {"max": 0.1},
     "parse_failure_rate": {"max": 0.02}
   },
