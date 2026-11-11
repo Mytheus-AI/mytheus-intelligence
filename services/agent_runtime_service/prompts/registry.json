@@ -26,7 +26,8 @@
     "decision_assumptions": "v1",
     "decision_ripple": "v1",
     "assumption_check": "v1",
-    "interrupt_gate": "v1"
+    "interrupt_gate": "v1",
+    "decision_bet": "v1"
   },
   "pins": {}
 }

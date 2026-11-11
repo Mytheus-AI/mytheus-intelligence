@@ -315,6 +315,7 @@ def test_the_shipped_prompts_are_registered_and_render():
         "decision_ripple": "v1",
         "assumption_check": "v1",
         "interrupt_gate": "v1",  # the live watch ("in every meeting at once")
+        "decision_bet": "v1",  # decisions as bets
     }
 
 
