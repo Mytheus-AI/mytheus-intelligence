@@ -103,6 +103,10 @@ PROMPT_AGENTS: dict[str, str] = {
     "proactive": "ProactiveAgent",
     "meeting_agent": "MeetingAgent",
     "minutes": "MinutesAgent",
+    # a3 room signals: the MeetingAgent's post-meeting reading (room_signals.py)
+    "last_word": "MeetingAgent",
+    "consensus_read": "MeetingAgent",
+    "resume_point": "MeetingAgent",
     "never_record_check": "NeverRecordGuard",
     # Promise ledger: the person's own agent reading their own messages.
     "promise_extract": "PersonalListenerAgent",
@@ -129,6 +133,9 @@ OUTPUT_FORMATS: dict[str, tuple[str, str]] = {
     "proactive_already_decided": ("list", "matches"),
     "proactive_topic_watch": ("list", "topics"),
     "promise_extract": ("list", "promises"),
+    "last_word": ("list", "signals"),
+    "consensus_read": ("list", "stances"),
+    "resume_point": ("object", "open"),
 }
 
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*[0-9]*\.?[0-9]+\s*$", re.IGNORECASE)

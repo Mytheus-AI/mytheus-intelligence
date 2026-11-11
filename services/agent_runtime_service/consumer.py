@@ -40,6 +40,11 @@ Minutes for everyone (`minutes.py`) runs beside it too: `meeting-events` in grou
 participant and one shared set. It needs `CORE_URL` + `CORE_CALLER_TOKEN` (core-api's internal
 minutes source); `MINUTES_AGENT=0` leaves it unstarted.
 
+Room signals (`room_signals.py`, a3) run beside it the same way: `meeting-events` in group
+`agent-runtime-room-signals`, its own producer; on `ended` one `room_signals` record (the last
+word nudges, the agreement read per decision, the resume point). Same `CORE_URL` +
+`CORE_CALLER_TOKEN`; `ROOM_SIGNALS_AGENT=0` leaves it unstarted.
+
 ADR-0039: one `OrgContextClient` (the company brain over `GetOrgContext`, cached in-process) feeds
 every window's prompts, and one `CachedAgendaSource` (core-api's internal agenda route) is shared
 by the runtime (proxied participants, C6), the MeetingAgent and ProactiveAgent's window checks
@@ -384,6 +389,18 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.proactive.loop import (
         consumer_config as proactive_consumer_config,
     )
+    from services.agent_runtime_service.room_signals import TOPIC as ROOM_SIGNALS_TOPIC
+    from services.agent_runtime_service.room_signals import (
+        RoomSignalsLoop,
+        RoomSignalsWriter,
+        run_room_signals_loop,
+    )
+    from services.agent_runtime_service.room_signals import (
+        consumer_config as room_signals_consumer_config,
+    )
+    from services.agent_runtime_service.room_signals import (
+        source_from_env as room_signals_from_env,
+    )
     from services.agent_runtime_service.translation import enabled as translation_enabled
     from services.agent_runtime_service.translation import start_translation
 
@@ -552,6 +569,33 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         )
     else:
         logger.warning("minutes off: no CORE_URL / CORE_CALLER_TOKEN, or MINUTES_AGENT=0")
+    room_source = room_signals_from_env()
+    if room_source is not None and os.environ.get("ROOM_SIGNALS_AGENT", "1") != "0":
+        room_consumer = Consumer(room_signals_consumer_config(brokers))
+        room_consumer.subscribe([ROOM_SIGNALS_TOPIC])
+        a2a_consumers.append(room_consumer)
+        room_emitter = Emitter(
+            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            codec,
+        )
+        room_loop = RoomSignalsLoop(
+            RoomSignalsWriter(
+                loader,
+                router,
+                source=room_source,
+                # Strict, like the minutes: nudges quote people, so an unknown never-record list
+                # is retried, never treated as "none".
+                org_context=org_contexts.get_strict,
+            ),
+            room_emitter,
+            claims=redis,
+            settle_s=float(os.environ.get("ROOM_SIGNALS_SETTLE_S", "20")),
+        )
+        background.append(
+            asyncio.create_task(run_room_signals_loop(room_consumer, codec, room_loop, stop))
+        )
+    else:
+        logger.warning("room signals off: no CORE_URL / CORE_CALLER_TOKEN, or ROOM_SIGNALS_AGENT=0")
     if translation_enabled():  # live caption translation (translation.py), same event loop
         translation_task, translation_consumer = start_translation(
             brokers=brokers,

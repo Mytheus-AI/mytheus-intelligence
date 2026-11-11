@@ -60,6 +60,11 @@ SIMULATED_REFS = frozenset(
         # tests/test_decision_check_eval.py `simulated_answer`, not by this harness; the live
         # record mode there (EVAL_LIVE=1 EVAL_RECORD=1) replaces it with `source: recorded`.
         "decision_conflict_check@v1",
+        # a3 room signals: simulated from the golden cases' ideal answers
+        # (tests/evalkit/room_signals.py) until the coordinator's live record run replaces them
+        "last_word@v1",
+        "consensus_read@v1",
+        "resume_point@v1",
     }
 )
 

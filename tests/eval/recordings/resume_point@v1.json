@@ -1,0 +1,11 @@
+{
+  "prompt": "resume_point@v1",
+  "prompt_sha256": "1dd42e68607ffbc60d24943fe90595e14585885c3f68e7c0a2315e425f48f651",
+  "source": "simulated",
+  "about": "Simulated model answers: the golden cases' ideal answers (tests/eval/room_signals_golden.json, `simulated`). Replaced by real answers when the live record mode runs (tests/test_room_signals_eval.py).",
+  "entries": {
+    "hiring-ran-out": "{\"open\": true, \"topic\": \"the interview loop\", \"positions\": [{\"participant\": \"Participant 1\", \"quote\": \"I think we keep four rounds\"}, {\"participant\": \"Participant 2\", \"quote\": \"three rounds with a take-home exercise would be better\"}], \"cut_off\": null}",
+    "pricing-cutoff": "{\"open\": true, \"topic\": \"the migration risk\", \"positions\": [{\"participant\": \"Participant 2\", \"quote\": \"move the billing tables first and freeze writes for a day\"}, {\"participant\": \"Participant 1\", \"quote\": \"run both systems in parallel for a week\"}], \"cut_off\": {\"participant\": \"Participant 3\", \"quote\": \"The migration risk is that the old billing tables\"}}",
+    "wrapped-up": "{\"open\": false, \"topic\": null, \"positions\": [], \"cut_off\": null}"
+  }
+}
