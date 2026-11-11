@@ -120,7 +120,7 @@ PROFILE = {"role": "Backend engineer", "skills": ["python"], "bio": "Owns billin
 def test_the_org_context_mirror_matches_the_proto():
     text = re.sub(r"//[^\n]*", "", (ROOT / "proto" / "identity.proto").read_text("utf-8"))
     assert re.search(r"rpc GetOrgContext\(GetOrgContextRequest\) returns \(OrgContext\);", text)
-    scalar = {oc._F.TYPE_STRING: "string"}
+    scalar = {oc._F.TYPE_STRING: "string", oc._F.TYPE_INT32: "int32"}
     for message, fields in oc.FIELDS.items():
         body = re.search(rf"message {message} \{{(.*?)\}}", text, re.S)
         assert body is not None, message

@@ -61,6 +61,20 @@ FIELDS: dict[str, list[tuple[str, int, int, bool, str | None]]] = {
         ("user_id", 1, _F.TYPE_STRING, False, None),
         ("topic", 2, _F.TYPE_STRING, False, None),
     ],
+    # People structure: departments and teams with what they do (backend migration c8d9e0f1a2b3)
+    "OrgDepartment": [
+        ("id", 1, _F.TYPE_STRING, False, None),
+        ("name", 2, _F.TYPE_STRING, False, None),
+        ("description", 3, _F.TYPE_STRING, False, None),
+        ("parent_id", 4, _F.TYPE_STRING, False, None),
+    ],
+    "OrgTeam": [
+        ("id", 1, _F.TYPE_STRING, False, None),
+        ("name", 2, _F.TYPE_STRING, False, None),
+        ("description", 3, _F.TYPE_STRING, False, None),
+        ("department_id", 4, _F.TYPE_STRING, False, None),
+        ("member_count", 5, _F.TYPE_INT32, False, None),
+    ],
     "OrgContext": [
         ("description", 1, _F.TYPE_STRING, False, None),
         ("industry", 2, _F.TYPE_STRING, False, None),
@@ -71,6 +85,8 @@ FIELDS: dict[str, list[tuple[str, int, int, bool, str | None]]] = {
         ("goals", 7, _F.TYPE_MESSAGE, True, "Goal"),
         ("never_record_topics", 8, _F.TYPE_STRING, True, None),
         ("topic_watches", 9, _F.TYPE_MESSAGE, True, "TopicWatch"),
+        ("departments", 10, _F.TYPE_MESSAGE, True, "OrgDepartment"),
+        ("teams", 11, _F.TYPE_MESSAGE, True, "OrgTeam"),
     ],
 }
 
@@ -133,6 +149,27 @@ class TopicWatch:
 
 
 @dataclass(frozen=True)
+class OrgDepartment:
+    """A department and what it does (People page). `parent_id` None = top level."""
+
+    id: str
+    name: str
+    description: str = ""
+    parent_id: str | None = None
+
+
+@dataclass(frozen=True)
+class OrgTeam:
+    """A team, what it does and its head count. `department_id` None = "No department"."""
+
+    id: str
+    name: str
+    description: str = ""
+    department_id: str | None = None
+    member_count: int = 0
+
+
+@dataclass(frozen=True)
 class CompanyContext:
     """The company brain one org's agents see. Every field may be empty."""
 
@@ -145,6 +182,8 @@ class CompanyContext:
     goals: tuple[Goal, ...] = ()
     never_record_topics: tuple[str, ...] = ()
     topic_watches: tuple[TopicWatch, ...] = ()
+    departments: tuple[OrgDepartment, ...] = ()
+    teams: tuple[OrgTeam, ...] = ()
 
     @property
     def empty(self) -> bool:
@@ -196,6 +235,27 @@ def from_message(reply: Any) -> CompanyContext:
         uid = _uuid(w.user_id)
         if uid is not None and _flat(w.topic):
             watches.append(TopicWatch(uid, _flat(w.topic)))
+    departments = tuple(
+        OrgDepartment(
+            id=_flat(d.id),
+            name=_flat(d.name),
+            description=_flat(d.description),
+            parent_id=_flat(d.parent_id) or None,
+        )
+        for d in reply.departments
+        if _uuid(d.id) is not None and _flat(d.name)
+    )
+    teams = tuple(
+        OrgTeam(
+            id=_flat(t.id),
+            name=_flat(t.name),
+            description=_flat(t.description),
+            department_id=_flat(t.department_id) or None,
+            member_count=max(0, int(t.member_count)),
+        )
+        for t in reply.teams
+        if _uuid(t.id) is not None and _flat(t.name)
+    )
     return CompanyContext(
         description=" ".join(reply.description.split()) if reply.description else "",
         industry=_flat(reply.industry),
@@ -210,6 +270,8 @@ def from_message(reply: Any) -> CompanyContext:
         ),
         never_record_topics=_strings(reply.never_record_topics),
         topic_watches=tuple(watches),
+        departments=departments,
+        teams=teams,
     )
 
 
