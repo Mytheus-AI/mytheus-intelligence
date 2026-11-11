@@ -354,6 +354,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.agents.proactive_agent import (
         deps_from_env as proactive_from_env,
     )
+    from services.agent_runtime_service.delegation.client import delegation_from_env
     from services.agent_runtime_service.emitter import Emitter
     from services.agent_runtime_service.feedback import TOPIC as FEEDBACK_TOPIC
     from services.agent_runtime_service.feedback import FeedbackListener, run_feedback_loop
@@ -430,6 +431,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         pep=pep,
         related=related_from_env(),
         user_context=contexts.get,
+        delegation=delegation_from_env(),  # polish wave 3: delegated answers
     )
     org_contexts = OrgContextClient()
     agenda_client = agenda_from_env()
