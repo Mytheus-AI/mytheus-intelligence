@@ -57,5 +57,14 @@
     "attribution": {"min": 3.5},
     "ground_rules": {"min": 4.8},
     "overall": {"min": 3.8}
+  },
+  "promise_extract": {
+    "precision": {"min": 0.9},
+    "recall": {"min": 0.85},
+    "false_promise_rate": {"max": 0.1},
+    "due_date_accuracy": {"min": 0.85},
+    "recipient_accuracy": {"min": 0.85},
+    "never_record_leak": {"max": 0.0},
+    "parse_failure_rate": {"max": 0.02}
   }
 }

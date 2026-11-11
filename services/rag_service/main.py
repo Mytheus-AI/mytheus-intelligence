@@ -48,6 +48,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from libs.shared.app import create_app
 from libs.shared.auth import _bearer, org_id_from, verify_token
 from libs.shared.service_auth import SERVICE_HEADER, ServiceAuthError, authenticate
+from services.agent_runtime_service.promises import PromiseExtractor
 from services.rag_service.clients import ScopeUnavailable
 from services.rag_service.contracts import RagQueryRequest, RagResponse
 from services.rag_service.decision_check import (
@@ -58,17 +59,22 @@ from services.rag_service.decision_check import (
 )
 from services.rag_service.domain import Caller
 from services.rag_service.pipeline import AnswerCache, RAGService
+from services.rag_service.promise_route import PromiseExtractOut, extract_promises
 
 logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
+# The agents' prompt registry: `promise_extract@vN` is the person's agent's prompt.
+AGENT_PROMPTS_DIR = Path(__file__).resolve().parents[1] / "agent_runtime_service" / "prompts"
 CALLER_TOKENS_ENV = "MYTHEUS_RAG_CALLER_TOKENS"
 # Who may call `/api/rag/query`, and who may call `/internal/decisions/check`. Every name in
 # `MYTHEUS_RAG_CALLER_TOKENS` must be one of `KNOWN_CALLERS` (the env is parsed against it); each
 # route then admits only its own set.
 ALLOWED_CALLERS = frozenset({"agent-runtime-service", "bff"})
 CHECK_CALLERS = frozenset({"core-api"})
-KNOWN_CALLERS = ALLOWED_CALLERS | CHECK_CALLERS
+# integration-service is admitted to `POST /internal/promises/extract` only (promise_route.py),
+# never to `/api/rag/query`; core-api only to `/internal/decisions/check`.
+KNOWN_CALLERS = ALLOWED_CALLERS | CHECK_CALLERS | {"integration-service"}
 USER_HEADER = "x-mytheus-user"
 
 
@@ -148,7 +154,9 @@ async def query(
 
 
 def build_app(
-    service: RAGService | None = None, check: DecisionCheckService | None = None
+    service: RAGService | None = None,
+    check: DecisionCheckService | None = None,
+    promises: PromiseExtractor | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -159,7 +167,7 @@ def build_app(
             # whole stack's deploy health gate. /healthz stays up; the reason is logged.
             app.state.wired = True
             try:
-                app.state.rag, app.state.check, closers = _wire_from_env()
+                app.state.rag, app.state.check, app.state.promises, closers = _wire_from_env()
             except NotConfigured as exc:
                 logger.error("rag-service not configured: %s; /api/rag/query answers 503", exc)
         yield
@@ -177,11 +185,19 @@ def build_app(
         methods=["POST"],
         response_model=CheckResponse,
     )
+    app.state.promises = promises
+    # Promise ledger: the person's agent reads one of their own messages (integration-service).
+    app.add_api_route(
+        "/internal/promises/extract",
+        extract_promises,
+        methods=["POST"],
+        response_model=PromiseExtractOut,
+    )
     return app
 
 
 def _wire_from_env() -> (
-    tuple[RAGService, DecisionCheckService, list[Any]]
+    tuple[RAGService, DecisionCheckService, PromiseExtractor, list[Any]]
 ):  # pragma: no cover - production wiring
     from confluent_kafka import Producer
     from redis.asyncio import from_url
@@ -252,7 +268,14 @@ def _wire_from_env() -> (
         judge=router,
         prompts=prompts,
     )
-    return service, check, [usage.flush]
+    extractor = PromiseExtractor(
+        router,
+        PromptLoader(AGENT_PROMPTS_DIR),
+        # Strict: the never-record topics must be known before a message reaches a model.
+        # Needs IDENTITY_GRPC_ADDR (the same GetOrgContext address agent-runtime uses).
+        OrgContextClient(),
+    )
+    return service, check, extractor, [usage.flush]
 
 
 app = build_app()
