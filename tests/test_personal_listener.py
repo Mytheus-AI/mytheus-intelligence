@@ -306,6 +306,9 @@ def test_the_shipped_prompts_are_registered_and_render():
         "proactive_topic_watch": "v2",
         "minutes": "v1",  # minutes for everyone
         "delegated_answer": "v1",
+        "last_word": "v1",
+        "consensus_read": "v1",
+        "resume_point": "v1",
     }
 
 
