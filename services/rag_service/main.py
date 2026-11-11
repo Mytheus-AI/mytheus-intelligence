@@ -40,16 +40,23 @@ from fastapi.security import HTTPAuthorizationCredentials
 from libs.shared.app import create_app
 from libs.shared.auth import _bearer, org_id_from, verify_token
 from libs.shared.service_auth import SERVICE_HEADER, ServiceAuthError, authenticate
+from services.agent_runtime_service.promises import PromiseExtractor
 from services.rag_service.clients import ScopeUnavailable
 from services.rag_service.contracts import RagQueryRequest, RagResponse
 from services.rag_service.domain import Caller
 from services.rag_service.pipeline import AnswerCache, RAGService
+from services.rag_service.promise_route import PromiseExtractOut, extract_promises
 
 logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
+# The agents' prompt registry: `promise_extract@vN` is the person's agent's prompt.
+AGENT_PROMPTS_DIR = Path(__file__).resolve().parents[1] / "agent_runtime_service" / "prompts"
 CALLER_TOKENS_ENV = "MYTHEUS_RAG_CALLER_TOKENS"
 ALLOWED_CALLERS = frozenset({"agent-runtime-service", "bff"})
+# Every name `MYTHEUS_RAG_CALLER_TOKENS` may hold. integration-service is admitted to
+# `POST /internal/promises/extract` only (promise_route.py), never to `/api/rag/query`.
+KNOWN_CALLERS = ALLOWED_CALLERS | {"integration-service"}
 USER_HEADER = "x-mytheus-user"
 
 
@@ -64,10 +71,12 @@ def resolve_caller(
     headers = {k.lower(): v for k, v in request.headers.items()}
     if SERVICE_HEADER in headers:
         try:
-            caller = authenticate(headers, env_name=CALLER_TOKENS_ENV, allowed=ALLOWED_CALLERS)
+            caller = authenticate(headers, env_name=CALLER_TOKENS_ENV, allowed=KNOWN_CALLERS)
             user_id = UUID(headers.get(USER_HEADER, ""))
         except (ServiceAuthError, ValueError):
             raise HTTPException(status_code=401, detail="Unauthenticated") from None
+        if caller.service not in ALLOWED_CALLERS:
+            raise HTTPException(status_code=401, detail="Unauthenticated")
         return Caller(org_id=caller.org_id, user_id=user_id)
     claims = verify_token(credentials)
     return Caller(org_id=org_id_from(claims), clerk_user_id=str(claims["sub"]))
@@ -92,7 +101,9 @@ async def query(
         raise HTTPException(status_code=503, detail="Retrieval is unavailable") from None
 
 
-def build_app(service: RAGService | None = None) -> FastAPI:
+def build_app(
+    service: RAGService | None = None, promises: PromiseExtractor | None = None
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         closers: list[Any] = []
@@ -102,7 +113,7 @@ def build_app(service: RAGService | None = None) -> FastAPI:
             # whole stack's deploy health gate. /healthz stays up; the reason is logged.
             app.state.wired = True
             try:
-                app.state.rag, closers = _wire_from_env()
+                app.state.rag, app.state.promises, closers = _wire_from_env()
             except NotConfigured as exc:
                 logger.error("rag-service not configured: %s; /api/rag/query answers 503", exc)
         yield
@@ -112,17 +123,28 @@ def build_app(service: RAGService | None = None) -> FastAPI:
     app = create_app("rag-service")
     app.router.lifespan_context = lifespan
     app.state.rag = service
+    app.state.promises = promises
     app.add_api_route("/api/rag/query", query, methods=["POST"], response_model=RagResponse)
+    # Promise ledger: the person's agent reads one of their own messages (integration-service).
+    app.add_api_route(
+        "/internal/promises/extract",
+        extract_promises,
+        methods=["POST"],
+        response_model=PromiseExtractOut,
+    )
     return app
 
 
-def _wire_from_env() -> tuple[RAGService, list[Any]]:  # pragma: no cover - production wiring
+def _wire_from_env() -> (
+    tuple[RAGService, PromiseExtractor, list[Any]]
+):  # pragma: no cover - production wiring
     from confluent_kafka import Producer
     from redis.asyncio import from_url
 
     from libs.shared.avro_codec import AvroCodec
     from libs.shared.budget import BillingRefresher, BudgetGate
     from libs.shared.llm_cache import ResponseCache
+    from libs.shared.org_context import OrgContextClient
     from libs.shared.pii import EgressRedactor
     from libs.shared.prompts import PromptLoader
     from libs.shared.qdrant import read_client
@@ -174,7 +196,14 @@ def _wire_from_env() -> tuple[RAGService, list[Any]]:  # pragma: no cover - prod
         budget=GateProbe(gate),
         cache=cast(AnswerCache, redis),
     )
-    return service, [usage.flush]
+    extractor = PromiseExtractor(
+        router,
+        PromptLoader(AGENT_PROMPTS_DIR),
+        # Strict: the never-record topics must be known before a message reaches a model.
+        # Needs IDENTITY_GRPC_ADDR (the same GetOrgContext address agent-runtime uses).
+        OrgContextClient(),
+    )
+    return service, extractor, [usage.flush]
 
 
 app = build_app()

@@ -306,6 +306,7 @@ def test_the_shipped_prompts_are_registered_and_render():
         "proactive_topic_watch": "v2",
         "minutes": "v1",  # minutes for everyone
         "delegated_answer": "v1",
+        "promise_extract": "v1",  # promise ledger: the person's own messages
     }
 
 
