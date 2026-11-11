@@ -104,6 +104,7 @@ PROMPT_AGENTS: dict[str, str] = {
     "meeting_agent": "MeetingAgent",
     "minutes": "MinutesAgent",
     "never_record_check": "NeverRecordGuard",
+    "interrupt_gate": "ListenWatch",
 }
 
 # How each prompt answers, for the parse check. ("number", key): a JSON object with a number
@@ -126,6 +127,7 @@ OUTPUT_FORMATS: dict[str, tuple[str, str]] = {
     "proactive_already_decided_gate": ("number", "score"),
     "proactive_already_decided": ("list", "matches"),
     "proactive_topic_watch": ("list", "topics"),
+    "interrupt_gate": ("object", "interrupt"),
 }
 
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*[0-9]*\.?[0-9]+\s*$", re.IGNORECASE)

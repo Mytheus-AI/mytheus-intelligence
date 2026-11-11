@@ -41,6 +41,11 @@ their personal ones for their notes, suggestions and context fills), recent feed
 for the `{guidance}` prompt block and their memory across meetings for `{person_memory}`.
 Without it, or on a failure, contexts are exactly as before.
 
+Beyond the meeting, layer 3 ("in every meeting at once"). With `watch` (`watch.ListenWatch`),
+every window that passed the off-the-record and never-record checks is also watched for the
+people whose agent listens for them: it may propose an interruption to core-api, which decides
+whether to deliver it. It runs beside the window's agents and adds nothing to the results count.
+
 Roster and agents are in memory. That is safe for the same reason the open windows are: a
 meeting's events all arrive on one partition of this consumer group.
 """
@@ -50,7 +55,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 from uuid import UUID
@@ -95,6 +100,19 @@ class Learner(Protocol):
     async def enrich(
         self, org_id: UUID, contexts: dict[UUID, dict[str, Any] | None]
     ) -> dict[UUID, dict[str, Any] | None]: ...
+
+
+class Watch(Protocol):
+    """The live watch (`watch.ListenWatch`): may interrupt a person whose agent listens for
+    them. Never raises; returns the interruptions it posted."""
+
+    async def observe(
+        self,
+        window: TranscriptWindow,
+        *,
+        roster: Iterable[UUID] = (),
+        post: Postprocess | None = None,
+    ) -> int: ...
 
 
 class Sink(Protocol):
@@ -145,8 +163,10 @@ class AgentRuntime:
         ledger: MeetingLedger | None = None,
         learning: Learner | None = None,
         redis: Any | None = None,  # the off-record flag (libs/shared/off_record.py)
+        watch: Watch | None = None,  # the live watch (watch.py, "in every meeting at once")
     ) -> None:
         self._redis = redis
+        self._watch = watch
         self._sink = sink
         self._ledger = ledger
         self._context = user_context
@@ -306,7 +326,15 @@ class AgentRuntime:
             self._run_user(m, window, u, _as_proxy(everyone[u]), post, proxy=True) for u in proxied
         )
         jobs.append(self._run_multi(m, window, contexts, post))
-        counts = await asyncio.gather(*jobs)
+        if self._watch is not None:
+            # after the off-record and never-record checks above, beside the window's agents;
+            # what it posts are interruptions for core-api, not results, so it is not counted
+            watched, *counts = await asyncio.gather(
+                self._watch.observe(window, roster=set(m.roster), post=post), *jobs
+            )
+            logger.debug("window %s: %s interruption(s) proposed", window.window_id, watched)
+        else:
+            counts = list(await asyncio.gather(*jobs))
         labels = speaker_labels(window)
         m.recent.append("\n".join(f"{labels[t.speaker_id]}: {t.text}" for t in window.turns))
         return sum(counts)

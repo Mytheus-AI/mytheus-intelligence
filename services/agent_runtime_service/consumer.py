@@ -386,6 +386,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     )
     from services.agent_runtime_service.translation import enabled as translation_enabled
     from services.agent_runtime_service.translation import start_translation
+    from services.agent_runtime_service.watch import watch_from_env
 
     logging.basicConfig(level=logging.INFO)
     set_service(GROUP)
@@ -475,6 +476,9 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         # polish: memory inside the meeting, nexus:{org_id}:meeting-ledger:{meeting_id}
         ledger=MeetingLedger(redis),
         redis=redis,  # off the record: no agent runs (libs/shared/off_record.py)
+        # "in every meeting at once": interruptions for people whose agent listens for them
+        # (needs CORE_URL + CORE_CALLER_TOKEN; LISTEN_WATCH=0 turns it off)
+        watch=watch_from_env(loader, router, redis),
     )
     stop = asyncio.Event()
     background: list[asyncio.Task[None]] = []
