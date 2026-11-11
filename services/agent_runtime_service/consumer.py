@@ -369,6 +369,10 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.agents.proactive_agent import (
         deps_from_env as proactive_from_env,
     )
+    from services.agent_runtime_service.bets import TOPIC as BETS_TOPIC
+    from services.agent_runtime_service.bets import BetProposer, BetsLoop, run_bets_loop
+    from services.agent_runtime_service.bets import consumer_config as bets_consumer_config
+    from services.agent_runtime_service.bets import source_from_env as bets_from_env
     from services.agent_runtime_service.briefing import (
         BriefingLoop,
         BriefingWriter,
@@ -387,10 +391,6 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.decision_why import (
         consumer_config as assumptions_consumer_config,
     )
-    from services.agent_runtime_service.bets import TOPIC as BETS_TOPIC
-    from services.agent_runtime_service.bets import BetProposer, BetsLoop, run_bets_loop
-    from services.agent_runtime_service.bets import consumer_config as bets_consumer_config
-    from services.agent_runtime_service.bets import source_from_env as bets_from_env
     from services.agent_runtime_service.delegation.client import delegation_from_env
     from services.agent_runtime_service.emitter import Emitter
     from services.agent_runtime_service.feedback import TOPIC as FEEDBACK_TOPIC
