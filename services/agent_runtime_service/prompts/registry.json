@@ -17,7 +17,8 @@
     "proactive_already_decided": "v2",
     "proactive_topic_watch": "v2",
     "minutes": "v1",
-    "delegated_answer": "v1"
+    "delegated_answer": "v1",
+    "briefing": "v1"
   },
   "pins": {}
 }

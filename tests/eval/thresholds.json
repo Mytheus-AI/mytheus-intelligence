@@ -57,5 +57,15 @@
     "attribution": {"min": 3.5},
     "ground_rules": {"min": 4.8},
     "overall": {"min": 3.8}
+  },
+  "briefing": {
+    "coverage": {"min": 0.85},
+    "link_accuracy": {"min": 0.85},
+    "length_ok": {"min": 0.75},
+    "greets_by_name": {"min": 1.0},
+    "order_ok": {"min": 0.75},
+    "spoken_style": {"min": 0.9},
+    "leak_free": {"min": 1.0},
+    "parse_failure_rate": {"max": 0.0}
   }
 }

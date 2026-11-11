@@ -56,6 +56,11 @@ SIMULATED_REFS = frozenset(
         "personal_listener@v0-worse",
         "meeting_agent@v0-worse",
         "proactive_conflict@v0-worse",
+        # A briefing from your agent (tests/test_briefing_eval.py): hand-written stand-ins for
+        # the golden set, never generated here, until the live record run replaces them
+        # (`source: recorded`): EVAL_LIVE=1 EVAL_RECORD=1 ... tests/test_briefing_eval.py -k live.
+        "briefing@v1",
+        "briefing@v0-worse",
     }
 )
 
