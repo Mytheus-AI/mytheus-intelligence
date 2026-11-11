@@ -354,6 +354,10 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     from services.agent_runtime_service.agents.proactive_agent import (
         deps_from_env as proactive_from_env,
     )
+    from services.agent_runtime_service.bets import TOPIC as BETS_TOPIC
+    from services.agent_runtime_service.bets import BetProposer, BetsLoop, run_bets_loop
+    from services.agent_runtime_service.bets import consumer_config as bets_consumer_config
+    from services.agent_runtime_service.bets import source_from_env as bets_from_env
     from services.agent_runtime_service.delegation.client import delegation_from_env
     from services.agent_runtime_service.emitter import Emitter
     from services.agent_runtime_service.feedback import TOPIC as FEEDBACK_TOPIC
@@ -552,6 +556,25 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         )
     else:
         logger.warning("minutes off: no CORE_URL / CORE_CALLER_TOKEN, or MINUTES_AGENT=0")
+    # Decisions as bets: after a meeting, the expected outcomes people said out loud.
+    bets_source = bets_from_env()
+    if bets_source is not None and os.environ.get("BETS_AGENT", "1") != "0":
+        bets_consumer = Consumer(bets_consumer_config(brokers))
+        bets_consumer.subscribe([BETS_TOPIC])
+        a2a_consumers.append(bets_consumer)
+        bets_emitter = Emitter(
+            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            codec,
+        )
+        bets_loop = BetsLoop(
+            BetProposer(loader, router, source=bets_source, org_context=org_contexts.get_strict),
+            bets_emitter,
+            claims=redis,
+            settle_s=float(os.environ.get("BETS_SETTLE_S", "20")),
+        )
+        background.append(asyncio.create_task(run_bets_loop(bets_consumer, codec, bets_loop, stop)))
+    else:
+        logger.warning("bets off: no CORE_URL / CORE_CALLER_TOKEN, or BETS_AGENT=0")
     if translation_enabled():  # live caption translation (translation.py), same event loop
         translation_task, translation_consumer = start_translation(
             brokers=brokers,

@@ -1,0 +1,12 @@
+{
+  "about": "Targets decision_bet@vN must reach on decision_bet_golden.json: recall (expected expectations proposed on the right decision with the right kind and direction), precision (proposals that match an expected one), date_accuracy (matched proposals with the exact check date), magnitude_accuracy (matched proposals with the right size), no_invention (cases expecting nothing propose nothing; must be 1.0) and leak_free (no never-record text in any proposal; must be 1.0). The offline gate replays tests/eval/decision_bet_recording.json, which is SIMULATED until the coordinator's live run records real answers (EVAL_LIVE=1 EVAL_RECORD=1); the measured_* values are filled from that run.",
+  "measured": false,
+  "prompt": "decision_bet@v1",
+  "golden_meetings": 7,
+  "min_recall": 0.8,
+  "min_precision": 0.8,
+  "min_date_accuracy": 0.75,
+  "min_magnitude_accuracy": 0.8,
+  "min_no_invention": 1.0,
+  "min_leak_free": 1.0
+}

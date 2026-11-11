@@ -1,0 +1,138 @@
+{
+  "about": "Golden meetings for decision_bet@vN (decisions as bets). Each case is an ended meeting: speakers by label, the decisions recorded during it (D1, D2 in order), the meeting date and the never-record topics. `expected` lists the expectations a good answer proposes: the recorded decision (ref), kind, direction, magnitude (null when none was said) and the exact check date. A case with `expected: []` must produce nothing: a decision is never given an expectation nobody stated. `forbidden` texts (never-record) must appear in no proposal. Lines are 20 s apart in the replay.",
+  "cases": [
+    {
+      "id": "annual-billing",
+      "meeting_date": "2026-11-04",
+      "participants": ["Participant 1", "Participant 2", "Participant 3"],
+      "never_record": [],
+      "recorded_decisions": [
+        {"content": "Move every plan to annual billing from January", "status": "confirmed"},
+        {"content": "Hire a support lead for Europe", "status": "proposed"}
+      ],
+      "transcript": [
+        "Participant 1: Let's close out billing. Proposal is annual billing on every plan from January.",
+        "Participant 2: I'm in. My bet is this should cut churn by 3 points by March, monthly customers leave on a whim.",
+        "Participant 3: Only if monthly customers actually take the annual discount.",
+        "Participant 1: Agreed, annual billing it is.",
+        "Participant 2: Separately, we need a support lead for Europe. Let's open the role.",
+        "Participant 3: Fine, open the role this week."
+      ],
+      "expected": [
+        {"ref": "D1", "kind": "metric", "direction": "decrease", "magnitude": 3, "check_date": "2027-03-31", "keywords": ["churn"]}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "no-expectation",
+      "meeting_date": "2026-11-04",
+      "participants": ["Participant 1", "Participant 2"],
+      "never_record": [],
+      "recorded_decisions": [
+        {"content": "Use Postgres for the events store", "status": "confirmed"},
+        {"content": "Move the standup to 9:30", "status": "confirmed"}
+      ],
+      "transcript": [
+        "Participant 1: For the events store, Postgres or the managed queue?",
+        "Participant 2: Postgres. We know it and it is already running.",
+        "Participant 1: Done, Postgres. And standup moves to 9:30 so the Lisbon folks can join.",
+        "Participant 2: Works for me."
+      ],
+      "expected": [],
+      "forbidden": []
+    },
+    {
+      "id": "event-launch",
+      "meeting_date": "2026-11-04",
+      "participants": ["Participant 1", "Participant 2"],
+      "never_record": [],
+      "recorded_decisions": [
+        {"content": "Move the platform to the new cluster", "status": "confirmed"}
+      ],
+      "transcript": [
+        "Participant 1: We decided to move the platform to the new cluster.",
+        "Participant 2: With two people on it the migration will be done before the Berlin conference on 15 January.",
+        "Participant 1: Good, that is the plan then."
+      ],
+      "expected": [
+        {"ref": "D1", "kind": "event", "direction": "happen", "magnitude": null, "check_date": "2027-01-15", "keywords": ["migration|cluster"]}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "reach-trials",
+      "meeting_date": "2026-11-04",
+      "participants": ["Participant 1", "Participant 2", "Participant 3"],
+      "never_record": [],
+      "recorded_decisions": [
+        {"content": "Launch the free trial without a credit card", "status": "confirmed"},
+        {"content": "Pause paid search for a month", "status": "confirmed"}
+      ],
+      "transcript": [
+        "Participant 1: Free trial without a card. Are we doing it?",
+        "Participant 3: Yes. We expect at least 40 new trials a week by the end of next quarter.",
+        "Participant 2: And we pause paid search for a month while we watch it.",
+        "Participant 1: Both agreed."
+      ],
+      "expected": [
+        {"ref": "D1", "kind": "metric", "direction": "reach", "magnitude": 40, "check_date": "2027-03-31", "keywords": ["trial"]}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "never-record",
+      "meeting_date": "2026-11-04",
+      "participants": ["Participant 1", "Participant 2"],
+      "never_record": ["layoffs"],
+      "recorded_decisions": [
+        {"content": "Add a solutions engineer to every enterprise deal", "status": "confirmed"}
+      ],
+      "transcript": [
+        "Participant 1: The layoffs in March should save us 2 million, keep that between us.",
+        "Participant 2: Understood, nothing more on that here.",
+        "Participant 1: Fine.",
+        "Participant 2: Moving on. Every enterprise deal gets a solutions engineer from now on.",
+        "Participant 1: That should make the sales cycle 10 days shorter by the end of February.",
+        "Participant 2: Agreed."
+      ],
+      "expected": [
+        {"ref": "D1", "kind": "metric", "direction": "decrease", "magnitude": 10, "check_date": "2027-02-28", "keywords": ["sales cycle|cycle"]}
+      ],
+      "forbidden": ["layoffs", "2 million"]
+    },
+    {
+      "id": "hedged-not-stated",
+      "meeting_date": "2026-11-04",
+      "participants": ["Participant 1", "Participant 2"],
+      "never_record": [],
+      "recorded_decisions": [
+        {"content": "Redesign the onboarding checklist", "status": "confirmed"}
+      ],
+      "transcript": [
+        "Participant 1: Let's redesign the onboarding checklist, it is a mess.",
+        "Participant 2: Sure. Who knows, maybe it helps activation, maybe not, hard to say.",
+        "Participant 1: Either way it needs doing. Agreed."
+      ],
+      "expected": [],
+      "forbidden": []
+    },
+    {
+      "id": "relative-weeks",
+      "meeting_date": "2026-11-04",
+      "participants": ["Participant 1", "Participant 2"],
+      "never_record": [],
+      "recorded_decisions": [
+        {"content": "Ship the in-app help centre", "status": "confirmed"}
+      ],
+      "transcript": [
+        "Participant 2: The help centre is ready to ship. Let's do it.",
+        "Participant 1: Agreed. In six weeks we should see support tickets drop by 20%, as long as people actually find the help button.",
+        "Participant 2: Then ship it on Monday."
+      ],
+      "expected": [
+        {"ref": "D1", "kind": "metric", "direction": "decrease", "magnitude": 20, "check_date": "2026-12-16", "keywords": ["ticket"]}
+      ],
+      "forbidden": []
+    }
+  ]
+}
