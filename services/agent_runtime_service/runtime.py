@@ -67,6 +67,7 @@ from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.off_record import is_off_record
 from libs.shared.org_context import CompanyContext
 from libs.shared.state import AgentResult, AgentState, StreamFn, TranscriptWindow
+from services.agent_runtime_service.agents.company import MEETING_TEAMS_KEY, meeting_team_ids
 from services.agent_runtime_service.memory import (
     CONTEXT_KEY as MEMORY_KEY,
 )
@@ -249,6 +250,9 @@ class AgentRuntime:
         extra: dict[str, Any] = {CONTEXT_KEY: overrides, MEMORY_KEY: memory}
         if org is not None:
             extra["org"] = org
+            extra[MEETING_TEAMS_KEY] = meeting_team_ids(
+                c for u, c in zip(users, found, strict=True) if u in m.roster or u == owner
+            )
         everyone = {
             u: (None if c is None else {**c, **extra}) for u, c in zip(users, found, strict=True)
         }
@@ -317,6 +321,9 @@ class AgentRuntime:
         extra: dict[str, Any] = {CONTEXT_KEY: overrides, MEMORY_KEY: memory}
         if org is not None:
             extra["org"] = org
+            # People structure: which teams have someone here (live roster only: a proxied
+            # absentee is exactly who a missing-team note is about)
+            extra[MEETING_TEAMS_KEY] = meeting_team_ids(everyone[u] for u in users)
         everyone = {u: (None if c is None else {**c, **extra}) for u, c in everyone.items()}
         everyone = await self._learn(window, everyone)
         post = Postprocess(Namer.build(m.labels, everyone), never)
