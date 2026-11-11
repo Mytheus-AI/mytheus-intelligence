@@ -1,10 +1,12 @@
 {
-  "about": "Targets for decision_agent@v3 / action_agent@v3 on meeting_memory_golden.json: the share of cases whose emitted cards (after memory.reconcile) match the expected outcome. Not yet measured: the coordinator runs the paid eval (EVAL_LIVE=1) and sets measured, min_accuracy from the first run.",
-  "measured": false,
+  "about": "Targets for the registry-default decision_agent / action_agent (v5: in-meeting memory plus feedback guidance) on meeting_memory_golden.json: the share of cases whose emitted cards (after memory.reconcile) match the expected outcome. First live run 2026-11-11 (24 calls): accuracy 1.0 on 12 cases; min_accuracy stays 0.75 to absorb model variance.",
+  "measured": true,
   "prompts": [
-    "decision_agent@v3",
-    "action_agent@v3"
+    "decision_agent@v5",
+    "action_agent@v5"
   ],
   "golden_cases": 12,
-  "min_accuracy": 0.75
+  "min_accuracy": 0.75,
+  "measured_on": "2026-11-11",
+  "measured_accuracy": 1.0
 }
