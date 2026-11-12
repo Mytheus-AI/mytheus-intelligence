@@ -85,12 +85,35 @@ def age_database_url() -> str:
     return url.replace("postgresql+asyncpg://", "postgresql://", 1)
 
 
+AGE_SEARCH_PATH = 'ag_catalog, "$user", public'
+
+
+async def restore_search_path(conn: AgeConnection) -> None:
+    """Put `ag_catalog` back on the search path on every pool checkout.
+
+    asyncpg resets a connection with `RESET ALL` when it goes back to the pool, which drops the
+    session `search_path` that `prepare_session` set. Without `ag_catalog` on the path, the
+    `agtype @> agtype` operator that every `{org_id: $org_id}` property match compiles to cannot
+    be found, so every read after a connection's first checkout failed with "operator does not
+    exist". Use as the pool's `setup=` hook, alongside `init=prepare_session`."""
+    await conn.execute(f"SET search_path = {AGE_SEARCH_PATH}")
+
+
+async def create_age_pool(**kwargs: Any) -> Any:
+    """An asyncpg pool for the AGE graph, prepared on connect and on every checkout."""
+    import asyncpg
+
+    return await asyncpg.create_pool(
+        age_database_url(), init=prepare_session, setup=restore_search_path, **kwargs
+    )
+
+
 async def prepare_session(conn: AgeConnection) -> None:
     """Per-connection setup AGE requires: load the extension library, put `ag_catalog` on the
     search path, and teach the driver to pass `agtype` as text (asyncpg has no built-in codec
     for it). Use as an asyncpg pool `init=` hook so every pooled connection is prepared."""
     await conn.execute("LOAD 'age'")
-    await conn.execute('SET search_path = ag_catalog, "$user", public')
+    await conn.execute(f"SET search_path = {AGE_SEARCH_PATH}")
     await conn.set_type_codec(
         "agtype", schema="ag_catalog", encoder=str, decoder=str, format="text"
     )

@@ -15,7 +15,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from libs.shared.age import AgeConnection, AgeQueryRejected, age_database_url, prepare_session
+from libs.shared.age import AgeConnection, AgeQueryRejected, create_age_pool
 from libs.shared.service_auth import InternalCaller, ServiceAuthError, authenticate
 from services.knowledge_graph_service.templates import (
     TemplateNotFound,
@@ -40,7 +40,7 @@ def internal_caller(request: Request) -> InternalCaller:
 async def graph_connection(request: Request) -> AsyncIterator[AgeConnection]:
     pool: asyncpg.Pool | None = getattr(request.app.state, "age_pool", None)
     if pool is None:
-        pool = await asyncpg.create_pool(age_database_url(), init=prepare_session, max_size=10)
+        pool = await create_age_pool(max_size=10)
         request.app.state.age_pool = pool
     async with pool.acquire() as conn:
         yield conn

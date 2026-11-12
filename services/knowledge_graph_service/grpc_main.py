@@ -12,10 +12,9 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-import asyncpg
 import grpc
 
-from libs.shared.age import AgeConnection, age_database_url, prepare_session
+from libs.shared.age import AgeConnection, create_age_pool
 from services.knowledge_graph_service.grpc_server import (
     KnowledgeGraphServicer,
     add_knowledge_graph_servicer,
@@ -23,7 +22,7 @@ from services.knowledge_graph_service.grpc_server import (
 
 
 async def serve() -> None:
-    pool = await asyncpg.create_pool(age_database_url(), init=prepare_session, max_size=10)
+    pool = await create_age_pool(max_size=10)
 
     @asynccontextmanager
     async def connect() -> AsyncIterator[AgeConnection]:
