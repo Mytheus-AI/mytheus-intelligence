@@ -175,7 +175,7 @@ def parse_source(body: object) -> Source | None:
         target_words=target if isinstance(target, int) and 40 <= target <= 400 else 220,
         language=str(body.get("language") or "en"),
         first_name=first,
-        agent_name=_str(agent.get("name"), 40) or f"{first}'s agent",
+        agent_name=_str(agent.get("name"), 40) or f"{first}'s Myte",
         personality=str(agent.get("personality") or "balanced"),
         instructions=_str(agent.get("instructions"), MAX_INSTRUCTIONS) or None,
         meeting_id=_uuid(meeting.get("id")) if meeting else None,

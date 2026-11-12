@@ -250,7 +250,7 @@ class DelegatedAnswerer:
             "asked_by": str(a.asked_by) if a.asked_by else None,
         }
         responder = responder_target(a.delegate.user_id)
-        content = f"{a.delegate.first_name}'s agent: {a.answer}"
+        content = f"{a.delegate.first_name}'s Myte: {a.answer}"
         rationale = (
             f'Pre-approved by {a.delegate.first_name} before the meeting: "{statement.text}"'
             if statement

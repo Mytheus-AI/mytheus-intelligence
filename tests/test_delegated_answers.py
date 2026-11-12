@@ -151,7 +151,7 @@ async def test_a_covered_question_is_answered_from_the_statement_to_every_live_p
     fill = first.payload["fill"]
     assert fill["surfaced"] is True and fill["hop"] == "peer"
     assert fill["responder"] == f"user:{SARAH}"
-    assert fill["content"] == "Sarah's agent: Sarah pre-approved either vendor under $40k."
+    assert fill["content"] == "Sarah's Myte: Sarah pre-approved either vendor under $40k."
     entry = first.payload["collaborations"][0]
     assert entry["id"] == fill["id"] and entry["requester"] == str(MAYA)
     assert entry["result"] == "answered" and entry["hop"] == "peer"
