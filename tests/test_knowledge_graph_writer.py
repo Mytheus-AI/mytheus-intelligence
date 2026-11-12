@@ -21,6 +21,7 @@ from libs.shared.age import (
     build_cypher_sql,
     encode_params,
     prepare_session,
+    restore_search_path,
     run_cypher,
 )
 from libs.shared.consumer import ConsumedEvent
@@ -120,6 +121,35 @@ async def test_prepare_session_loads_age_and_registers_agtype() -> None:
     assert statements[0] == "LOAD 'age'"
     assert "ag_catalog" in statements[1]
     assert cur.codecs == ["agtype"]
+
+
+async def test_every_pool_checkout_restores_the_ag_catalog_search_path() -> None:
+    # asyncpg runs RESET ALL when a connection goes back to the pool, which dropped the
+    # search_path set at connect; the next read then failed with "operator does not exist:
+    # agtype @> agtype". The setup hook puts it back on every checkout.
+    cur = FakeCursor()
+    await restore_search_path(cur)
+    statements = [q for _, q, _ in cur.calls]
+    assert statements == ['SET search_path = ag_catalog, "$user", public']
+
+
+async def test_the_age_pool_prepares_on_connect_and_on_every_checkout(monkeypatch) -> None:
+    import asyncpg
+
+    from libs.shared import age
+
+    seen: dict[str, object] = {}
+
+    async def fake_create_pool(dsn: str, **kwargs: object) -> str:
+        seen.update(kwargs, dsn=dsn)
+        return "pool"
+
+    monkeypatch.setattr(asyncpg, "create_pool", fake_create_pool)
+    monkeypatch.setenv("AGE_DATABASE_URL", "postgresql://u:p@h:5434/nexus_graph")
+    assert await age.create_age_pool(max_size=3) == "pool"
+    assert seen["init"] is age.prepare_session
+    assert seen["setup"] is age.restore_search_path
+    assert seen["max_size"] == 3
 
 
 def test_agtype_to_int() -> None:
