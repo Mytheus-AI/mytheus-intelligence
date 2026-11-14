@@ -616,3 +616,55 @@ def remap_citations(text: str, mapping: dict[int, int]) -> str:
         return "".join(kept)
 
     return _CITE.sub(sub, text)
+
+
+# --- attachments (ADR-0049 F7) ---------------------------------------------------------------
+
+PASSAGE_CHARS = 1500
+_BREAKS = ("\n\n", "\n", ". ", "? ", "! ", "; ", ", ", " ")
+
+
+def passages(text: str, size: int = PASSAGE_CHARS) -> list[str]:
+    """Split text into passages of about `size` characters, at the latest paragraph, line,
+    sentence or word break in the second half of each window (a hard cut only when a window has
+    none). Whitespace-only passages are dropped."""
+    text = text.replace("\r\n", "\n").strip()
+    out: list[str] = []
+    while text:
+        if len(text) <= size:
+            out.append(text)
+            break
+        window = text[:size]
+        cut = -1
+        for brk in _BREAKS:
+            at = window.rfind(brk)
+            if at >= size // 2:
+                cut = at + len(brk)
+                break
+        if cut <= 0:
+            cut = size
+        piece, text = text[:cut].strip(), text[cut:].strip()
+        if piece:
+            out.append(piece)
+    return out
+
+
+def attachment_drafts(attachments: list[Any]) -> list[Draft]:
+    """Each attachment -> numbered `document` drafts, one per passage, the file name as title
+    ("name (part i of k)" when it has several). `ref_id` keeps them distinct per file and part."""
+    drafts: list[Draft] = []
+    for i, att in enumerate(attachments, start=1):
+        name = " ".join(str(att.name).split())[:120] or f"Attachment {i}"
+        parts = passages(str(att.text))
+        for j, part in enumerate(parts, start=1):
+            title = name if len(parts) == 1 else f"{name} (part {j} of {len(parts)})"
+            drafts.append(
+                Draft(
+                    kind="document",
+                    title=title,
+                    text=part,
+                    ref_id=f"attachment:{i}:{j}",
+                    raw={"attachment": name, "part": j, "parts": len(parts)},
+                )
+            )
+    return drafts

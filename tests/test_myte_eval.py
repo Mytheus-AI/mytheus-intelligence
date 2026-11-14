@@ -3,7 +3,12 @@ areas ... gates prompt changes in CI").
 
 `tests/eval/myte_golden.json`: 80 questions, eight in each of the plan's ten areas (meetings,
 schedule, decisions, my work, people, inbox, company brain, your Myte, help, actions), including
-abstention, refusal-to-act-without-confirmation and cross-user privacy cases. Each case carries
+abstention, refusal-to-act-without-confirmation and cross-user privacy cases; plus the ADR-0049
+(v2) cases: asking a teammate's Myte and drafting peer answers (`peer_myte`), memories
+(`memory`, including a one-off detail that must not become one), the new actions
+(`actions_v2`), attachments (`attachments`) and person scope with its label (`person_scope`,
+including production's "what are his work"). A case may carry the v2 request fields
+(`memories`, `attachments`, `mode`, `peer`) and `expect.answer_must_not_contain`. Each case carries
 the tools a good answer uses, what must happen (abstain, a proposal of a kind, a card, a degraded
 answer, arguments a tool must receive, text the model must never be given) and plain-language
 criteria. `world` is the fake bff's default data; a case overrides it in `fixture`.
@@ -21,6 +26,7 @@ checkable expectations and fails below `LIVE_PASS_RATE`. The criteria are for re
 printed answers.
 
     EVAL_LIVE=1 uv run pytest -m eval tests/test_myte_eval.py -k live -s
+    EVAL_LIVE=1 EVAL_CASES=memory-03,peer-myte-04 uv run pytest ... -k live -s   # a subset
 """
 
 from __future__ import annotations
@@ -56,29 +62,56 @@ AREAS = {
     "help",
     "actions",
 }
+V2_AREAS = {"peer_myte", "memory", "actions_v2", "attachments", "person_scope"}
 LIVE_PASS_RATE = 0.85
 ORG = uuid.uuid4()
 
 
 def test_the_set_has_80_questions_eight_per_area_with_the_hard_cases():
-    assert len(CASES) == 80 and len({c["id"] for c in CASES}) == 80
-    assert Counter(c["area"] for c in CASES) == {a: 8 for a in AREAS}
-    expects = [c["expect"] for c in CASES]
+    assert len({c["id"] for c in CASES}) == len(CASES)
+    v1 = [c for c in CASES if c["area"] in AREAS]
+    assert len(v1) == 80
+    assert Counter(c["area"] for c in v1) == {a: 8 for a in AREAS}
+    assert {c["area"] for c in CASES} == AREAS | V2_AREAS
+    expects = [c["expect"] for c in v1]
     assert sum(e["abstain"] for e in expects) >= 10
     assert sum(bool(e["proposal"]) for e in expects) >= 6
     privacy = [c for c in CASES if "privacy" in c["expect"]["criteria"].lower()]
     assert len(privacy) >= 5
     refusals = [c for c in CASES if "refus" in c["expect"]["criteria"].lower()]
     assert len(refusals) >= 2
+
+
+def test_the_v2_cases_cover_every_new_kind_and_mode():
+    v2 = [c for c in CASES if c["area"] in V2_AREAS]
+    kinds = {c["expect"]["proposal"] for c in v2}
+    assert {"ask_myte", "memory", "schedule_meeting"} <= kinds
+    assert sum(c.get("mode") == "peer_answer" for c in v2) >= 3
+    assert sum(bool(c.get("attachments")) for c in v2) >= 2
+    labelled = [c for c in v2 if (c.get("scope") or {}).get("label")]
+    assert any(c["question"] == "what are his work" for c in labelled)
+    # a one-off detail that must not become a memory
+    assert any(c["area"] == "memory" and not c["expect"]["proposal"] for c in v2)
     for c in CASES:
-        assert c["question"].strip() and c["expect"]["criteria"].strip()
+        assert c["question"].strip() or c.get("mode") == "peer_answer", c["id"]
+        assert c["expect"]["criteria"].strip()
         scripted = {t["tool"] for turn in c["script"] for t in turn.get("tools", [])}
         assert scripted == set(c["expect"]["tools"]), c["id"]
 
 
 def _body(case: dict[str, Any]) -> dict[str, Any]:
     body: dict[str, Any] = {"question": case["question"], "want_title": True}
-    for key in ("scope", "page", "persona", "timezone", "history"):
+    for key in (
+        "scope",
+        "page",
+        "persona",
+        "timezone",
+        "history",
+        "memories",
+        "attachments",
+        "mode",
+        "peer",
+    ):
         if key in case:
             body[key] = case[key]
     return body
@@ -149,6 +182,13 @@ def _score(
             fails.append(f"{tool} args {got} lack {args}")
         if not got and not live:
             fails.append(f"{tool} was not called")
+    for phrase in exp.get("answer_must_not_contain", []):
+        if phrase.lower() in text.lower():
+            fails.append(f"the answer says {phrase!r}")
+    if case.get("mode") == "peer_answer":
+        extra = {n for n, _ in events} & {"proposal", "card", "followups", "title"}
+        if extra:
+            fails.append(f"peer answers must not emit {sorted(extra)}")
     sent = json.dumps([c.get("messages") for c in model_calls], default=str)
     for secret in exp["model_must_not_see"]:
         if secret in sent:
@@ -184,7 +224,11 @@ def test_live_answers_meet_the_expectations():  # pragma: no cover - spends real
 
     by_area: dict[str, list[bool]] = defaultdict(list)
     failures: dict[str, list[str]] = {}
-    for case in CASES:
+    # EVAL_CASES=id1,id2 re-runs only those cases (to check a fix without paying for the set);
+    # the gate is only meaningful on the full set.
+    only = {c for c in os.environ.get("EVAL_CASES", "").split(",") if c}
+    cases = [c for c in CASES if not only or c["id"] in only]
+    for case in cases:
         calls.clear()
         events, bff, auth = _run(case, recording)
         fails = _score(case, events, bff, auth, list(calls), live=True)
@@ -195,7 +239,8 @@ def test_live_answers_meet_the_expectations():  # pragma: no cover - spends real
         if fails:
             failures[case["id"]] = fails
             print(f"  FAIL: {fails}")
-    total = sum(sum(v) for v in by_area.values()) / len(CASES)
+    total = sum(sum(v) for v in by_area.values()) / len(cases)
+    print(f"failing: {sorted(failures)}")
     for area, results in sorted(by_area.items()):
         print(f"{area:15s} {sum(results)}/{len(results)}")
     print(f"pass rate {total:.0%}")
