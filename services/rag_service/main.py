@@ -30,7 +30,9 @@ REDPANDA_BROKERS, SCHEMA_REGISTRY_URL, QDRANT_URL, QDRANT_READ_ONLY_API_KEY, ANT
 
 Ask Myte (ADR-0047): `POST /api/rag/myte` streams an answer from the person's own Myte, with
 bff's MCP tools called as the person (`myte/`). Clerk sessions only. Needs BFF_URL (default
-`http://bff:8000`) besides the router's own settings.
+`http://bff:8000`) besides the router's own settings. ADR-0049: IDENTITY_URL (default
+`http://identity-tenant-service:8000`, the asker's `users.id` via `GET /users/me`) and
+MYTE_USER_DAILY_UNITS (default 300000, the per-person daily Ask Myte allowance).
 
 Run: uvicorn services.rag_service.main:app --port 8201
 """
@@ -297,7 +299,11 @@ def _wire_from_env() -> (
 
     # One pooled client for every answer's bff calls; each call names its own timeout.
     bff_http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0))
-    myte = MyteLoop(router, prompts, bff_http)
+    from services.rag_service.myte.allowance import Allowance
+
+    # ADR-0049 R3: the asker's users.id (identity-tenant-service, IDENTITY_URL) and their daily
+    # allowance (MYTE_USER_DAILY_UNITS) in the same Redis as the budget mirror.
+    myte = MyteLoop(router, prompts, bff_http, allowance=Allowance(redis, bff_http))
     return service, check, extractor, myte, [usage.flush, bff_http.aclose]
 
 

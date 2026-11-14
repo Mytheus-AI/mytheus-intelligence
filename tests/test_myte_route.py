@@ -415,7 +415,30 @@ def test_preamble_text_and_the_answer_are_separated():
         ],
         fixtures={"list_my_inbox": {"items": []}},
     )
-    assert "".join(d["text"] for d in of(events, "delta")) == "Let me look.\n\nNothing waiting."
+    # A short update before a lookup is never streamed (the steps already show the work).
+    assert "".join(d["text"] for d in of(events, "delta")) == "Nothing waiting."
+
+
+def test_a_long_text_before_a_lookup_still_streams_and_is_separated():
+    long = "Here is what I already know about this, before I check the inbox. " * 5
+    events, _bff, _model, _ = run(
+        [
+            {"tools": [{"tool": "list_my_inbox"}], "text": long.strip()},
+            {"text": "Nothing waiting."},
+        ],
+        fixtures={"list_my_inbox": {"items": []}},
+    )
+    assert "".join(d["text"] for d in of(events, "delta")) == long.strip() + "\n\nNothing waiting."
+
+
+def test_answer_text_streams_live_once_past_the_holdback():
+    from services.rag_service.myte.loop import HOLD_CHARS
+
+    answer = "word " * 200
+    events, _bff, _model, _ = run([{"text": answer.strip()}])
+    deltas = of(events, "delta")
+    assert len(deltas) > 10  # not one blob at the end of the round
+    assert len(deltas[0]["text"]) >= HOLD_CHARS
 
 
 def test_followups_failing_does_not_fail_the_answer_and_the_title_falls_back():
@@ -611,3 +634,16 @@ def test_a_person_scope_names_who_he_means_so_myte_never_asks():
     context = call["messages"][0]["content"][1]["text"]
     assert '"Samar Rihan"' in context and "never ask who is meant" in context
     assert "find_people" in context
+
+
+def test_short_text_beside_only_a_card_or_proposal_is_the_answer_and_kept():
+    events, _bff, _model, _ = run(
+        [
+            {
+                "tools": [{"tool": "propose_action", "args": {"kind": "task", "title": "Upload"}}],
+                "text": "Suggested a task to upload the logo.",
+            },
+            {"text": ""},
+        ],
+    )
+    assert "".join(d["text"] for d in of(events, "delta")) == "Suggested a task to upload the logo."

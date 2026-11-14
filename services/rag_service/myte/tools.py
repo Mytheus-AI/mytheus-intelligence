@@ -23,6 +23,7 @@ PROPOSE = "propose_action"
 CARD = "show_card"
 HELP = "search_help"
 LOCAL_TOOLS = frozenset({PROPOSE, CARD, HELP})
+PEER_EXCLUDED = frozenset({PROPOSE, CARD})
 
 # Plain words for each lookup, shown live as `step` labels while it runs.
 STEP_LABELS: dict[str, str] = {
@@ -51,48 +52,133 @@ def step_label(name: str, args: dict[str, Any]) -> str:
     return STEP_LABELS.get(name, "Looking things up")
 
 
+PROPOSAL_KINDS = (
+    "task",
+    "promise",
+    "attendance",
+    "agenda_item",
+    "schedule_meeting",
+    "invite_people",
+    "slack_post",
+    "export_decisions",
+    "share_decision",
+    "ask_myte",
+    "memory",
+)
+
 PSEUDO_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
             "name": PROPOSE,
             "description": (
-                "Suggest a change for the person to confirm: a task, a promise, an attendance "
-                "choice for a meeting (attend, send their Myte, or skip) or an agenda item. "
-                "Nothing is saved: the person sees a card with Confirm, Edit and Not now. Use "
-                "this for every change, and only when the person asked for it or clearly "
-                "would want it. Never claim the change is done."
+                "Suggest a change for the person to confirm. Nothing is saved or sent: the "
+                "person sees a card with Confirm, Edit and Not now. Use it for every change, "
+                "only when the person asked for it or clearly wants it, and never claim it is "
+                "done. Kinds and their fields: task {title, due_date?}; promise {title, "
+                "due_date?}; attendance {meeting_id, choice, title}; agenda_item {meeting_id, "
+                "title}; schedule_meeting {title, start, end, attendee_ids}: a new meeting, "
+                "start and end ISO 8601 with the UTC offset; invite_people {meeting_id, "
+                "user_ids}: add people to an existing meeting; slack_post {text, channel?}: "
+                "post a message to Slack; export_decisions {destination, meeting_id? and/or "
+                "decision_ids?}: send decisions to Notion, Confluence or Slack; share_decision "
+                "{decision_id}: make a share link for one decision; ask_myte {person_id, "
+                "person_name, question}: ask a teammate's Myte a question for them to answer; "
+                "memory {text}: remember a lasting preference or fact the person stated about "
+                "themselves. Every id must come from your sources, the scope or the page: look "
+                "people up with find_people and meetings or decisions with search_meetings "
+                "first."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": ["task", "promise", "attendance", "agenda_item"],
-                    },
+                    "kind": {"type": "string", "enum": list(PROPOSAL_KINDS)},
                     "title": {
                         "type": "string",
-                        "minLength": 1,
                         "maxLength": 200,
                         "description": (
-                            "The task, promise or agenda item in a few words; for "
-                            "attendance, the meeting title."
+                            "task, promise, agenda item or new meeting in a few words; for "
+                            "attendance, the meeting title. Optional for the other kinds."
                         ),
                     },
                     "due_date": {"type": "string", "format": "date", "description": "YYYY-MM-DD"},
                     "meeting_id": {
                         "type": "string",
                         "format": "uuid",
-                        "description": "Required for attendance and agenda_item.",
+                        "description": (
+                            "attendance, agenda_item and invite_people: required; "
+                            "export_decisions: optional."
+                        ),
                     },
                     "choice": {
                         "type": "string",
                         "enum": ["attend", "agent", "skip"],
                         "description": "Attendance only: attend, agent (send my Myte) or skip.",
                     },
+                    "start": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "schedule_meeting: e.g. 2026-11-16T10:00:00+05:30",
+                    },
+                    "end": {"type": "string", "format": "date-time"},
+                    "attendee_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "uuid"},
+                        "maxItems": 20,
+                        "description": "schedule_meeting: person ids from find_people.",
+                    },
+                    "user_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "uuid"},
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "description": "invite_people: person ids from find_people.",
+                    },
+                    "text": {
+                        "type": "string",
+                        "maxLength": 4000,
+                        "description": (
+                            "slack_post: the message; memory: the thing to remember, in one "
+                            "short sentence about them (at most 300 characters)."
+                        ),
+                    },
+                    "channel": {
+                        "type": "string",
+                        "maxLength": 80,
+                        "description": "slack_post: a channel name such as #product, if named.",
+                    },
+                    "destination": {
+                        "type": "string",
+                        "enum": ["notion", "confluence", "slack"],
+                        "description": "export_decisions only.",
+                    },
+                    "decision_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "uuid"},
+                        "maxItems": 50,
+                    },
+                    "decision_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "share_decision only.",
+                    },
+                    "person_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "ask_myte: the teammate's person id.",
+                    },
+                    "person_name": {"type": "string", "maxLength": 160},
+                    "question": {
+                        "type": "string",
+                        "maxLength": 1000,
+                        "description": (
+                            "ask_myte: the question, written to the teammate, standing on its "
+                            "own."
+                        ),
+                    },
                     "note": {"type": "string", "maxLength": 500},
                 },
-                "required": ["kind", "title"],
+                "required": ["kind"],
                 "additionalProperties": False,
             },
         },
@@ -147,9 +233,12 @@ PSEUDO_TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def model_tools(mcp_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def model_tools(mcp_tools: list[dict[str, Any]], *, peer: bool = False) -> list[dict[str, Any]]:
     """bff's MCP tool list -> OpenAI function schemas for the model, writes removed, then the
-    local tools. Sorted by name so the tool block (a cache breakpoint) is byte-stable."""
+    local tools. Sorted by name so the tool block (a cache breakpoint) is byte-stable.
+
+    `peer` (ADR-0049 F1, drafting a reply to a teammate): no `propose_action` and no
+    `show_card`; the draft is text the recipient reviews and sends, nothing else."""
     out = []
     for tool in sorted(mcp_tools, key=lambda t: str(t.get("name"))):
         name = str(tool.get("name"))
@@ -169,6 +258,8 @@ def model_tools(mcp_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 },
             }
         )
+    if peer:
+        return out + [t for t in PSEUDO_TOOLS if t["function"]["name"] not in PEER_EXCLUDED]
     return out + PSEUDO_TOOLS
 
 

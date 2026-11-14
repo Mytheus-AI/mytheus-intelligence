@@ -1,8 +1,8 @@
 {
- "version": 1,
- "prompt": "myte_answer@v1",
+ "version": 2,
+ "prompt": "myte_answer@v2",
  "today": "2026-11-14",
- "note": "Ask Myte eval set (ADR-0047). world = the fake bff's default tool results; each case may override them in fixture. script = the scripted model's rounds for the offline plumbing check ([[needle]] cites the source line containing needle). expect = what a passing answer does; criteria are for human/live review.",
+ "note": "Ask Myte eval set (ADR-0047). world = the fake bff's default tool results; each case may override them in fixture. script = the scripted model's rounds for the offline plumbing check ([[needle]] cites the source line containing needle). expect = what a passing answer does; criteria are for human/live review. v2 (ADR-0049) adds peer_myte, memory, actions_v2, attachments and person_scope cases; a case may carry memories, attachments, mode and peer like the stream request, and expect.answer_must_not_contain.",
  "world": {
   "search_meetings": {
    "items": [
@@ -2771,30 +2771,31 @@
    "question": "Be more concise from now on",
    "expect": {
     "tools": [
-     "search_help"
+     "propose_action"
     ],
     "abstain": false,
-    "proposal": null,
+    "proposal": "memory",
     "card": null,
     "degraded": false,
     "args": {},
     "model_must_not_see": [],
-    "criteria": "Explains where to change it; no proposal."
+    "criteria": "v2 (ADR-0049 F4): a lasting preference about how Myte answers, so a memory proposal ('Prefers concise answers'); may also mention the concise personality in Settings; never claims it is saved."
    },
    "fixture": {},
    "script": [
     {
      "tools": [
       {
-       "tool": "search_help",
+       "tool": "propose_action",
        "args": {
-        "query": "personality concise"
+        "kind": "memory",
+        "text": "Prefers concise answers"
        }
       }
      ]
     },
     {
-     "text": "You can set my personality to concise in Settings, Agent [[Set up your Myte]]."
+     "text": "I suggested remembering that you prefer concise answers."
     }
    ]
   },
@@ -3472,6 +3473,685 @@
      "text": "Here's a draft: \"Backend update: we dropped Drive access [[Drop Google Drive]]; Calendar reconnect is on me [[Reconnect Google Calendar]].\" Copy it when you're ready; I won't send it."
     }
    ]
+  },
+  {
+   "id": "peer-myte-01",
+   "area": "peer_myte",
+   "question": "Ask Maya's Myte whether the pricing page copy is final",
+   "expect": {
+    "tools": [
+     "find_people",
+     "propose_action"
+    ],
+    "abstain": false,
+    "proposal": "ask_myte",
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Finds Maya, proposes ask_myte with her id and a self-contained question; does not answer the question itself or claim it was sent."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "find_people",
+       "args": {
+        "query": "Maya"
+       }
+      }
+     ]
+    },
+    {
+     "tools": [
+      {
+       "tool": "propose_action",
+       "args": {
+        "kind": "ask_myte",
+        "person_id": "d0000000-0000-4000-8000-000000000001",
+        "person_name": "Maya Chen",
+        "question": "Is the pricing page copy final?"
+       }
+      }
+     ]
+    },
+    {
+     "text": "I suggested asking Maya's Myte whether the pricing page copy is final."
+    }
+   ]
+  },
+  {
+   "id": "peer-myte-02",
+   "area": "peer_myte",
+   "question": "Can you ask his Myte when the security questionnaire will be done?",
+   "expect": {
+    "tools": [
+     "propose_action"
+    ],
+    "abstain": false,
+    "proposal": "ask_myte",
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Person scope: 'his' is Arjun; proposes ask_myte with the scope's person_id without asking who is meant.",
+    "answer_must_not_contain": [
+     "who do you mean",
+     "which person"
+    ]
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "propose_action",
+       "args": {
+        "kind": "ask_myte",
+        "person_id": "d0000000-0000-4000-8000-000000000002",
+        "person_name": "Arjun Rao",
+        "question": "When will the security questionnaire be done?"
+       }
+      }
+     ]
+    },
+    {
+     "text": "I suggested asking Arjun's Myte when the security questionnaire will be done."
+    }
+   ],
+   "scope": {
+    "kind": "person",
+    "person_id": "d0000000-0000-4000-8000-000000000002",
+    "label": "Arjun Rao"
+   }
+  },
+  {
+   "id": "peer-myte-03",
+   "area": "peer_myte",
+   "question": "",
+   "expect": {
+    "tools": [
+     "list_my_open_actions",
+     "search_meetings"
+    ],
+    "abstain": false,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Peer answer: first-person draft to Maya with the due date, cited; shares nothing beyond the question; no proposals."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "list_my_open_actions",
+       "args": {}
+      },
+      {
+       "tool": "search_meetings",
+       "args": {
+        "query": "Google Calendar reconnect"
+       }
+      }
+     ]
+    },
+    {
+     "text": "It's on me and due Friday, Nov 13 [[Reconnect Google Calendar]]."
+    }
+   ],
+   "mode": "peer_answer",
+   "peer": {
+    "question_id": "e0000000-0000-4000-8000-000000000001",
+    "from_name": "Maya Chen",
+    "question": "When is the Google Calendar reconnect due?"
+   }
+  },
+  {
+   "id": "peer-myte-04",
+   "area": "peer_myte",
+   "question": "",
+   "expect": {
+    "tools": [
+     "search_meetings",
+     "ask_meetings"
+    ],
+    "abstain": false,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Peer answer: the discount decision, cited, and nothing else from the asker's tasks or promises.",
+    "answer_must_not_contain": [
+     "Send the deck to Acme",
+     "Review Arjun's pull request"
+    ]
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "search_meetings",
+       "args": {
+        "query": "discounts pricing review"
+       }
+      },
+      {
+       "tool": "ask_meetings",
+       "args": {
+        "question": "What did we decide about discounts?"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Yes: in the pricing review we agreed no discounts above 15% without finance sign-off [[No discounts above 15%]]."
+    }
+   ],
+   "mode": "peer_answer",
+   "peer": {
+    "question_id": "e0000000-0000-4000-8000-000000000002",
+    "from_name": "Arjun Rao",
+    "question": "Did we decide anything about discounts in the pricing review?"
+   }
+  },
+  {
+   "id": "peer-myte-05",
+   "area": "peer_myte",
+   "question": "",
+   "expect": {
+    "tools": [
+     "search_meetings"
+    ],
+    "abstain": true,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Peer answer with nothing found: a short polite draft saying so; no guessing."
+   },
+   "fixture": {
+    "search_meetings": {
+     "items": []
+    },
+    "ask_meetings": {
+     "question": "q",
+     "answer": "",
+     "abstained": true,
+     "degraded": false,
+     "citations": []
+    }
+   },
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "search_meetings",
+       "args": {
+        "query": "Berlin offsite"
+       }
+      }
+     ]
+    },
+    {
+     "text": "I couldn't find anything about a Berlin offsite in Sushan's meetings."
+    }
+   ],
+   "mode": "peer_answer",
+   "peer": {
+    "question_id": "e0000000-0000-4000-8000-000000000003",
+    "from_name": "Maya Chen",
+    "question": "What's the plan for the Berlin offsite?"
+   }
+  },
+  {
+   "id": "memory-01",
+   "area": "memory",
+   "question": "Remember that I prefer short answers in bullet points",
+   "expect": {
+    "tools": [
+     "propose_action"
+    ],
+    "abstain": false,
+    "proposal": "memory",
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Memory proposal of the stated preference; never claims it is saved."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "propose_action",
+       "args": {
+        "kind": "memory",
+        "text": "Prefers short answers in bullet points"
+       }
+      }
+     ]
+    },
+    {
+     "text": "I suggested remembering that you prefer short answers in bullet points."
+    }
+   ]
+  },
+  {
+   "id": "memory-02",
+   "area": "memory",
+   "question": "I own billing now, so keep that in mind when I ask about invoices",
+   "expect": {
+    "tools": [
+     "propose_action"
+    ],
+    "abstain": false,
+    "proposal": "memory",
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Memory proposal for a durable fact about them."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "propose_action",
+       "args": {
+        "kind": "memory",
+        "text": "Owns billing"
+       }
+      }
+     ]
+    },
+    {
+     "text": "I suggested remembering that you own billing."
+    }
+   ]
+  },
+  {
+   "id": "memory-03",
+   "area": "memory",
+   "question": "I'm working from the Pune office today. What's on my schedule tomorrow?",
+   "expect": {
+    "tools": [
+     "list_my_schedule"
+    ],
+    "abstain": false,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Answers the schedule; does NOT propose a memory for the one-off location."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "list_my_schedule",
+       "args": {
+        "days": 2
+       }
+      }
+     ]
+    },
+    {
+     "text": "Tomorrow you have Test at 11 PM [[Test]]."
+    }
+   ],
+   "timezone": "Asia/Kolkata"
+  },
+  {
+   "id": "actions-v2-01",
+   "area": "actions_v2",
+   "question": "Set up a 30 minute meeting with Maya on Monday at 10am to go over the pricing FAQ",
+   "expect": {
+    "tools": [
+     "find_people",
+     "propose_action"
+    ],
+    "abstain": false,
+    "proposal": "schedule_meeting",
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "schedule_meeting proposal with Maya's id, Monday Nov 16 10:00-10:30 +05:30; not claimed as booked."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "find_people",
+       "args": {
+        "query": "Maya"
+       }
+      }
+     ]
+    },
+    {
+     "tools": [
+      {
+       "tool": "propose_action",
+       "args": {
+        "kind": "schedule_meeting",
+        "title": "Pricing FAQ review",
+        "start": "2026-11-16T10:00:00+05:30",
+        "end": "2026-11-16T10:30:00+05:30",
+        "attendee_ids": [
+         "d0000000-0000-4000-8000-000000000001"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "text": "I suggested a 30-minute meeting with Maya on Monday, Nov 16 at 10 AM."
+    }
+   ],
+   "timezone": "Asia/Kolkata"
+  },
+  {
+   "id": "actions-v2-02",
+   "area": "actions_v2",
+   "question": "Invite Arjun to the pricing review on Tuesday",
+   "expect": {
+    "tools": [
+     "find_people",
+     "list_my_schedule",
+     "propose_action"
+    ],
+    "abstain": false,
+    "proposal": "invite_people",
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "invite_people with the pricing review's id and Arjun's id."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "find_people",
+       "args": {
+        "query": "Arjun"
+       }
+      },
+      {
+       "tool": "list_my_schedule",
+       "args": {
+        "days": 7
+       }
+      }
+     ]
+    },
+    {
+     "tools": [
+      {
+       "tool": "propose_action",
+       "args": {
+        "kind": "invite_people",
+        "meeting_id": "a0000000-0000-4000-8000-000000000002",
+        "user_ids": [
+         "d0000000-0000-4000-8000-000000000002"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "text": "I suggested inviting Arjun to the pricing review on Tuesday."
+    }
+   ]
+  },
+  {
+   "id": "actions-v2-03",
+   "area": "actions_v2",
+   "question": "Post in #product that the pricing FAQ is ready for review",
+   "expect": {
+    "tools": [
+     "propose_action"
+    ],
+    "abstain": false,
+    "proposal": "slack_post",
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "slack_post with the message and #product; never claims it was posted."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "propose_action",
+       "args": {
+        "kind": "slack_post",
+        "text": "The pricing FAQ is ready for review.",
+        "channel": "#product"
+       }
+      }
+     ]
+    },
+    {
+     "text": "I suggested posting that in #product."
+    }
+   ]
+  },
+  {
+   "id": "attachments-01",
+   "area": "attachments",
+   "question": "Summarise this in two lines",
+   "expect": {
+    "tools": [],
+    "abstain": false,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Summary from the attached notes, citing the attachment source; no lookups needed."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "text": "The notes move the Q4 launch to December 8 and make Samar own onboarding [1]."
+    }
+   ],
+   "attachments": [
+    {
+     "name": "q4-notes.md",
+     "text": "Q4 planning notes\n\n- Launch moves from November 24 to December 8 because of the Google verification.\n- Samar owns the onboarding redesign.\n- Budget for contractors stays flat."
+    }
+   ]
+  },
+  {
+   "id": "attachments-02",
+   "area": "attachments",
+   "question": "Does this plan clash with anything we decided?",
+   "expect": {
+    "tools": [
+     "check_against_decisions"
+    ],
+    "abstain": false,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Checks the attached plan with check_against_decisions and names the 15% decision, cited."
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "check_against_decisions",
+       "args": {
+        "text": "We'll offer Acme 25% off annual to close this quarter."
+       }
+      }
+     ]
+    },
+    {
+     "text": "Yes: offering Acme 25% off goes against the decision to allow no discounts above 15% without finance sign-off [[15%]]."
+    }
+   ],
+   "attachments": [
+    {
+     "name": "acme-plan.txt",
+     "text": "Acme close plan: We'll offer Acme 25% off annual to close this quarter. Arjun sends the order form Friday."
+    }
+   ]
+  },
+  {
+   "id": "person-scope-01",
+   "area": "person_scope",
+   "question": "what are his work",
+   "expect": {
+    "tools": [
+     "find_people",
+     "search_meetings"
+    ],
+    "abstain": false,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "Production case: the chip says Samar Rihan, so 'his' is Samar; answers from shared meetings, cited, never asks who is meant.",
+    "answer_must_not_contain": [
+     "who is his",
+     "who do you mean",
+     "which person",
+     "who are you asking"
+    ]
+   },
+   "fixture": {
+    "find_people": {
+     "query": "Samar",
+     "items": [
+      {
+       "id": "d0000000-0000-4000-8000-000000000003",
+       "name": "Samar Rihan",
+       "email": "samar@acme-corp.com",
+       "role": "Designer",
+       "team": "Growth",
+       "department": "Product"
+      }
+     ]
+    },
+    "search_meetings": {
+     "items": [
+      {
+       "kind": "action",
+       "id": "c0000000-0000-4000-8000-000000000021",
+       "text": "Redesign the pricing page hero",
+       "meeting_title": "Pricing review",
+       "meeting_id": "a0000000-0000-4000-8000-000000000002",
+       "occurred_at": "2026-11-05T16:30:00Z"
+      },
+      {
+       "kind": "decision",
+       "id": "b0000000-0000-4000-8000-000000000021",
+       "text": "Samar owns the onboarding redesign",
+       "meeting_title": "Feature Update - Backend",
+       "meeting_id": "a0000000-0000-4000-8000-000000000001",
+       "occurred_at": "2026-11-12T23:30:00Z"
+      }
+     ]
+    }
+   },
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "find_people",
+       "args": {
+        "query": "Samar Rihan"
+       }
+      },
+      {
+       "tool": "search_meetings",
+       "args": {
+        "query": "Samar Rihan"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Samar is a designer on Growth [[Samar Rihan]]. In your meetings he took on the pricing page hero redesign [[Redesign the pricing page hero]] and owns the onboarding redesign [[onboarding redesign]]."
+    }
+   ],
+   "scope": {
+    "kind": "person",
+    "person_id": "d0000000-0000-4000-8000-000000000003",
+    "label": "Samar Rihan"
+   }
+  },
+  {
+   "id": "person-scope-02",
+   "area": "person_scope",
+   "question": "What did she decide in the pricing review?",
+   "expect": {
+    "tools": [
+     "search_meetings",
+     "ask_meetings"
+    ],
+    "abstain": false,
+    "proposal": null,
+    "card": null,
+    "degraded": false,
+    "args": {},
+    "model_must_not_see": [],
+    "criteria": "'She' is Maya from the scope label; answers from the pricing review, cited.",
+    "answer_must_not_contain": [
+     "who do you mean",
+     "which person"
+    ]
+   },
+   "fixture": {},
+   "script": [
+    {
+     "tools": [
+      {
+       "tool": "search_meetings",
+       "args": {
+        "query": "Maya Chen pricing review"
+       }
+      },
+      {
+       "tool": "ask_meetings",
+       "args": {
+        "question": "What did Maya Chen decide in the pricing review?"
+       }
+      }
+     ]
+    },
+    {
+     "text": "In the pricing review Maya set annual plans at two months free [[two months free]]."
+    }
+   ],
+   "scope": {
+    "kind": "person",
+    "person_id": "d0000000-0000-4000-8000-000000000001",
+    "label": "Maya Chen"
+   }
   }
  ]
 }

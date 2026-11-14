@@ -26,6 +26,7 @@ from libs.shared.budget import BudgetGate
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import LiteLLMRouter
 from services.rag_service.main import PROMPTS_DIR
+from services.rag_service.myte.allowance import Allowance
 from services.rag_service.myte.loop import LoopConfig, MyteLoop
 from services.rag_service.myte.mcp import ToolCatalog
 
@@ -51,7 +52,10 @@ BFF_TOOLS: list[dict[str, Any]] = [
     _tool("get_decision_record", {"decision_id": _UUID}),
     _tool("company_as_of", {"date": {"type": "string"}, "topic": {"type": "string"}}),
     _tool("list_my_open_actions", {}),
-    _tool("list_my_promises", {"status": {"type": "string"}}),
+    # bff's real schema (mytheus-backend services/bff/mcp.py): status is an enum.
+    _tool(
+        "list_my_promises", {"status": {"type": "string", "enum": ["open", "done", "dismissed"]}}
+    ),
     _tool("check_against_decisions", {"text": {"type": "string"}}),
     _tool(
         "check_my_capacity",
@@ -278,6 +282,7 @@ def make_loop(
     budget: BudgetGate | None = None,
     sink: Sink | None = None,
     config: LoopConfig | None = None,
+    allowance: Allowance | None = None,
 ) -> MyteLoop:
     router = LiteLLMRouter(budget or gate(), sink or Sink(), model)
     http = httpx.AsyncClient(transport=httpx.MockTransport(bff.handler))
@@ -289,6 +294,7 @@ def make_loop(
         base_url="http://bff:8000",
         config=config,
         clock=lambda: FIXED_NOW,
+        allowance=allowance,
     )
 
 
