@@ -43,6 +43,8 @@ class Scope(BaseModel):
     meeting_id: UUID | None = None
     person_id: UUID | None = None
     as_of: date | None = None
+    # The chip's words ("Samar Rihan", a meeting title): names what "he", "this meeting" mean.
+    label: str | None = Field(default=None, max_length=160)
 
 
 class Persona(BaseModel):
