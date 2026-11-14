@@ -153,9 +153,8 @@ def test_the_system_prompt_is_in_character_and_versioned():
     assert "Your name: Pip" in context and "friendly" in context and "Mention deadlines" in context
     assert "Saturday, November 14, 2026, 21:00" in context and "Asia/Kolkata" in context
     assert 'meeting page for "Feature Update - Backend"' in context
-    assert call["thinking"] == {"type": "adaptive"} and call["output_config"] == {
-        "effort": "medium"
-    }
+    # No thinking (owner's call: token cost); Sonnet 5.5's "off" with tools is between_tools.
+    assert call["thinking"] == {"type": "between_tools"} and "output_config" not in call
     assert call["model"].endswith("sonnet-5-5")
 
 

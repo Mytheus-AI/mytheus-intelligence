@@ -5,7 +5,7 @@ One answer:
    `propose_action`, `show_card` and `search_help` (`tools.py`).
 2. The system prompt `myte_answer@vN` (versioned, tenant-pinnable, `prompts/`), and its
    per-call context block (the persona, today in the person's time zone, scope, page).
-3. Up to 8 model rounds on tier `extract` (Sonnet 5.5, adaptive thinking at effort `medium`)
+3. Up to 8 model rounds on tier `extract` (Sonnet 5.5, no thinking: `between_tools`)
    through `LiteLLMRouter.converse()`: budget gate, redaction, caching and one metering record
    per round. Text deltas stream live. A round's tool calls run concurrently, as the person,
    within 45 s of tool time per answer; each is a `step` (running, then done or failed) and
@@ -111,8 +111,9 @@ class MyteError(Exception):
 class LoopConfig:
     max_rounds: int = 8
     tool_budget_s: float = 45.0
-    max_tokens: int = 8192
-    effort: str = "medium"
+    max_tokens: int = 2048
+    # None = no thinking (`between_tools`): owner's call, thinking costs too many tokens.
+    effort: str | None = None
     followup_max_tokens: int = 400
     max_proposals: int = 3
     max_cards: int = 3
