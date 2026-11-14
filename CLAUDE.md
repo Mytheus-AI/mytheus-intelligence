@@ -31,7 +31,7 @@ Agent-to-agent collaboration. `ContextGapAgent` asks other users' agents for con
 | Service | Responsibility | Owns / calls | Events in | Events out |
 | --- | --- | --- | --- | --- |
 | `agent-runtime-service` | The seven agents, `BaseAgent` lifecycle, tiered routing, per-tenant budgets | Calls `get_user_context` over gRPC; reads Redis budget mirror. Writes no Postgres | `transcript-chunks`, `document-chunks`, `agent-responses` | `agent-results`, `agent-stream`, `agent-requests`, `usage-events` |
-| `rag-service` | `expand -> retrieve -> rerank -> assemble -> cite`; RRF fusion; Redis answer cache | Calls embedding / reranker / knowledge-graph / search over gRPC | (sync `POST /api/rag/query`) | `usage-events` |
+| `rag-service` | `expand -> retrieve -> rerank -> assemble -> cite`; RRF fusion; Redis answer cache; Ask Myte loop (ADR-0047) | Calls embedding / reranker / knowledge-graph / search over gRPC; bff `POST /mcp` as the asker (Ask Myte tools) | (sync `POST /api/rag/query`, streaming `POST /api/rag/myte`) | `usage-events` |
 | `embedding-service` | BGE-small-en 384-dim; embed-on-ingest + query-embed | The only writer of Qdrant per-tenant collections | `transcript-chunks`, `document-chunks` | (upserts Qdrant) |
 | `reranker-service` | BGE-reranker-base cross-encoder; top-50 -> top-10; warm-replica floor | Owns no data | (sync gRPC from rag-service) | none |
 | `knowledge-graph-service` | The only writer of AGE `nexus_knowledge`; Cypher parameterized by `$org_id` | Reads served to rag-service and ProactiveAgent | `decisions`, `actions` (confirmed, from core-api) | (writes AGE edges) |
@@ -164,7 +164,7 @@ pytest -m eval
 ruff check . && black --check . && mypy .
 ```
 
-Environment variables: `ANTHROPIC_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY` (write; embedding-service only) / `QDRANT_READ_ONLY_API_KEY` (every other consumer), `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`. A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
+Environment variables: `ANTHROPIC_API_KEY` (LiteLLM), `LITELLM_CONFIG` (tier mapping + budget hooks), `QDRANT_URL` / `QDRANT_API_KEY` (write; embedding-service only) / `QDRANT_READ_ONLY_API_KEY` (every other consumer), `POSTGRES_DSN` (Postgres + AGE `nexus_knowledge`), `REDPANDA_BROKERS` / `SCHEMA_REGISTRY_URL`, `REDIS_URL` (keys prefixed `nexus:{org_id}:`), `RAY_ADDRESS` / `EMBEDDING_GPU` / `RERANKER_GPU`, `OTEL_EXPORTER_OTLP_ENDPOINT` / `SENTRY_DSN`, `BFF_URL` (rag-service's Ask Myte tools; default `http://bff:8000`). A GPU is optional locally; CPU inference works at dev scale and CI mocks the model servers.
 
 ## Pitfalls
 
