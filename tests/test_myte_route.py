@@ -634,3 +634,16 @@ def test_a_person_scope_names_who_he_means_so_myte_never_asks():
     context = call["messages"][0]["content"][1]["text"]
     assert '"Samar Rihan"' in context and "never ask who is meant" in context
     assert "find_people" in context
+
+
+def test_short_text_beside_only_a_card_or_proposal_is_the_answer_and_kept():
+    events, _bff, _model, _ = run(
+        [
+            {
+                "tools": [{"tool": "propose_action", "args": {"kind": "task", "title": "Upload"}}],
+                "text": "Suggested a task to upload the logo.",
+            },
+            {"text": ""},
+        ],
+    )
+    assert "".join(d["text"] for d in of(events, "delta")) == "Suggested a task to upload the logo."

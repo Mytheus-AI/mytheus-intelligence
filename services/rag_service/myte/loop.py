@@ -404,7 +404,9 @@ class MyteLoop:
             )
             await self._charge(caller, result.units)
             # A round that goes on to look things up drops its short preamble (never streamed).
-            await state.end_round(drop=bool(result.tool_calls) and not last)
+            # Text beside only a proposal or a card is the answer itself, and is kept.
+            looks_up = any(c.name not in (PROPOSE, CARD) for c in result.tool_calls)
+            await state.end_round(drop=looks_up and not last)
             if result.tier != "extract" or result.truncated:
                 state.degraded = True
             if not result.tool_calls:
