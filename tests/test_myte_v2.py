@@ -821,3 +821,20 @@ def test_the_answer_prompt_is_v2_and_v1_still_loads():
     assert "{memories}" not in v1.user_template  # pinned tenants keep the v1 context
     _, _, model = run([{"text": "ok"}], {"question": "Hi"})
     assert "ask_myte" in system_of(model)
+
+
+def test_a_card_tells_the_model_it_does_not_replace_the_answer():
+    # Live eval: with "keep your text short", Sonnet wrote only "That's the full list."
+    _, _, model = run(
+        [
+            {"tools": [{"tool": "list_my_open_actions", "args": {}}]},
+            {"tools": [{"tool": "show_card", "args": {"kind": "tasks", "source_ns": [1]}}]},
+            {"text": "Upload the logo is due Monday [1]."},
+        ],
+        {"question": "What's on me?"},
+        fixtures={
+            "list_my_open_actions": {"items": [{"id": str(uuid.uuid4()), "content": "Upload"}]}
+        },
+    )
+    tool = [m for m in model.calls[-2]["messages"] if m.get("role") == "tool"][-1]
+    assert "does not replace the answer" in tool["content"]

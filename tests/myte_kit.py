@@ -52,7 +52,10 @@ BFF_TOOLS: list[dict[str, Any]] = [
     _tool("get_decision_record", {"decision_id": _UUID}),
     _tool("company_as_of", {"date": {"type": "string"}, "topic": {"type": "string"}}),
     _tool("list_my_open_actions", {}),
-    _tool("list_my_promises", {"status": {"type": "string"}}),
+    # bff's real schema (mytheus-backend services/bff/mcp.py): status is an enum.
+    _tool(
+        "list_my_promises", {"status": {"type": "string", "enum": ["open", "done", "dismissed"]}}
+    ),
     _tool("check_against_decisions", {"text": {"type": "string"}}),
     _tool(
         "check_my_capacity",

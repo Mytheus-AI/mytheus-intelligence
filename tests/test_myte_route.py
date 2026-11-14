@@ -415,7 +415,30 @@ def test_preamble_text_and_the_answer_are_separated():
         ],
         fixtures={"list_my_inbox": {"items": []}},
     )
-    assert "".join(d["text"] for d in of(events, "delta")) == "Let me look.\n\nNothing waiting."
+    # A short update before a lookup is never streamed (the steps already show the work).
+    assert "".join(d["text"] for d in of(events, "delta")) == "Nothing waiting."
+
+
+def test_a_long_text_before_a_lookup_still_streams_and_is_separated():
+    long = "Here is what I already know about this, before I check the inbox. " * 5
+    events, _bff, _model, _ = run(
+        [
+            {"tools": [{"tool": "list_my_inbox"}], "text": long.strip()},
+            {"text": "Nothing waiting."},
+        ],
+        fixtures={"list_my_inbox": {"items": []}},
+    )
+    assert "".join(d["text"] for d in of(events, "delta")) == long.strip() + "\n\nNothing waiting."
+
+
+def test_answer_text_streams_live_once_past_the_holdback():
+    from services.rag_service.myte.loop import HOLD_CHARS
+
+    answer = "word " * 200
+    events, _bff, _model, _ = run([{"text": answer.strip()}])
+    deltas = of(events, "delta")
+    assert len(deltas) > 10  # not one blob at the end of the round
+    assert len(deltas[0]["text"]) >= HOLD_CHARS
 
 
 def test_followups_failing_does_not_fail_the_answer_and_the_title_falls_back():

@@ -2771,30 +2771,31 @@
    "question": "Be more concise from now on",
    "expect": {
     "tools": [
-     "search_help"
+     "propose_action"
     ],
     "abstain": false,
-    "proposal": null,
+    "proposal": "memory",
     "card": null,
     "degraded": false,
     "args": {},
     "model_must_not_see": [],
-    "criteria": "Explains where to change it; no proposal."
+    "criteria": "v2 (ADR-0049 F4): a lasting preference about how Myte answers, so a memory proposal ('Prefers concise answers'); may also mention the concise personality in Settings; never claims it is saved."
    },
    "fixture": {},
    "script": [
     {
      "tools": [
       {
-       "tool": "search_help",
+       "tool": "propose_action",
        "args": {
-        "query": "personality concise"
+        "kind": "memory",
+        "text": "Prefers concise answers"
        }
       }
      ]
     },
     {
-     "text": "You can set my personality to concise in Settings, Agent [[Set up your Myte]]."
+     "text": "I suggested remembering that you prefer concise answers."
     }
    ]
   },

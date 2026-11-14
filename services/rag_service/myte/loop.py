@@ -123,6 +123,9 @@ _PROPOSED = (
     "until they confirm. Tell them in one short sentence what you suggested; do not say it is "
     "done."
 )
+# Characters of a round's text held back before it streams: longer than a "let me check"
+# update, short enough that the first text still lands well inside the 2.5 s target.
+HOLD_CHARS = 240
 _CARD_DETAIL_KINDS = frozenset({"meeting", "decision", "capacity"})
 _CARD_DETAIL_MAX = 32_000  # bytes of JSON
 
@@ -162,6 +165,8 @@ class _Answer:
     registry: SourceRegistry = field(default_factory=SourceRegistry)
     streamed: list[str] = field(default_factory=list)
     round_has_text: bool = False
+    held: list[str] = field(default_factory=list)  # this round's text, not yet streamed
+    released: bool = False  # this round's text is streaming live
     steps: int = 0
     degraded: bool = False
     out_of_time: bool = False
@@ -175,7 +180,36 @@ class _Answer:
     def text(self) -> str:
         return "".join(self.streamed)
 
+    def start_round(self) -> None:
+        self.round_has_text = False
+        self.held = []
+        self.released = False
+
     async def delta(self, piece: str) -> None:
+        """A round's text is held until it is long enough to be an answer (`HOLD_CHARS`), then
+        streams live. Without thinking (`between_tools`), Sonnet writes a short update before
+        its tool calls ("I'll check your schedule."); a round that ends in tool calls drops
+        held text, so those updates never reach the person, who already sees the live steps."""
+        if self.released:
+            await self.say(piece)
+            return
+        self.held.append(piece)
+        if sum(len(p) for p in self.held) >= HOLD_CHARS:
+            await self.release()
+
+    async def release(self) -> None:
+        self.released = True
+        held, self.held = "".join(self.held), []
+        if held:
+            await self.say(held)
+
+    async def end_round(self, *, drop: bool) -> None:
+        if drop:
+            self.held = []
+        else:
+            await self.release()
+
+    async def say(self, piece: str) -> None:
         if not self.round_has_text:
             self.round_has_text = True
             if self.streamed and not self.text.endswith("\n"):
@@ -351,7 +385,7 @@ class MyteLoop:
         for round_no in range(cfg.max_rounds):
             await self._check_allowance(caller)
             last = round_no == cfg.max_rounds - 1 or state.out_of_time
-            state.round_has_text = False
+            state.start_round()
             if timer is not None:
                 timer.rounds += 1
             result = await self._router.converse(
@@ -369,6 +403,8 @@ class MyteLoop:
                 prompt_ref=prompt.ref,
             )
             await self._charge(caller, result.units)
+            # A round that goes on to look things up drops its short preamble (never streamed).
+            await state.end_round(drop=bool(result.tool_calls) and not last)
             if result.tier != "extract" or result.truncated:
                 state.degraded = True
             if not result.tool_calls:
@@ -377,7 +413,7 @@ class MyteLoop:
                 # Asked for no tools and still called one: answer with what there is.
                 state.degraded = True
                 if not state.text.strip():
-                    await state.delta(_OUT_OF_ROUNDS)
+                    await state.say(_OUT_OF_ROUNDS)
                 break
             messages.append(result.assistant_message())
             # Every lookup of the round shows as running at once, then they run concurrently.
@@ -398,7 +434,7 @@ class MyteLoop:
             )
         if not state.text.strip():
             state.degraded = True
-            await state.delta(_EMPTY)
+            await state.say(_EMPTY)
         answer = state.text
         cited = state.registry.cited(answer)
         if not req.peer_mode:
@@ -684,7 +720,10 @@ class MyteLoop:
                 "data": {"items": [s.event() for s in sources], "detail": detail},
             },
         )
-        return "Card shown beside your answer. Keep your text short."
+        return (
+            "Card shown beside your answer. It does not replace the answer: now write the answer "
+            "itself, the key facts with their [n] citations, shorter than without the card."
+        )
 
     # --- follow-ups and title ----------------------------------------------------------------
 
