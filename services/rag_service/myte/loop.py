@@ -76,6 +76,7 @@ from services.rag_service.myte.sources import (
     remap_citations,
 )
 from services.rag_service.myte.telemetry import AnswerTimer
+from services.rag_service.myte.timefmt import localize
 from services.rag_service.myte.tools import (
     CARD,
     HELP,
@@ -430,8 +431,9 @@ class MyteLoop:
                 timer.tools += len(result.tool_calls)
             if state.session_lost is not None:
                 raise state.session_lost
+            # Timestamps arrive in UTC; the model reads them in the asker's own zone.
             messages.extend(
-                {"role": "tool", "tool_call_id": call.id, "content": out}
+                {"role": "tool", "tool_call_id": call.id, "content": localize(out, req.timezone)}
                 for call, out in zip(result.tool_calls, outputs, strict=True)
             )
         if not state.text.strip():
