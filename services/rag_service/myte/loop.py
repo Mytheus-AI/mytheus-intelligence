@@ -311,7 +311,7 @@ class MyteLoop:
             title = (
                 f' ("{req.page.title}")'
                 if req.page.kind == "meeting" and req.page.id == scope.meeting_id and req.page.title
-                else ""
+                else (f' ("{scope.label.strip()}")' if scope.label and scope.label.strip() else "")
             )
             scope_line = (
                 f"Scope: one meeting, meeting_id={scope.meeting_id}{title}. Questions are about "
@@ -319,9 +319,18 @@ class MyteLoop:
                 "meeting_id to every tool that takes it."
             )
         elif scope.kind == "person" and scope.person_id:
+            who = (scope.label or "").strip()
+            named = (
+                f'"{who}" (person_id={scope.person_id})' if who else f"person_id={scope.person_id}"
+            )
             scope_line = (
-                f"Scope: one person, person_id={scope.person_id}. Questions are about this "
-                "person: find them with find_people and use their name in searches."
+                f"Scope: one person, {named}. Questions are about this person: he, she, they, "
+                f"his, her, their and \"this person\" mean {who or 'them'}, so never ask who is "
+                "meant. To answer: find_people with their name for role, team and department; "
+                "search_meetings and ask_meetings with their name for what they said, decided "
+                "or took on in meetings the asker shared with them; get_decision_record for "
+                "decisions they are part of. You cannot see their private tasks or promises: "
+                "answer from what shared meetings show and say so in one short clause."
             )
         elif scope.kind == "as_of" and scope.as_of:
             scope_line = (

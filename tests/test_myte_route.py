@@ -595,3 +595,19 @@ async def test_closing_the_stream_cancels_the_answer():
         await task
     await stream.aclose()
     await asyncio.wait_for(cancelled.wait(), 1)
+
+
+def test_a_person_scope_names_who_he_means_so_myte_never_asks():
+    """Production: with the chip "Person: Samar Rihan", "what are his work" got "who is his?"
+    because only the id reached the prompt and find_people searches by name."""
+    _events, _bff, model, _ = run(
+        [{"text": "ok"}],
+        body={
+            "question": "what are his work",
+            "scope": {"kind": "person", "person_id": M1, "label": "Samar Rihan"},
+        },
+    )
+    call = next(c for c in model.calls if c.get("stream"))
+    context = call["messages"][0]["content"][1]["text"]
+    assert '"Samar Rihan"' in context and "never ask who is meant" in context
+    assert "find_people" in context
