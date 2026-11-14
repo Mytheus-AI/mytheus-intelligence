@@ -51,8 +51,10 @@ Model settings (polish plan, Phase 0):
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -390,3 +392,326 @@ class LiteLLMRouter:
                 await on_delta(seq, piece)
                 seq += 1
         return "".join(parts), usage, truncated
+
+    # --- converse: multi-turn, tool-calling, streaming (ADR-0047 D2) ---------------------------
+
+    async def converse(
+        self,
+        *,
+        tier: Tier,
+        system: str,
+        messages: list[dict[str, Any]],
+        org_id: UUID,
+        user_id: UUID | None,
+        max_tokens: int,
+        tools: list[dict[str, Any]] | None = None,
+        system_context: str = "",
+        effort: Effort | None = None,
+        on_delta: TextDelta | None = None,
+        tool_choice: Literal["auto", "none"] | None = None,
+        prompt_ref: str | None = None,
+        est_tokens: int | None = None,
+    ) -> ConverseResult:
+        """One model round of a conversation. The caller owns the loop: it appends
+        `result.assistant_message()` and its tool results to `messages` and calls again.
+
+        Same guarantees as `complete()`, per round:
+        - Redaction: user turns and tool results (what people and meetings said) go through the
+          egress redactor, with UUIDs kept intact so the model can pass ids back to tools;
+          `system_context` (per-call, partly user-authored: the persona's instructions) too.
+          The reviewed `system` template and the model's own assistant turns are not touched
+          (assistant turns may carry signed thinking blocks that must round-trip unchanged).
+        - The budget gate: `block` raises `BudgetBlocked`, `throttle` answers on triage.
+        - Caching: `system` is breakpoint 1 and the last tool breakpoint 2, so the template
+          and the tool block are read from the cache on every round of every answer.
+          `system_context` follows `system` uncached (it changes per person and per day).
+        - Thinking: adaptive at `effort` on extract, off on triage. Anthropic requires the
+          thinking blocks of a tool-use turn to be sent back with its tool results; the result
+          keeps them and `assistant_message()` carries them. Thinking can only start at the
+          beginning of a turn, so a round that continues a turn whose earlier tool-use message
+          has no thinking blocks (it was throttled to triage) runs without thinking.
+        - Exactly one `usage-events` record per round, emitted as soon as the stream ends.
+        Text deltas are forwarded live to `on_delta(text)`.
+        """
+        if tier not in self._models:
+            raise ValueError(f"tier {tier!r} has no model mapped (ADR-0029 D2)")
+        context = await self._redact_keep_ids(org_id, system_context) if system_context else ""
+        outgoing = [await self._redact_message(org_id, m) for m in messages]
+        tool_specs = [dict(t) for t in tools or []]
+        estimate = (
+            est_tokens
+            if est_tokens is not None
+            else Usage(
+                input_tokens=(
+                    len(system)
+                    + len(context)
+                    + len(json.dumps(tool_specs))
+                    + sum(len(json.dumps(m.get("content"), default=str)) for m in outgoing)
+                )
+                // 3,
+                output_tokens=min(max_tokens, EST_OUTPUT_TOKENS),
+            ).units(tier)
+        )
+        decision = await self._budget.check(org_id, estimate)
+        if decision == "block":
+            raise BudgetBlocked(str(org_id))
+        if decision == "throttle":
+            tier = "triage"
+        model = self._models[tier]
+        system_blocks: list[dict[str, Any]] = [
+            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+        ]
+        if context:
+            system_blocks.append({"type": "text", "text": context})
+        if tool_specs:
+            tool_specs[-1] = {**tool_specs[-1], "cache_control": {"type": "ephemeral"}}
+        extra = dict(self._extra)
+        if tier == "triage":
+            extra["thinking"] = {"type": "disabled"}
+        elif effort is not None:
+            if _turn_lacks_thinking(outgoing):
+                extra["thinking"] = {"type": "disabled"}
+            else:
+                extra["thinking"] = {"type": "adaptive"}
+                extra["output_config"] = {"effort": effort}
+        if tool_specs:
+            extra["tools"] = tool_specs
+            if tool_choice is not None:
+                extra["tool_choice"] = tool_choice
+        call_id = str(uuid.uuid4())
+        stream = await self._complete(
+            model=model,
+            messages=[{"role": "system", "content": system_blocks}, *outgoing],
+            max_tokens=max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+            **extra,
+        )
+        acc = _StreamAccumulator(on_delta)
+        try:
+            async for chunk in stream:
+                await acc.feed(chunk)
+        finally:
+            # A stream cut short (the client went away, a provider error mid-stream) is still
+            # metered for what it reported.
+            units = acc.usage.units(tier)
+            await self._meter(org_id, user_id, units, tier, call_id)
+        if acc.finish_reason == "length":
+            logger.warning(
+                "%s stopped at max_tokens=%s (tier %s): the answer may be cut",
+                prompt_ref or "a conversation round",
+                max_tokens,
+                tier,
+            )
+        text = "".join(acc.text)
+        agent_metrics.observe_call(prompt_ref, org_id, tier, acc.usage, text)
+        return ConverseResult(
+            text=text,
+            tool_calls=acc.tool_calls(),
+            thinking_blocks=acc.thinking_blocks(),
+            tier=tier,
+            model=model,
+            usage=acc.usage,
+            units=units,
+            finish_reason=acc.finish_reason,
+        )
+
+    async def _redact_keep_ids(self, org_id: UUID, text: str) -> str:
+        """Redact, but never touch a UUID: an all-digit UUID group next to another can look
+        like a card number to the redactor, and a mangled id breaks the next tool call."""
+        ids: list[str] = []
+
+        def keep(m: re.Match[str]) -> str:
+            ids.append(m.group(0))
+            return f"⟦{len(ids) - 1}⟧"
+
+        masked = _UUID_RE.sub(keep, text)
+        out = await self._redact(org_id, masked)
+        return _MASK_RE.sub(lambda m: ids[int(m.group(1))], out) if ids else out
+
+    async def _redact_message(self, org_id: UUID, message: dict[str, Any]) -> dict[str, Any]:
+        if message.get("role") not in ("user", "tool"):
+            return message
+        content = message.get("content")
+        if isinstance(content, str):
+            return {**message, "content": await self._redact_keep_ids(org_id, content)}
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    part = {**part, "text": await self._redact_keep_ids(org_id, part["text"])}
+                parts.append(part)
+            return {**message, "content": parts}
+        return message
+
+
+TextDelta = Callable[[str], Awaitable[None]]
+_UUID_RE = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
+_MASK_RE = re.compile("⟦(\\d+)⟧")
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, Any]  # {} when the model's JSON did not parse (see `raw_arguments`)
+    raw_arguments: str
+    parse_error: bool = False
+
+
+@dataclass(frozen=True)
+class ConverseResult:
+    text: str
+    tool_calls: list[ToolCall]
+    thinking_blocks: list[dict[str, Any]]
+    tier: str
+    model: str
+    usage: Usage
+    units: int
+    finish_reason: str
+
+    @property
+    def truncated(self) -> bool:
+        return self.finish_reason == "length"
+
+    def assistant_message(self) -> dict[str, Any]:
+        """This round as the next round's assistant message (OpenAI format, LiteLLM's
+        `thinking_blocks` extension), so tool results can follow it."""
+        message: dict[str, Any] = {"role": "assistant", "content": self.text or None}
+        if self.tool_calls:
+            message["tool_calls"] = [
+                {
+                    "id": c.id,
+                    "type": "function",
+                    "function": {"name": c.name, "arguments": c.raw_arguments or "{}"},
+                }
+                for c in self.tool_calls
+            ]
+        if self.thinking_blocks:
+            message["thinking_blocks"] = [dict(b) for b in self.thinking_blocks]
+        return message
+
+
+def _turn_lacks_thinking(messages: list[dict[str, Any]]) -> bool:
+    """True when the current turn (after the last user message) already has a tool-use
+    assistant message without thinking blocks: thinking cannot be switched on mid-turn."""
+    for m in reversed(messages):
+        role = m.get("role")
+        if role == "user":
+            return False
+        if role == "assistant" and m.get("tool_calls") and not m.get("thinking_blocks"):
+            return True
+    return False
+
+
+def _get(obj: Any, key: str, default: Any = None) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+class _StreamAccumulator:
+    """Folds LiteLLM stream chunks (objects or dicts) into text, tool calls, thinking blocks,
+    usage and the finish reason. Tool calls arrive as a first chunk with `id` and `name` and
+    then argument fragments, keyed by `index`. Thinking arrives as text fragments of the
+    current block, closed by a `signature` fragment; a `redacted_thinking` block is whole."""
+
+    def __init__(self, on_delta: TextDelta | None) -> None:
+        self._on_delta = on_delta
+        self.text: list[str] = []
+        self.usage = Usage()
+        self.finish_reason = ""
+        self._calls: dict[int, dict[str, Any]] = {}
+        self._order: list[int] = []
+        self._blocks: list[dict[str, Any]] = []
+        self._open: dict[str, Any] | None = None
+
+    async def feed(self, chunk: Any) -> None:
+        raw = _get(chunk, "usage")
+        if raw:
+            self.usage = _usage(raw)
+        choices = _get(chunk, "choices") or []
+        if not choices:
+            return
+        choice = choices[0]
+        reason = _get(choice, "finish_reason")
+        if reason:
+            self.finish_reason = str(reason)
+        delta = _get(choice, "delta")
+        if delta is None:
+            return
+        for block in _get(delta, "thinking_blocks") or []:
+            self._thinking(block)
+        for call in _get(delta, "tool_calls") or []:
+            self._tool_call(call)
+        piece = _get(delta, "content") or ""
+        if piece:
+            self.text.append(piece)
+            if self._on_delta is not None:
+                await self._on_delta(piece)
+
+    def _thinking(self, block: Any) -> None:
+        kind = _get(block, "type") or "thinking"
+        if kind == "redacted_thinking":
+            self._open = None
+            self._blocks.append({"type": "redacted_thinking", "data": _get(block, "data") or ""})
+            return
+        if self._open is None:
+            self._open = {"type": "thinking", "thinking": "", "signature": ""}
+            self._blocks.append(self._open)
+        self._open["thinking"] += _get(block, "thinking") or ""
+        signature = _get(block, "signature") or ""
+        if signature:
+            self._open["signature"] += signature
+            self._open = None
+
+    def _tool_call(self, call: Any) -> None:
+        index = _get(call, "index")
+        if index is None:
+            index = self._order[-1] if self._order else 0
+        slot = self._calls.get(index)
+        if slot is None:
+            slot = {"id": "", "name": "", "args": []}
+            self._calls[index] = slot
+            self._order.append(index)
+        if _get(call, "id"):
+            slot["id"] = str(_get(call, "id"))
+        fn = _get(call, "function")
+        if fn is not None:
+            if _get(fn, "name"):
+                slot["name"] = str(_get(fn, "name"))
+            if _get(fn, "arguments"):
+                slot["args"].append(str(_get(fn, "arguments")))
+
+    def thinking_blocks(self) -> list[dict[str, Any]]:
+        # A block with only a signature (thinking display omitted) still has to round-trip.
+        return [
+            b
+            for b in self._blocks
+            if b.get("type") == "redacted_thinking" or b["thinking"] or b["signature"]
+        ]
+
+    def tool_calls(self) -> list[ToolCall]:
+        out = []
+        for index in self._order:
+            slot = self._calls[index]
+            if not slot["name"]:
+                continue
+            raw = "".join(slot["args"])
+            try:
+                parsed = json.loads(raw) if raw.strip() else {}
+                ok = isinstance(parsed, dict)
+            except ValueError:
+                parsed, ok = {}, False
+            out.append(
+                ToolCall(
+                    id=slot["id"] or f"call_{uuid.uuid4().hex[:12]}",
+                    name=slot["name"],
+                    arguments=parsed if ok else {},
+                    raw_arguments=raw if ok else "{}",
+                    parse_error=not ok,
+                )
+            )
+        return out

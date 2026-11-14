@@ -2,7 +2,9 @@
   "defaults": {
     "rag_expand": "v1",
     "rag_answer": "v1",
-    "decision_conflict_check": "v1"
+    "decision_conflict_check": "v1",
+    "myte_answer": "v1",
+    "myte_followups": "v1"
   },
   "pins": {}
 }

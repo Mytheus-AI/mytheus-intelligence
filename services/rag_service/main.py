@@ -28,6 +28,10 @@ service base including its `/internal` mount), SEARCH_GRPC_URL, KNOWLEDGE_GRAPH_
 IDENTITY_GRPC_ADDR (the decision check's never-record list), BILLING_URL, REDIS_URL,
 REDPANDA_BROKERS, SCHEMA_REGISTRY_URL, QDRANT_URL, QDRANT_READ_ONLY_API_KEY, ANTHROPIC_API_KEY.
 
+Ask Myte (ADR-0047): `POST /api/rag/myte` streams an answer from the person's own Myte, with
+bff's MCP tools called as the person (`myte/`). Clerk sessions only. Needs BFF_URL (default
+`http://bff:8000`) besides the router's own settings.
+
 Run: uvicorn services.rag_service.main:app --port 8201
 """
 
@@ -58,6 +62,8 @@ from services.rag_service.decision_check import (
     NeverRecordUnavailable,
 )
 from services.rag_service.domain import Caller
+from services.rag_service.myte.loop import MyteLoop
+from services.rag_service.myte.route import ask_myte
 from services.rag_service.pipeline import AnswerCache, RAGService
 from services.rag_service.promise_route import PromiseExtractOut, extract_promises
 
@@ -157,6 +163,7 @@ def build_app(
     service: RAGService | None = None,
     check: DecisionCheckService | None = None,
     promises: PromiseExtractor | None = None,
+    myte: MyteLoop | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -167,17 +174,26 @@ def build_app(
             # whole stack's deploy health gate. /healthz stays up; the reason is logged.
             app.state.wired = True
             try:
-                app.state.rag, app.state.check, app.state.promises, closers = _wire_from_env()
+                (
+                    app.state.rag,
+                    app.state.check,
+                    app.state.promises,
+                    app.state.myte,
+                    closers,
+                ) = _wire_from_env()
             except NotConfigured as exc:
                 logger.error("rag-service not configured: %s; /api/rag/query answers 503", exc)
         yield
         for close in closers:  # pragma: no cover
-            close()
+            result = close()
+            if hasattr(result, "__await__"):
+                await result
 
     app = create_app("rag-service")
     app.router.lifespan_context = lifespan
     app.state.rag = service
     app.state.check = check
+    app.state.myte = myte
     app.add_api_route("/api/rag/query", query, methods=["POST"], response_model=RagResponse)
     app.add_api_route(
         "/internal/decisions/check",
@@ -193,11 +209,13 @@ def build_app(
         methods=["POST"],
         response_model=PromiseExtractOut,
     )
+    # Ask Myte: the person's own Myte, streamed as Server-Sent Events (ADR-0047 D8).
+    app.add_api_route("/api/rag/myte", ask_myte, methods=["POST"])
     return app
 
 
 def _wire_from_env() -> (
-    tuple[RAGService, DecisionCheckService, PromiseExtractor, list[Any]]
+    tuple[RAGService, DecisionCheckService, PromiseExtractor, MyteLoop, list[Any]]
 ):  # pragma: no cover - production wiring
     from confluent_kafka import Producer
     from redis.asyncio import from_url
@@ -275,7 +293,12 @@ def _wire_from_env() -> (
         # Needs IDENTITY_GRPC_ADDR (the same GetOrgContext address agent-runtime uses).
         OrgContextClient(),
     )
-    return service, check, extractor, [usage.flush]
+    import httpx
+
+    # One pooled client for every answer's bff calls; each call names its own timeout.
+    bff_http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0))
+    myte = MyteLoop(router, prompts, bff_http)
+    return service, check, extractor, myte, [usage.flush, bff_http.aclose]
 
 
 app = build_app()

@@ -115,6 +115,8 @@ PROMPT_AGENTS: dict[str, str] = {
     "decision_ripple": "ProactiveAgent",
     "assumption_check": "ProactiveAgent",
     "interrupt_gate": "ListenWatch",
+    # Ask Myte (ADR-0047): the person's own Myte answering in rag-service.
+    "myte": "AskMyte",
 }
 
 # How each prompt answers, for the parse check. ("number", key): a JSON object with a number
@@ -145,6 +147,7 @@ OUTPUT_FORMATS: dict[str, tuple[str, str]] = {
     "decision_ripple": ("list", "actions"),
     "assumption_check": ("list", "breaks"),
     "interrupt_gate": ("object", "interrupt"),
+    "myte_followups": ("list", "followups"),
 }
 
 _CONFIDENCE = re.compile(r"^\s*CONFIDENCE\s*:\s*[0-9]*\.?[0-9]+\s*$", re.IGNORECASE)

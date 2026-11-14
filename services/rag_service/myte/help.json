@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "reviewed": "2026-11-14",
+  "note": "A small, reviewed help corpus about Mytheus itself for Ask Myte's search_help tool (ADR-0047, the plan's Help area). Keep each article short and true to the product; change it through review like a prompt.",
+  "articles": [
+    {
+      "id": "help-ask-myte",
+      "title": "Ask Myte",
+      "keywords": ["ask", "myte", "assistant", "shortcut", "cmd j", "threads", "history", "sources", "citations"],
+      "text": "Ask Myte answers questions about your meetings, decisions, tasks, promises, people, schedule and the company brain, as your own Myte. Open it from the sidebar, from Your Myte, or with Cmd+J (Ctrl+J) on any page; on a meeting or decision page it already knows which one you mean. Every fact carries a numbered citation you can open. It only sees what you can see. Your questions are private to you; admins cannot read them, and you can delete one thread or all of them."
+    },
+    {
+      "id": "help-proposals",
+      "title": "How Myte makes changes (proposals)",
+      "keywords": ["confirm", "proposal", "create", "task", "promise", "agenda", "attendance", "change", "write"],
+      "text": "Myte never changes anything on its own. When you ask it to add a task, write down a promise, add an agenda item or choose whether to attend a meeting, it shows a suggestion card with Confirm, Edit and Not now. Only Confirm saves it, through the same action the rest of the app uses, and it is audited like a change you made by hand."
+    },
+    {
+      "id": "help-slack",
+      "title": "Connect Slack",
+      "keywords": ["slack", "connect", "integration", "messages", "channel"],
+      "text": "Connect Slack from Settings, Integrations. After you allow access, your Myte can find promises you make in Slack and post updates where you choose. A workspace admin may need to approve the Mytheus app in Slack first."
+    },
+    {
+      "id": "help-calendar",
+      "title": "Connect or reconnect Google Calendar",
+      "keywords": ["google", "calendar", "sync", "reconnect", "events", "schedule", "permission"],
+      "text": "Connect Google Calendar from Settings, Integrations. Mytheus asks for read-only calendar access so your schedule and capacity include calendar events. If events stop appearing, open Settings, Integrations and reconnect Google Calendar. Without calendar sync, only Mytheus meetings are counted in your capacity."
+    },
+    {
+      "id": "help-jira",
+      "title": "Connect Jira",
+      "keywords": ["jira", "atlassian", "tasks", "issues", "integration"],
+      "text": "Connect Jira from Settings, Integrations. Confirmed tasks can then appear in Jira as issues."
+    },
+    {
+      "id": "help-your-myte",
+      "title": "Set up your Myte (name, personality, instructions)",
+      "keywords": ["myte", "agent", "persona", "name", "personality", "instructions", "avatar", "voice", "rename"],
+      "text": "Your Myte is your personal agent. On Your Myte, or in Settings, Agent, you can rename it, change how it looks, pick its personality (balanced, concise, detailed, direct or friendly) and give it instructions, for example 'always mention deadlines'. These shape how it talks everywhere, including Ask Myte; they never change what it can see."
+    },
+    {
+      "id": "help-listening",
+      "title": "Listening rules: which meetings your Myte listens to",
+      "keywords": ["listening", "listen", "stop", "standup", "rules", "record", "notes", "privacy"],
+      "text": "Settings, Listening controls which meetings your Myte listens to and keeps notes for. You can turn listening off for a kind of meeting (for example standups). Ask Myte can suggest a change, but it is saved only when you change the setting yourself."
+    },
+    {
+      "id": "help-promises",
+      "title": "Promises and capacity",
+      "keywords": ["promise", "promises", "owe", "capacity", "deadline", "ledger", "due", "full"],
+      "text": "Your promise ledger (Work, Promises) collects things you said you would do, from meetings, phone recordings, Slack, email, and ones you add yourself. It is private to you. Before you accept a deadline, the capacity check shows how full that day is and suggests the first day with room."
+    },
+    {
+      "id": "help-time-machine",
+      "title": "The time machine (as of a date)",
+      "keywords": ["time", "machine", "as of", "date", "history", "past", "then", "snapshot"],
+      "text": "Decisions, Time machine shows the company as it stood at the end of a date: the decisions in force and why, what had been replaced, open promises and goals. In Ask Myte, choose the 'As of a date' scope to ask what was true then."
+    },
+    {
+      "id": "help-company-brain",
+      "title": "The company brain",
+      "keywords": ["company", "brain", "documents", "policy", "docs", "goals", "owners", "vocabulary", "ground rules"],
+      "text": "The company brain (Workspace, Brain) holds what your admins added about the company: documents, goals, topic owners, vocabulary, meeting types and ground rules. Myte uses it to answer questions such as policies, and cites the document it used."
+    },
+    {
+      "id": "help-claude-connector",
+      "title": "Use Mytheus from Claude or your IDE (MCP)",
+      "keywords": ["claude", "mcp", "connector", "ide", "api", "token", "personal access token", "cursor"],
+      "text": "Mytheus is an MCP server. Add it to Claude as a custom connector (it signs in with OAuth), or point an MCP client at the API's /mcp address with a personal access token from Settings, API. The tools see only what you can see; read-only tokens cannot create tasks or promises."
+    },
+    {
+      "id": "help-not-connected",
+      "title": "Ask is not connected or the AI limit was reached",
+      "keywords": ["not connected", "limit", "budget", "usage", "unavailable", "admin", "ai", "turned off"],
+      "text": "If Ask Myte says it is not connected on your workspace, an admin can turn AI on in Workspace settings. If it says the workspace reached its AI limit, answers come back when the limit resets or when an admin raises it in Workspace, Billing."
+    },
+    {
+      "id": "help-privacy",
+      "title": "What Myte can see, and privacy",
+      "keywords": ["privacy", "see", "access", "confidential", "redaction", "pii", "email", "private", "admins"],
+      "text": "Myte runs every lookup as you, with your permissions: meetings you were not in and confidential meetings are never searched. Emails, phone numbers and card numbers are removed before anything reaches the AI model, unless your workspace turned that off. Myte does not train on your data."
+    },
+    {
+      "id": "help-inbox",
+      "title": "Inbox and notifications",
+      "keywords": ["inbox", "notifications", "review", "detections", "needs me", "alerts"],
+      "text": "The Inbox collects notifications and things your Myte found that wait for your review, such as a possible decision or promise. Confirm or dismiss them there. Choose what you are notified about in Settings, Notifications."
+    }
+  ]
+}
