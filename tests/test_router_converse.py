@@ -362,7 +362,9 @@ async def test_thinking_is_not_switched_on_mid_turn_after_a_throttled_round():
         {"role": "tool", "tool_call_id": "t1", "content": "none"},
     ]
     await converse(LiteLLMRouter(gate(), Sink(), llm), messages)
-    assert llm.calls[0]["thinking"] == {"type": "disabled"}
+    # Sonnet 5.5 refuses `disabled` mid-turn (400 "send between_tools instead"); this was the
+    # production failure after a first round where adaptive thinking chose not to think.
+    assert llm.calls[0]["thinking"] == {"type": "between_tools"}
     assert "output_config" not in llm.calls[0]
 
 

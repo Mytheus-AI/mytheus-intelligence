@@ -468,9 +468,18 @@ class LiteLLMRouter:
         extra = dict(self._extra)
         if tier == "triage":
             extra["thinking"] = {"type": "disabled"}
-        elif effort is not None:
+        elif effort is None:
+            # No thinking at all (Ask Myte, owner's call 2026-11-14: thinking tokens cost too
+            # much for chat). Sonnet 5.5's "off" in a tool conversation is `between_tools`; it
+            # refuses `{"type": "disabled"}` there.
+            extra["thinking"] = {"type": "between_tools"}
+        else:
             if _turn_lacks_thinking(outgoing):
-                extra["thinking"] = {"type": "disabled"}
+                # The turn already has a tool-use message without thinking blocks (adaptive
+                # chose not to think, or a throttled round). Sonnet 5.5 refuses
+                # `{"type": "disabled"}` mid-turn and names `between_tools` as its "off": no
+                # thinking before answering, short updates between tool calls.
+                extra["thinking"] = {"type": "between_tools"}
             else:
                 extra["thinking"] = {"type": "adaptive"}
                 extra["output_config"] = {"effort": effort}
