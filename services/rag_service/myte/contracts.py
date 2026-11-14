@@ -53,6 +53,7 @@ ProposalKind = Literal[
     "memory",
 ]
 Mode = Literal["ask", "peer_answer"]
+Channel = Literal["text", "voice"]
 
 
 class HistoryMessage(BaseModel):
@@ -124,6 +125,8 @@ class MyteRequest(BaseModel):
     memories: list[Memory] = Field(default_factory=list, max_length=MAX_MEMORIES)
     attachments: list[Attachment] = Field(default_factory=list, max_length=MAX_ATTACHMENTS)
     mode: Mode = "ask"
+    # "voice": Talk mode. Haiku 5.5, short spoken answers, text released early (latency first).
+    channel: Channel = "text"
     peer: Peer | None = None
 
     @field_validator("attachments")

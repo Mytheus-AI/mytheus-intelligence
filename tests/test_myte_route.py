@@ -647,3 +647,17 @@ def test_short_text_beside_only_a_card_or_proposal_is_the_answer_and_kept():
         ],
     )
     assert "".join(d["text"] for d in of(events, "delta")) == "Suggested a task to upload the logo."
+
+
+def test_talk_mode_answers_on_haiku_short_and_releases_text_early():
+    events, _bff, model, _ = run(
+        [{"text": "Your next meeting is Test, Saturday at 11 PM [1]."}],
+        body={"question": "what's next", "channel": "voice"},
+    )
+    call = next(c for c in model.calls if c.get("stream"))
+    assert call["model"].endswith("haiku-5-5")
+    assert call["max_tokens"] == 400
+    context = call["messages"][0]["content"][1]["text"]
+    assert "spoken conversation (Talk mode)" in context
+    done = [e for e in events if e[0] == "done"][-1]
+    assert done[1]["degraded"] is False

@@ -127,6 +127,16 @@ _PROPOSED = (
 # Characters of a round's text held back before it streams: longer than a "let me check"
 # update, short enough that the first text still lands well inside the 2.5 s target.
 HOLD_CHARS = 240
+# Talk mode: release once a short sentence is there, so the voice can start; the prompt already
+# forbids narration and the person hears a filler during lookups anyway.
+VOICE_HOLD_CHARS = 80
+VOICE_MAX_TOKENS = 400
+_VOICE_NOTE = (
+    "This is a spoken conversation (Talk mode): your answer is read aloud as you write it. "
+    "Answer in one to three short sentences, the most useful thing first. No lists, no "
+    "headings, no markdown, no links. Keep the [n] citations after facts (they are not read "
+    "aloud). Dates and times in whole words. If there is more, offer it in a short question."
+)
 _CARD_DETAIL_KINDS = frozenset({"meeting", "decision", "capacity"})
 _CARD_DETAIL_MAX = 32_000  # bytes of JSON
 
@@ -167,6 +177,7 @@ class _Answer:
     streamed: list[str] = field(default_factory=list)
     round_has_text: bool = False
     held: list[str] = field(default_factory=list)  # this round's text, not yet streamed
+    hold_chars: int = HOLD_CHARS
     released: bool = False  # this round's text is streaming live
     steps: int = 0
     degraded: bool = False
@@ -195,7 +206,7 @@ class _Answer:
             await self.say(piece)
             return
         self.held.append(piece)
-        if sum(len(p) for p in self.held) >= HOLD_CHARS:
+        if sum(len(p) for p in self.held) >= self.hold_chars:
             await self.release()
 
     async def release(self) -> None:
@@ -381,6 +392,10 @@ class MyteLoop:
                 await emit("source", source.event())
             attached.append((source.n, draft))
         context = prompt.render_user(**self._context(req, attached, caller))
+        voice = req.channel == "voice" and not req.peer_mode
+        if voice:
+            context = f"{context}\n\n{_VOICE_NOTE}"
+            state.hold_chars = VOICE_HOLD_CHARS
         messages = _peer_messages(req) if req.peer_mode else _messages(req)
         effort: Any = cfg.effort
         for round_no in range(cfg.max_rounds):
@@ -390,7 +405,7 @@ class MyteLoop:
             if timer is not None:
                 timer.rounds += 1
             result = await self._router.converse(
-                tier="extract",
+                tier="triage" if voice else "extract",
                 system=prompt.system,
                 system_context=context,
                 messages=messages,
@@ -398,7 +413,7 @@ class MyteLoop:
                 tool_choice="none" if last else None,
                 org_id=caller.org_id,
                 user_id=caller.user_id,
-                max_tokens=cfg.max_tokens,
+                max_tokens=VOICE_MAX_TOKENS if voice else cfg.max_tokens,
                 effort=effort,
                 on_delta=state.delta,
                 prompt_ref=prompt.ref,
@@ -408,7 +423,7 @@ class MyteLoop:
             # Text beside only a proposal or a card is the answer itself, and is kept.
             looks_up = any(c.name not in (PROPOSE, CARD) for c in result.tool_calls)
             await state.end_round(drop=looks_up and not last)
-            if result.tier != "extract" or result.truncated:
+            if result.tier != ("triage" if voice else "extract") or result.truncated:
                 state.degraded = True
             if not result.tool_calls:
                 break
