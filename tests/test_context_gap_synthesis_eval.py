@@ -46,8 +46,8 @@ def golden() -> list[dict[str, Any]]:
 
 def recordings(version: str) -> dict[str, str]:
     path = EVAL_DIR / f"recordings/context_gap_agent@{version}.json"
-    data: dict[str, str] = json.loads(path.read_text("utf-8"))
-    return data
+    entries: dict[str, str] = json.loads(path.read_text("utf-8"))["entries"]
+    return entries
 
 
 def hit(text: str, groups: list[str]) -> bool:

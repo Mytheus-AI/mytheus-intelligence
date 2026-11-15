@@ -107,9 +107,25 @@ def export(metrics: Path, repo: Path, per_kind: int = 20) -> dict[str, int]:
         "utf-8",
     )
     ids = {c["id"] for c in chosen}
+    from tests.evalkit.models import prompt_index
+
     for name, rec in (("v2", rec2), ("v3", rec3)):
-        (eval_dir / f"recordings/context_gap_agent@{name}.json").write_text(
-            json.dumps({k: v for k, v in rec.items() if k in ids}, indent=1, ensure_ascii=False)
+        ref = f"context_gap_agent@{name}"
+        (eval_dir / f"recordings/{ref}.json").write_text(
+            json.dumps(
+                {
+                    "prompt": ref,
+                    "prompt_sha256": prompt_index().sha(ref),
+                    "source": "recorded",
+                    "about": (
+                        "Real Sonnet answers (batch, effort low) recorded by the journal red "
+                        "team (research/redteam), keyed by golden case id."
+                    ),
+                    "entries": {k: v for k, v in rec.items() if k in ids},
+                },
+                indent=1,
+                ensure_ascii=False,
+            )
             + "\n",
             "utf-8",
         )
