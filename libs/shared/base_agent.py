@@ -23,7 +23,7 @@ from uuid import UUID
 
 from libs.shared import agent_metrics
 from libs.shared.prompts import Prompt, PromptLoader
-from libs.shared.router import BudgetBlocked, LiteLLMRouter
+from libs.shared.router import MODELS_USED, BudgetBlocked, LiteLLMRouter
 from libs.shared.state import AgentResult, AgentState
 
 logger = logging.getLogger(__name__)
@@ -68,14 +68,25 @@ class BaseAgent(ABC):
         state = dataclasses.replace(
             state, agent_id=self.agent_id, prompt_version=self.prompt.version
         )
+        models: list[str] = []
+        token = MODELS_USED.set(models)
         try:
             out = await self._graph.ainvoke(state)
         except BudgetBlocked:
             self.blocked = True
             return None
+        finally:
+            MODELS_USED.reset(token)
         final = out if isinstance(out, AgentState) else dataclasses.replace(state, **dict(out))
         agent_metrics.observe_window(self.name, state.org_id, final)
-        return final.result
+        result = final.result
+        if result is not None:
+            # Attribution: which prompt and which model produced this card.
+            if result.prompt_version is None:
+                result.prompt_version = self.prompt.ref
+            if result.model_id is None and models:
+                result.model_id = ",".join(models)
+        return result
 
     async def terminate(self) -> None:
         """Release per-meeting resources. Agents hold no durable state, so the base does

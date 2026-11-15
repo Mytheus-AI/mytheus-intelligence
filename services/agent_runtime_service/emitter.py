@@ -238,6 +238,10 @@ class Emitter:
                 "updates_candidate_id": _opt_str(top.get("updates_candidate_id")),
                 "window_start_ms": int(window.start_ms) if window is not None else None,
                 "window_end_ms": int(window.end_ms) if window is not None else None,
+                # Attribution (mytheus-events agent-results, optional): prompt key@version and
+                # the exact model id. A registry on the previous version drops them.
+                "prompt_version": result.prompt_version,
+                "model_id": result.model_id,
             },
         )
         self._produce(env, key=str(org_id))
