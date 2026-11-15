@@ -23,6 +23,7 @@ on:
     branches: [main]
 
 env:
+  UV_PYTHON: "3.12"
   BOOTSTRAP_DATABASE_URL: postgresql+asyncpg://supabase_admin:postgres@localhost:5443/mytheus
   SUPERUSER_DATABASE_URL: postgresql+asyncpg://supabase_admin:postgres@localhost:5443/mytheus
   REDIS_URL: redis://localhost:6390
