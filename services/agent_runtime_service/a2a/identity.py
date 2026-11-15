@@ -7,7 +7,13 @@ replay with any query), but over the message it travels on:
 
 - requester id on an AgentRequest:
   `cga:{org}:{user}|{correlation_id}|{responder_target}|{deadline_micros}|{sha256(query)}`;
-- responder id on an AgentResponse: `cga:{org}:{user}|{correlation_id}|resp`.
+- responder id on an AgentResponse: `cga:{org}:{user}|{correlation_id}|resp`, and with
+  `A2A_RESPONSE_MAC_BODY=1` (the default, journal red team T7)
+  `cga:{org}:{user}|{correlation_id}|resp|{sha256(success | result)}`. Without the body in
+  the MAC, anyone able to rewrite a message on the broker kept a valid responder id while
+  replacing the passages; with it, a changed `result` or `success` breaks the MAC and the
+  requester ignores the response. Both sides are this service, so the flag flips together;
+  during a rolling deploy a mixed pair only costs a few unanswered requests.
 
 A verifier recomputes the MAC from the fields it received, so changing the query, the target,
 the deadline or the correlation id, or moving the id to another message, breaks it. What is left
@@ -53,8 +59,23 @@ def request_material(
     return f"{correlation_id}|{responder_target}|{int(deadline_us)}|{digest}"
 
 
-def response_material(correlation_id: str) -> str:
-    return f"{correlation_id}|resp"
+MAC_BODY_ENV = "A2A_RESPONSE_MAC_BODY"
+
+
+def mac_body_enabled() -> bool:
+    return os.environ.get(MAC_BODY_ENV, "1").strip() != "0"
+
+
+def body_digest(result: str, success: bool) -> str:
+    return hashlib.sha256(f"{int(bool(success))}|{result}".encode()).hexdigest()
+
+
+def response_material(
+    correlation_id: str, result: str | None = None, success: bool | None = None
+) -> str:
+    if result is None or success is None:
+        return f"{correlation_id}|resp"
+    return f"{correlation_id}|resp|{body_digest(result, success)}"
 
 
 class IdentitySigner:
@@ -106,11 +127,28 @@ class IdentitySigner:
         material = request_material(correlation_id, responder_target, deadline_us, query)
         return self._verify(agent_id, material)
 
-    def mint_response(self, org_id: UUID, user_id: UUID, correlation_id: str) -> str:
-        return self._mint(org_id, user_id, response_material(correlation_id))
+    def mint_response(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        correlation_id: str,
+        *,
+        result: str | None = None,
+        success: bool | None = None,
+    ) -> str:
+        """Without `result`/`success`: the id over the correlation id only (the original
+        contract). With them: the id also covers the body."""
+        return self._mint(org_id, user_id, response_material(correlation_id, result, success))
 
-    def verify_response(self, agent_id: object, correlation_id: str) -> AgentIdentity | None:
-        return self._verify(agent_id, response_material(correlation_id))
+    def verify_response(
+        self,
+        agent_id: object,
+        correlation_id: str,
+        *,
+        result: str | None = None,
+        success: bool | None = None,
+    ) -> AgentIdentity | None:
+        return self._verify(agent_id, response_material(correlation_id, result, success))
 
 
 def signer_from_env() -> IdentitySigner | None:

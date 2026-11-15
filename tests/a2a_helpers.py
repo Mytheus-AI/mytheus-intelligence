@@ -223,8 +223,13 @@ class Loopback:
         task.add_done_callback(self.tasks.discard)
 
     async def drain(self) -> None:
+        # Yield first and between rounds: a finished task leaves `tasks` only when its done
+        # callback runs, and gathering already-done tasks never yields, so without the sleep
+        # this loop could spin forever on a task that is done but not yet discarded.
+        await asyncio.sleep(0)
         while self.tasks:
             await asyncio.gather(*list(self.tasks), return_exceptions=True)
+            await asyncio.sleep(0)
 
 
 def lognormal_delay(rng: random.Random, median_s: float, sigma: float, cap_s: float) -> float:

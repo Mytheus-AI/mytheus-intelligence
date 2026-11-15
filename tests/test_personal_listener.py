@@ -297,7 +297,7 @@ def test_the_shipped_prompts_are_registered_and_render():
         "question_gate": "v4",
         "question_agent": "v4",
         "context_gap_gate": "v2",
-        "context_gap_agent": "v2",
+        "context_gap_agent": "v3",  # spotlighted passages (journal red team)
         "proactive_conflict": "v2",
         "proactive_stakeholder": "v3",
         "meeting_agent": "v3",

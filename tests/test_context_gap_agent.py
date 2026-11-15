@@ -698,7 +698,12 @@ async def test_the_responder_re_authorizes_and_a_deny_is_answered_and_logged():
     [resp] = bus.producer.on("agent-responses")
     assert resp["success"] is False and json.loads(resp["result"]) == {"error": "authz_denied"}
     assert resp["correlation_id"] == value["correlation_id"]
-    ident = bus.signer.verify_response(resp["responder_agent_id"], value["correlation_id"])
+    ident = bus.signer.verify_response(
+        resp["responder_agent_id"],
+        value["correlation_id"],
+        result=resp["result"],
+        success=resp["success"],
+    )  # A2A_RESPONSE_MAC_BODY (default on): the id is a MAC over the body too
     assert ident is not None and ident.user_id == ALICE
     [res] = bus.producer.on("agent-results")
     entry = json.loads(res["payload_json"])["collaborations"][0]
@@ -776,7 +781,7 @@ def test_answer_parsing_is_defensive():
 
 async def test_decision_cache_miss_then_hit_with_a_60s_ttl():
     redis, pdp = fakeredis.aioredis.FakeRedis(), FakePdp({("member", "action_status", "org")})
-    pep = Pep(redis, pdp)
+    pep = Pep(redis, pdp, cache_hmac=False)  # raw values; the sealed form: test_redteam_fixes
     assert await pep.authorize(ORG, "member", "action_status", "org") is True
     key = grant_key(ORG, "member", "action_status", "org")
     assert key == f"nexus:{ORG}:a2a:grant:member:action_status:org"
@@ -1047,7 +1052,8 @@ async def test_the_emitted_record_matches_the_contract_shape():
     p = bob.payload
     assert set(p) == {"gap", "collaborations", "fill", "prompt", "model_tier"}
     assert p["gap"] == {"query": QUERY, "query_class": "decision_lineage"}
-    assert p["prompt"] == "context_gap_agent@v2" and p["model_tier"] == "extract"
+    # v3: spotlighted passages (journal red team)
+    assert p["prompt"] == "context_gap_agent@v3" and p["model_tier"] == "extract"
     for c in p["collaborations"]:
         assert set(c) == {
             "id",
@@ -1319,7 +1325,7 @@ async def test_an_unchanged_version_caches_and_a_missing_one_reads_as_zero():
     server = fakeredis.FakeServer()
     mine = fakeredis.aioredis.FakeRedis(server=server)
     pdp = FakePdp(allow_all())
-    pep = Pep(mine, pdp)
+    pep = Pep(mine, pdp, cache_hmac=False)  # raw values; the sealed form: test_redteam_fixes
     assert await mine.get(f"nexus:{ORG}:a2a:grant:version") is None
     assert await pep.authorize(ORG, "admin", "action_status", "department") is True
     assert await mine.get(grant_key(ORG, "admin", "action_status", "department")) == b"allow"
