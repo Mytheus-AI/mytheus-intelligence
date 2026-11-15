@@ -98,7 +98,7 @@ async def eavesdrop() -> dict[str, Any]:
         org_id=org.ORG_ID,
         requester=org.USERS["eng2"].id,
         responder=org.USERS["ceo"].id,
-        query="Project Falcon acquisition target valuation",
+        query="Project Falcon acquisition memo",
         query_class="meeting_context",
         deadline_s=time.time() + 2,
     )

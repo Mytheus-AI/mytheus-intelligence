@@ -234,7 +234,12 @@ class GateAndSynth:
         else:
             self.calls.append("synth")
             text = json.dumps(
-                {"content": "Tier B was chosen.", "confidence": 0.9, "rationale": "r", "sources": [1]}
+                {
+                    "content": "Tier B was chosen.",
+                    "confidence": 0.9,
+                    "rationale": "r",
+                    "sources": [1],
+                }
             )
         return {"choices": [{"message": {"content": text}}], "usage": {"prompt_tokens": 1}}
 

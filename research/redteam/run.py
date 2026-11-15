@@ -148,7 +148,7 @@ def cmd_report(args: argparse.Namespace) -> None:
 def cmd_adaptive(args: argparse.Namespace) -> None:
     from research.redteam.adaptive import run_adaptive
 
-    run_adaptive(args.metrics, make_llm(args.metrics, args.env_file), args.rounds)
+    run_adaptive(args.metrics, make_llm(args.metrics, args.env_file), args.rounds, args.attacker)
 
 
 def main() -> None:
@@ -158,6 +158,7 @@ def main() -> None:
     ap.add_argument("--env-file", type=Path, default=DEFAULT_ENV)
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--rounds", type=int, default=3)
+    ap.add_argument("--attacker", choices=["scripted", "llm"], default="scripted")
     args = ap.parse_args()
     {
         "corpus": cmd_corpus,

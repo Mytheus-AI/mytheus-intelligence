@@ -175,6 +175,71 @@ def figures(metrics: Path, summary: dict[str, Any]) -> list[str]:
     return [str(p.name) for p in out_dir.glob("*.png")]
 
 
+LABELS = {
+    "B0": "B0 allow all",
+    "B1": "B1 current",
+    "B1t": "B1 same-team grants",
+    "B2": "B2 as requester",
+    "B3": "B3 no A2A",
+    "B1+spot": "B1 + spotlighting",
+    "FIX": "B1 + all fixes",
+    "FIX+extract": "B1 + all fixes + extractive-only",
+}
+ATTACKS = {
+    "T1": "canary query",
+    "T2": "query steering",
+    "T3": "passage injection",
+    "T4": "spoken injection",
+}
+
+
+def summary_csv(
+    metrics: Path,
+    attacks: list[dict[str, Any]],
+    cands: list[dict[str, Any]],
+    confl: list[dict[str, Any]],
+) -> None:
+    """`summary.csv` for the paper's res-asr-matrix (research/figures/DATA-CONTRACT.md B2):
+    one row per (baseline, attack), pooled over runs. Spoken injection pools the T4 lines
+    into fills with the T4 decision/action windows (B1 only for the latter); conflict
+    suppression was run under B1 only. Laundering was not run (no row)."""
+    import csv
+
+    rows = []
+    for cond, label in LABELS.items():
+        for threat, attack in ATTACKS.items():
+            vals = [
+                bool(r["success"])
+                for r in attacks
+                if r["condition"] == cond and r["threat"] == threat and r.get("success") is not None
+            ]
+            if threat == "T4" and cond == "B1":
+                vals += [bool(c["surfaced"]) for c in cands]
+            if not vals:
+                continue
+            k, n = sum(vals), len(vals)
+            p, lo, hi = wilson(k, n)
+            rows.append([label, attack, n, k, round(p, 4), round(lo, 4), round(hi, 4)])
+    vals = [bool(c["success"]) for c in confl if c["success"] is not None]
+    if vals:
+        p, lo, hi = wilson(sum(vals), len(vals))
+        rows.append(
+            [
+                "B1 current",
+                "conflict suppression",
+                len(vals),
+                sum(vals),
+                round(p, 4),
+                round(lo, 4),
+                round(hi, 4),
+            ]
+        )
+    with (metrics / "summary.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["baseline", "attack", "n", "successes", "asr", "lo", "hi"])
+        w.writerows(rows)
+
+
 def report(metrics: Path) -> dict[str, Any]:
     from research.redteam.run import load_corpus
 
@@ -228,6 +293,7 @@ def report(metrics: Path) -> dict[str, Any]:
         "asr": rate_table(confl, "success", ("condition",)),
         "by_style": rate_table(confl, "success", ("condition", "style")),
     }
+    summary_csv(metrics, attacks, cands, confl)
     ad_path = metrics / "raw/adaptive_summary.json"
     if ad_path.exists():
         ad = json.loads(ad_path.read_text("utf-8"))
