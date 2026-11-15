@@ -517,9 +517,10 @@ async def test_pii_is_redacted_before_egress_unless_the_tenant_turned_it_off():
     assert "jane@acme.com" not in str(llm.calls[-1]["messages"][1]["content"])
 
 
-async def test_an_identical_call_is_answered_from_the_cache_and_meters_nothing():
+async def test_an_identical_call_is_answered_from_the_cache_and_meters_nothing(monkeypatch):
     """ADR-0030 D1: same tier, model, prompt and normalized input -> no second model call and
     no second usage record. A blocked tenant still gets nothing; a Redis failure is a miss."""
+    monkeypatch.setenv("LLM_CACHE_SECRET", "test-llm-cache-secret-0123456789abcdef")  # sealed
     redis = fakeredis.aioredis.FakeRedis()
     llm, sink = FakeLLM(text="note"), Sink()
     router = LiteLLMRouter(budget_gate(redis), sink, llm, cache=ResponseCache(redis))

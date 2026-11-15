@@ -13,7 +13,8 @@ Response routing (`ResponseRouter`): every runtime instance consumes `agent-resp
 group `agent-runtime-resp-{hostname}` (auto.offset.reset latest) and resolves futures by
 `correlation_id`. An unknown id (another instance's request, a late answer) is ignored. A response
 whose `responder_agent_id` is not the bound id of the user that was asked is ignored too: only the
-asked agent can answer.
+asked agent can answer. With `A2A_RESPONSE_MAC_BODY=1` (default) that id is also a MAC over the
+response's `success` and `result`, so a body rewritten on the broker is ignored as well.
 
 Responder (`Responder.handle`, group `agent-runtime-a2a` on `agent-requests`), the PEP
 pre-process check, in order, fail closed:
@@ -48,6 +49,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import socket
 import time
 import uuid
@@ -64,7 +66,9 @@ from services.agent_runtime_service.a2a.collab import (
     security_window,
 )
 from services.agent_runtime_service.a2a.identity import (
+    AgentIdentity,
     IdentitySigner,
+    mac_body_enabled,
     parse_target,
     responder_target,
 )
@@ -228,17 +232,24 @@ def error_of(result: object) -> str | None:
 # --- requester -----------------------------------------------------------------------------
 
 
+Verifier = Callable[[dict[str, Any]], bool]
+
+
 class ResponseRouter:
-    """In-process futures keyed by `correlation_id`, resolved by the response consumer."""
+    """In-process futures keyed by `correlation_id`, resolved by the response consumer.
+
+    A waiting request names either the exact responder id it expects (the original contract,
+    a MAC over the correlation id only) or a `verify` callback that checks the responder id
+    against the response's own body (`A2A_RESPONSE_MAC_BODY`, `identity.py`)."""
 
     def __init__(self) -> None:
-        self._waiting: dict[str, tuple[asyncio.Future[dict[str, Any]], str]] = {}
+        self._waiting: dict[str, tuple[asyncio.Future[dict[str, Any]], str, Verifier | None]] = {}
 
     def expect(
-        self, correlation_id: str, responder_agent_id: str
+        self, correlation_id: str, responder_agent_id: str, verify: Verifier | None = None
     ) -> asyncio.Future[dict[str, Any]]:
         fut: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
-        self._waiting[correlation_id] = (fut, responder_agent_id)
+        self._waiting[correlation_id] = (fut, responder_agent_id, verify)
         return fut
 
     def forget(self, correlation_id: str) -> None:
@@ -256,9 +267,12 @@ class ResponseRouter:
         waiting = self._waiting.get(cid)
         if waiting is None:
             return False
-        fut, expected = waiting
-        if value.get("responder_agent_id") != expected:
-            logger.warning("a2a: response for %s from an agent that was not asked; ignored", cid)
+        fut, expected, verify = waiting
+        ok = verify(value) if verify is not None else value.get("responder_agent_id") == expected
+        if not ok:
+            logger.warning(
+                "a2a: response for %s not signed by the asked agent over its body; ignored", cid
+            )
             return False
         self._waiting.pop(cid, None)
         if fut.done():
@@ -303,7 +317,23 @@ class A2AClient:
         cid = str(uuid.uuid4())
         target, sent_query = responder_target(responder), query[:MAX_QUERY_CHARS]
         deadline_us = int(deadline_s * 1_000_000)
-        fut = self._router.expect(cid, self.signer.mint_response(org_id, responder, cid))
+        expected = AgentIdentity(org_id=org_id, user_id=responder)
+        signer = self.signer
+
+        def body_signed(value: dict[str, Any]) -> bool:
+            result, success = value.get("result"), value.get("success")
+            if not isinstance(result, str) or not isinstance(success, bool):
+                return False
+            got = signer.verify_response(
+                value.get("responder_agent_id"), cid, result=result, success=success
+            )
+            return got == expected
+
+        fut = self._router.expect(
+            cid,
+            self.signer.mint_response(org_id, responder, cid),
+            body_signed if mac_body_enabled() else None,
+        )
         try:
             await self._emitter.agent_request(
                 org_id=org_id,
@@ -382,8 +412,17 @@ class Responder:
         emitter: Any,
         redis: Any,
         bad_signature_dlq_per_s: int = BAD_SIGNATURE_DLQ_PER_S,
+        retrieve_as_requester: bool | None = None,
     ) -> None:
         self._signer = signer
+        # Experiment flag (journal red team, baseline B2): the original ADR-0013 design, where
+        # the responder retrieves AS THE REQUESTER, so an answer can never carry anything the
+        # requester could not read already. Off (retrieve as the responder) is production.
+        self._as_requester = (
+            os.environ.get("A2A_RESPONDER_AS_REQUESTER", "0").strip() == "1"
+            if retrieve_as_requester is None
+            else retrieve_as_requester
+        )
         self._pep = pep
         self._rag = rag
         self._context = user_context
@@ -539,13 +578,20 @@ class Responder:
             and await self._pep.authorize(org, grantee_role(requester_ctx), query_class, scope)
         )
         assert self._signer is not None
-        me = self._signer.mint_response(org, responder, cid)
+        signer = self._signer
+
+        def me(result: str, success: bool) -> str:
+            if mac_body_enabled():
+                return signer.mint_response(org, responder, cid, result=result, success=success)
+            return signer.mint_response(org, responder, cid)
+
         if not allowed:
+            denied = json.dumps({"error": "authz_denied"})
             await self._emitter.agent_response(
                 org_id=org,
                 correlation_id=cid,
-                responder_agent_id=me,
-                result=json.dumps({"error": "authz_denied"}),
+                responder_agent_id=me(denied, False),
+                result=denied,
                 success=False,
                 latency_ms=_ms(start),
             )
@@ -565,19 +611,25 @@ class Responder:
             remaining = deadline / 1_000_000 - time.time()
             try:
                 found = await asyncio.wait_for(
-                    # AS the responder, never as a service identity (ADR-0033 D1).
-                    self._rag.retrieve(org_id=org, user_id=responder, query=query),
+                    # AS the responder, never as a service identity (ADR-0033 D1); B2: as
+                    # the requester.
+                    self._rag.retrieve(
+                        org_id=org,
+                        user_id=requester if self._as_requester else responder,
+                        query=query,
+                    ),
                     max(0.0, remaining),
                 )
             except TimeoutError:
                 found = []
             kinds = allowed_kinds(query_class)  # the class bounds what may be returned
             body = answer_json([p for p in found if p.kind in kinds])
+        result = body if body is not None else json.dumps({"error": "no_answer"})
         await self._emitter.agent_response(
             org_id=org,
             correlation_id=cid,
-            responder_agent_id=me,
-            result=body if body is not None else json.dumps({"error": "no_answer"}),
+            responder_agent_id=me(result, body is not None),
+            result=result,
             success=body is not None,
             latency_ms=_ms(start),
         )

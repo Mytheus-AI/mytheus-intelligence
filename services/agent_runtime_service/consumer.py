@@ -482,6 +482,7 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         related=related_from_env(),
         user_context=contexts.get,
         delegation=delegation_from_env(),  # polish wave 3: delegated answers
+        redis=redis,  # red-team hardening: per-user gap rate limit, per-meeting A2A cap
     )
     org_contexts = OrgContextClient()
     agenda_client = agenda_from_env()

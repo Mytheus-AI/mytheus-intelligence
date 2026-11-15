@@ -37,6 +37,20 @@ closed 30 s window:
 7. **Output**: one `context_fill` AgentResult per requester that had any hop activity, with the
    collaboration entries core-api turns into `agent_collaborations` rows (`a2a/collab.py`).
 
+Hardening (journal red team; each behind a flag so it can be ablated):
+- spotlighting: from `context_gap_agent@v3` the passages are rendered as `<passage n="N">`
+  blocks with datamarked text (words joined by `SPOTLIGHT_MARK`, Hines et al. 2024) and the
+  prompt says passages are data, never instructions. Pin `v2` to switch it off;
+- `CONTEXT_GAP_USER_GAPS_PER_HOUR` (default 20, 0 = off): gate calls a speaker can trigger per
+  hour (`nexus:{org}:ratelimit:context-gap:{user}:{hour}`), so one participant cannot drain
+  the tenant budget by saying "last time" every window. Checked before the gate; a Redis
+  failure admits (the budget gate still holds);
+- `CONTEXT_GAP_MEETING_A2A_CAP` (default 3, 0 = off): A2A-answered fills per (meeting,
+  requester) (`nexus:{org}:a2a:extract:{meeting}:{requester}`); past the cap the requester
+  gets its own RAG only, which bounds what one meeting can extract from colleagues' agents;
+- `CONTEXT_GAP_EXTRACTIVE=1` (default off): the fill's content is a verbatim sentence of the
+  first cited passage (the one closest to the model's wording), never model-written text.
+
 What the model sees: transcript lines labelled "You" / "Participant N", the search query and
 passage text. No user id, name or email; the router redacts PII on top. Every model call goes
 through the router (budget gate, metering on `usage-events`).
@@ -107,6 +121,12 @@ DEFAULT_DEADLINE_MS = 1500
 DEFAULT_GATE_THRESHOLD = 0.5
 DEFAULT_HAVE_SCORE = 0.5
 DEFAULT_MAX_REQUESTERS = 2
+DEFAULT_USER_GAPS_PER_HOUR = 20
+DEFAULT_MEETING_A2A_CAP = 3
+EXTRACT_TTL_S = 24 * 3600
+SPOTLIGHT_MARK = "\u02c6"  # the circumflex the v3 prompt names
+SPOTLIGHT_FROM = 3  # prompt versions >= v3 expect spotlighted passages
+_WORDS = re.compile(r"[a-z0-9]+")
 
 _REFERENCE = re.compile(
     r"\b(last time|we decided|we agreed|as (?:we )?discussed|the (?:[\w'-]+ ){0,3}decision|"
@@ -148,6 +168,9 @@ class ContextGapSettings:
     gate_threshold: float = DEFAULT_GATE_THRESHOLD
     have_score: float = DEFAULT_HAVE_SCORE
     max_requesters: int = DEFAULT_MAX_REQUESTERS
+    user_gaps_per_hour: int = DEFAULT_USER_GAPS_PER_HOUR
+    meeting_a2a_cap: int = DEFAULT_MEETING_A2A_CAP
+    extractive: bool = False
 
     @classmethod
     def from_env(cls) -> ContextGapSettings:
@@ -159,6 +182,13 @@ class ContextGapSettings:
             ),
             have_score=_env_float("CONTEXT_GAP_HAVE_SCORE", DEFAULT_HAVE_SCORE),
             max_requesters=max(0, _env_int("CONTEXT_GAP_MAX_REQUESTERS", DEFAULT_MAX_REQUESTERS)),
+            user_gaps_per_hour=max(
+                0, _env_int("CONTEXT_GAP_USER_GAPS_PER_HOUR", DEFAULT_USER_GAPS_PER_HOUR)
+            ),
+            meeting_a2a_cap=max(
+                0, _env_int("CONTEXT_GAP_MEETING_A2A_CAP", DEFAULT_MEETING_A2A_CAP)
+            ),
+            extractive=os.environ.get("CONTEXT_GAP_EXTRACTIVE", "0").strip() == "1",
         )
 
 
@@ -174,6 +204,8 @@ class ContextGapDeps:
     user_context: ContextFn | None = None
     # Polish wave 3: delegated answers (`delegation/`); None = nobody answers for anyone.
     delegation: DelegationSource | None = None
+    # The rate-limit and extraction-cap counters; None = no limits (tests, evals).
+    redis: Any = None
 
 
 def rag_from_env(timeout_s: float) -> RagClient | None:
@@ -242,6 +274,34 @@ def parse_gate(text: str) -> tuple[bool, str, float]:
 
 def render_passages(passages: list[ScoredPassage]) -> str:
     return "\n".join(f"[{i + 1}] {p.text}" for i, p in enumerate(passages)) or "(none)"
+
+
+def render_spotlight(passages: list[ScoredPassage]) -> str:
+    """Delimited, datamarked passages (spotlighting): angle brackets in the text are replaced
+    so a passage cannot close its own block, and every run of whitespace becomes the mark."""
+    blocks = []
+    for i, p in enumerate(passages):
+        text = p.text.replace("<", "\u2039").replace(">", "\u203a")
+        blocks.append(f'<passage n="{i + 1}">{SPOTLIGHT_MARK.join(text.split())}</passage>')
+    return "\n".join(blocks) or "(none)"
+
+
+def spotlighted(version: str) -> bool:
+    try:
+        return int(version.lstrip("v")) >= SPOTLIGHT_FROM
+    except ValueError:
+        return False
+
+
+def extract_quote(content: str, texts: list[str]) -> str:
+    """The sentence of the first cited passage that shares the most words with the model's
+    content, verbatim (the extractive-only fill)."""
+    if not texts:
+        return ""
+    want = set(_WORDS.findall(content.lower()))
+    sentences = [x for x in _SENTENCE_END.split(" ".join(texts[0].split())) if x.strip()]
+    best = max(sentences, key=lambda x: len(want & set(_WORDS.findall(x.lower()))), default="")
+    return clip_content(best)
 
 
 def clip_content(text: str) -> str:
@@ -402,6 +462,8 @@ class ContextGapAgent(BaseAgent):
         if hit is None:
             return None
         speaker = _uuid(hit.speaker_id)
+        if not await self._admit(window.org_id, speaker):
+            return None  # this speaker's gap triggers are over the hourly limit
         state = AgentState(
             meeting_id=window.meeting_id,
             user_id=speaker or window.meeting_id,
@@ -426,6 +488,48 @@ class ContextGapAgent(BaseAgent):
             speaker=speaker,
             reference=hit.text,
         )
+
+    async def _admit(self, org_id: UUID, speaker: UUID | None) -> bool:
+        limit, redis = self._settings.user_gaps_per_hour, self._deps.redis
+        if limit <= 0 or redis is None:
+            return True
+        hour = int(time.time() // 3600)
+        key = f"nexus:{org_id}:ratelimit:context-gap:{speaker or 'unknown'}:{hour}"
+        try:
+            count = int(await redis.incr(key))
+            if count == 1:
+                await redis.expire(key, 3600)
+        except Exception:  # noqa: BLE001 - a limiter outage admits; the budget gate still holds
+            logger.warning("context-gap rate limit unavailable org=%s; admitted", org_id)
+            return True
+        if count > limit:
+            logger.info("context-gap trigger over %s/h for a speaker org=%s", limit, org_id)
+            return False
+        return True
+
+    def _extract_key(self, org_id: UUID, meeting_id: UUID, requester: UUID) -> str:
+        return f"nexus:{org_id}:a2a:extract:{meeting_id}:{requester}"
+
+    async def _extractions_left(self, org_id: UUID, meeting_id: UUID, requester: UUID) -> bool:
+        cap, redis = self._settings.meeting_a2a_cap, self._deps.redis
+        if cap <= 0 or redis is None:
+            return True
+        try:
+            raw = await redis.get(self._extract_key(org_id, meeting_id, requester))
+        except Exception:  # noqa: BLE001 - unknown count: no A2A this time (fail closed)
+            return False
+        return int(raw or 0) < cap
+
+    async def _count_extraction(self, org_id: UUID, meeting_id: UUID, requester: UUID) -> None:
+        redis = self._deps.redis
+        if self._settings.meeting_a2a_cap <= 0 or redis is None:
+            return
+        key = self._extract_key(org_id, meeting_id, requester)
+        try:
+            await redis.incr(key)
+            await redis.expire(key, EXTRACT_TTL_S)
+        except Exception:  # noqa: BLE001
+            logger.warning("a2a extraction count not recorded org=%s", org_id)
 
     async def _throttled(self, org_id: UUID) -> bool:
         try:
@@ -488,7 +592,13 @@ class ContextGapAgent(BaseAgent):
         entries: list[dict[str, Any]] = []
         winner: Winner | None = None
         a2a, pep = self._deps.a2a, self._deps.pep
-        if self._settings.a2a and not throttled and a2a is not None and pep is not None:
+        if (
+            self._settings.a2a
+            and not throttled
+            and a2a is not None
+            and pep is not None
+            and await self._extractions_left(org, window.meeting_id, requester)
+        ):
             peers = sorted(
                 (u for u in people if u != requester), key=lambda u: (-own[u].best, str(u))
             )[:MAX_PEERS]
@@ -526,6 +636,8 @@ class ContextGapAgent(BaseAgent):
                         deadline,
                         entries,
                     )
+        if winner is not None:
+            await self._count_extraction(org, window.meeting_id, requester)
         if winner is None:
             mine = own[requester]
             entries.append(
@@ -669,7 +781,11 @@ class ContextGapAgent(BaseAgent):
                 **self.prompt.user_parts(
                     query=query,
                     window=render_window(window, requester),
-                    passages=render_passages(winner.passages),
+                    passages=(
+                        render_spotlight(winner.passages)
+                        if spotlighted(self.prompt.version)
+                        else render_passages(winner.passages)
+                    ),
                     **company_values(context),
                 ),
                 org_id=window.org_id,
@@ -688,9 +804,21 @@ class ContextGapAgent(BaseAgent):
         citations = cited(obj.get("sources"), winner.passages)
         if not citations:
             return None, out.tier  # never surface uncited output
+        text = clip_content(content)
+        if self._settings.extractive:
+            raw_sources = obj.get("sources")
+            sources: list[Any] = raw_sources if isinstance(raw_sources, list) else []
+            texts = [
+                winner.passages[n - 1].text
+                for n in sources
+                if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= len(winner.passages)
+            ]
+            text = extract_quote(content, texts)
+            if not text:
+                return None, out.tier
         return {
             "id": numbered[winner.index]["id"],
-            "content": clip_content(content),
+            "content": text,
             "confidence": confidence,
             "surfaced": band(confidence, limits) == "surfaced",
             "rationale": text_of(obj, "rationale") or "",

@@ -25,12 +25,29 @@ misses on the same key in one process share a single PDP call. An answer is cach
 the per-org grant version (`nexus:{org_id}:a2a:grant:version`, INCRed by identity-tenant-service
 on every grant change) did not move during the PDP call, so a revoke racing a miss can never
 leave a stale `allow` in the cache.
+
+Hardening (journal red team, each behind a flag so it can be ablated; both default on):
+
+- `A2A_MEETING_CONTEXT_EXPLICIT=1`: `meeting_context` is no longer the class of a query with no
+  signal. It needs an explicit meeting signal (meeting, call, discussed, said, notes, doc, ...);
+  a query with none is `unclassified`, which is not a class, so the PEP denies it without a PDP
+  call and `allowed_kinds` returns nothing. The tenant side of the same control is that
+  `meeting_context` (transcripts and documents, the richest kinds) is granted explicitly rather
+  than by the platform template.
+- `A2A_GRANT_CACHE_HMAC=1`: a cached decision is stored as `{allow|deny}.{mac}`, the MAC an
+  HMAC-SHA256 over `{key}|{decision}` under `A2A_GRANT_CACHE_SECRET` (or, without one, a key
+  derived from `AGENT_IDENTITY_SECRET`). A value that does not verify (a planted `allow`, a
+  legacy unsigned value) is a miss: the PDP is asked again. No key at all means nothing is
+  cached (every check asks the PDP).
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
+import os
 import re
 from typing import Any, Protocol
 from uuid import UUID
@@ -60,6 +77,45 @@ _ACTION_WORDS = re.compile(
 )
 
 
+_MEETING_WORDS = re.compile(
+    r"\b(meetings?|calls?|syncs?|stand-?ups?|1:1s?|one-on-ones?|discuss\w*|conversations?|"
+    r"talk\w*|said|says|mention\w*|notes?|minutes|presentations?|demos?|reviews?|retros?|"
+    r"documents?|docs?|memos?|write-?ups?|slides?|decks?|specs?|transcripts?|recordings?)\b",
+    re.IGNORECASE,
+)
+UNCLASSIFIED = "unclassified"
+EXPLICIT_ENV = "A2A_MEETING_CONTEXT_EXPLICIT"
+CACHE_HMAC_ENV = "A2A_GRANT_CACHE_HMAC"
+CACHE_SECRET_ENV = "A2A_GRANT_CACHE_SECRET"
+
+
+def meeting_context_explicit() -> bool:
+    return os.environ.get(EXPLICIT_ENV, "1").strip() != "0"
+
+
+def cache_hmac_key() -> bytes | None:
+    """The grant-cache MAC key, or None when the HMAC is on but no secret is configured."""
+    own = os.environ.get(CACHE_SECRET_ENV, "").strip()
+    if len(own) >= 32:
+        return own.encode()
+    identity = os.environ.get("AGENT_IDENTITY_SECRET", "").strip()
+    if len(identity) >= 32:
+        return hmac.new(identity.encode(), b"a2a-grant-cache-v1", hashlib.sha256).digest()
+    return None
+
+
+def seal(key: str, decision: str, mac_key: bytes) -> str:
+    mac = hmac.new(mac_key, f"{key}|{decision}".encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{decision}.{mac}"
+
+
+def unseal(key: str, raw: str, mac_key: bytes) -> str | None:
+    decision, _, mac = raw.partition(".")
+    if decision not in ("allow", "deny") or not mac:
+        return None
+    return decision if hmac.compare_digest(seal(key, decision, mac_key), raw) else None
+
+
 class Pdp(Protocol):
     async def authorize(
         self, org_id: UUID, grantee_role: str, query_class: str, target_scope: str
@@ -71,6 +127,8 @@ def classify_query(query: str) -> str:
         return "decision_lineage"
     if _ACTION_WORDS.search(query):
         return "action_status"
+    if meeting_context_explicit() and not _MEETING_WORDS.search(query):
+        return UNCLASSIFIED  # not a class: denied, and no kind may come back
     return "meeting_context"
 
 
@@ -108,10 +166,13 @@ def grant_key(org_id: UUID, role: str, query_class: str, target_scope: str) -> s
 
 
 class Pep:
-    def __init__(self, redis: Any, pdp: Pdp, ttl_s: int = GRANT_TTL_S) -> None:
+    def __init__(
+        self, redis: Any, pdp: Pdp, ttl_s: int = GRANT_TTL_S, cache_hmac: bool | None = None
+    ) -> None:
         self._redis = redis
         self._pdp = pdp
         self._ttl = ttl_s
+        self._cache_hmac = cache_hmac
         # Concurrent misses on one key share one PDP call (a cold cache at a window boundary
         # would otherwise send one Authorize per peer per requester at the same instant).
         self._inflight: dict[str, asyncio.Future[bool]] = {}
@@ -132,6 +193,12 @@ class Pep:
             logger.warning("a2a grant cache read failed org=%s; asking the PDP", org_id)
         if isinstance(cached, bytes):
             cached = cached.decode("utf-8", "replace")
+        if self._hmac_on():
+            mac_key = cache_hmac_key()
+            verified = unseal(key, cached, mac_key) if mac_key and isinstance(cached, str) else None
+            if cached is not None and verified is None:
+                logger.warning("a2a grant cache value failed its MAC org=%s", org_id)
+            cached = verified
         if cached in ("allow", "deny"):
             return bool(cached == "allow")
         flight = self._inflight.get(key)
@@ -140,6 +207,11 @@ class Pep:
             self._inflight[key] = flight
             flight.add_done_callback(lambda _f: self._inflight.pop(key, None))
         return await asyncio.shield(flight)
+
+    def _hmac_on(self) -> bool:
+        if self._cache_hmac is not None:
+            return self._cache_hmac
+        return os.environ.get(CACHE_HMAC_ENV, "1").strip() != "0"
 
     async def _ask(
         self, key: str, org_id: UUID, role: str, query_class: str, target_scope: str
@@ -169,11 +241,15 @@ class Pep:
                 decision = None
             if decision not in ("allow", "deny"):
                 return False  # PDP down or nonsense: deny, and do not cache it
-            if before is not None:
+            value: str | None = decision
+            if self._hmac_on():
+                mac_key = cache_hmac_key()
+                value = seal(key, decision, mac_key) if mac_key else None
+            if before is not None and value is not None:
                 try:
                     if _version(await pipe.get(vkey)) == before:
                         pipe.multi()
-                        pipe.set(key, decision, ex=self._ttl)
+                        pipe.set(key, value, ex=self._ttl)
                         await pipe.execute()
                     else:
                         logger.info("a2a grants changed during the PDP call org=%s", org_id)
