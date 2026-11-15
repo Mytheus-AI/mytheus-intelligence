@@ -31,7 +31,13 @@ from typing import Any, Protocol
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from libs.shared.db_guard import install_global_role_guard
 from libs.shared.metrics import record_outbox
+
+# Every process that touches Postgres imports this module, so this is where the process-wide
+# role guard is installed (journal plan Part 3 fix 5): no engine in the process may connect as a
+# role that makes row-level security inert. Idempotent.
+install_global_role_guard()
 
 logger = logging.getLogger(__name__)
 

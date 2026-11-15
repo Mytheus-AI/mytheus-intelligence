@@ -31,6 +31,13 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from libs.shared.db_guard import install_global_role_guard
+
+# Every process that touches Postgres imports this module, so this is where the process-wide
+# role guard is installed (journal plan Part 3 fix 5): no engine in the process may connect as a
+# role that makes row-level security inert. Idempotent.
+install_global_role_guard()
+
 SCHEMA = "intelligence"
 
 
