@@ -120,7 +120,9 @@ def figures(metrics: Path, summary: dict[str, Any]) -> list[str]:
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(5.6, 4.2))
-    for c in conds:
+    # the leave-one-out points sit on top of FIX or B1 (see asr_matrix); the frontier shows
+    # the baselines and the fixed system only, so the labels stay readable
+    for c in [c for c in ("B0", "B1", "B1t", "B2", "B3", "FIX") if c in conds]:
         s = summary["by_condition"][c]
         if "exfil" not in s or "benign_correct" not in s:
             continue

@@ -18,7 +18,7 @@ live outside this repository, in the journal's metrics folder (`research/metrics
 | `harness.py` | Runs instances under a condition (grant table, class filter, retrieval identity, code flags, prompt pins) |
 | `fixes.py` | Post-fix conditions: all controls on, leave-one-out ablations, extractive option |
 | `analyze.py` | Oracles (canary leak, payload, paired suppression, benign correctness) and Wilson intervals |
-| `adaptive.py`, `prompts/attacker.md` | One adaptive attacker loop (Sonnet rewrites failed attacks knowing the defences) |
+| `adaptive.py`, `prompts/attacker.md` | One adaptive attacker loop over failed attacks: an LLM attacker (`--attacker llm`; Sonnet refused the role) or the scripted attacker with full knowledge of the controls (default) |
 | `bandwidth.py` | Exfiltration bandwidth per meeting and T8 gap-flooding cost, with a perfectly leaky scripted model ($0) |
 | `protocol_attacks.py` | T7: response-body forgery before/after, eavesdropping, service-identity trust assumption, planted cache entries |
 | `report.py`, `run.py` | Tables, figures and the driver |
