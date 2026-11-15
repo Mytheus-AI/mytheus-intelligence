@@ -48,6 +48,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import socket
 import time
 import uuid
@@ -382,8 +383,17 @@ class Responder:
         emitter: Any,
         redis: Any,
         bad_signature_dlq_per_s: int = BAD_SIGNATURE_DLQ_PER_S,
+        retrieve_as_requester: bool | None = None,
     ) -> None:
         self._signer = signer
+        # Experiment flag (journal red team, baseline B2): the original ADR-0013 design, where
+        # the responder retrieves AS THE REQUESTER, so an answer can never carry anything the
+        # requester could not read already. Off (retrieve as the responder) is production.
+        self._as_requester = (
+            os.environ.get("A2A_RESPONDER_AS_REQUESTER", "0").strip() == "1"
+            if retrieve_as_requester is None
+            else retrieve_as_requester
+        )
         self._pep = pep
         self._rag = rag
         self._context = user_context
@@ -565,8 +575,13 @@ class Responder:
             remaining = deadline / 1_000_000 - time.time()
             try:
                 found = await asyncio.wait_for(
-                    # AS the responder, never as a service identity (ADR-0033 D1).
-                    self._rag.retrieve(org_id=org, user_id=responder, query=query),
+                    # AS the responder, never as a service identity (ADR-0033 D1); B2: as
+                    # the requester.
+                    self._rag.retrieve(
+                        org_id=org,
+                        user_id=requester if self._as_requester else responder,
+                        query=query,
+                    ),
                     max(0.0, remaining),
                 )
             except TimeoutError:
