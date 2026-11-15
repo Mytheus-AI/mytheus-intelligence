@@ -1,0 +1,158 @@
+name: test
+
+# mytheus-intelligence had no test CI at all (journal plan Part 3 fix 8): its unit tests, its RLS
+# and grant tests, its Qdrant tenancy and API-key tests and its A2A adversarial tests ran only on
+# a developer laptop. This workflow runs them against real engines on every PR:
+#
+#   Postgres   supabase/postgres:15.8.1.060, the production image, bootstrapped and hardened
+#              the way mytheus-platform's deploy/postgres-init does it
+#   Redis      redis:7-alpine
+#   Qdrant     qdrant/qdrant:v1.12.4 with the write and read-only API keys
+#   Redpanda   v24.1.1 + Schema Registry, with mytheus-events' topics and subjects
+#
+# MYTHEUS_REQUIRE_{DB,REDIS,QDRANT,REGISTRY}=1 turn "service unreachable" from a skip into a
+# failure (tests/conftest.py), so a broken container cannot produce a green build. MinIO is not
+# started: the object-storage tests skip, and say so in the log. No test calls a paid model.
+#
+# The ports are the ones tests/conftest.py and several tests hard-code for the local stack
+# (5443, 6390, 6333, 9092), so CI and a developer run the identical configuration.
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+env:
+  BOOTSTRAP_DATABASE_URL: postgresql+asyncpg://supabase_admin:postgres@localhost:5443/mytheus
+  SUPERUSER_DATABASE_URL: postgresql+asyncpg://supabase_admin:postgres@localhost:5443/mytheus
+  REDIS_URL: redis://localhost:6390
+  QDRANT_URL: http://localhost:6333
+  REDPANDA_BROKERS: localhost:9092
+  SCHEMA_REGISTRY_URL: http://localhost:8081
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run black --check .
+      - run: uv run mypy .
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: supabase/postgres:15.8.1.060
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mytheus
+        ports:
+          - 5443:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -h localhost"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 40
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6390:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:v1.12.4
+        env:
+          QDRANT__SERVICE__API_KEY: dev-qdrant-write
+          QDRANT__SERVICE__READ_ONLY_API_KEY: dev-qdrant-read
+        ports:
+          - 6333:6333
+    steps:
+      - uses: actions/checkout@v4
+      - name: check out mytheus-events (topics and Avro subjects)
+        uses: actions/checkout@v4
+        with:
+          repository: Mytheus-AI/mytheus-events
+          path: _events
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+
+      - name: start Redpanda with a Schema Registry
+        # Not a service container: Redpanda needs command-line flags, which services cannot set.
+        run: |
+          docker run -d --name redpanda -p 9092:9092 -p 8081:8081 \
+            redpandadata/redpanda:v24.1.1 redpanda start --smp 1 --memory 1G --overprovisioned \
+            --node-id 0 --check=false --kafka-addr PLAINTEXT://0.0.0.0:9092 \
+            --advertise-kafka-addr PLAINTEXT://localhost:9092 --schema-registry-addr 0.0.0.0:8081
+          for i in $(seq 1 60); do curl -sf localhost:8081/subjects >/dev/null && break; sleep 2; done
+
+      - name: topics (one partition each on a one-core broker) and subjects
+        working-directory: _events
+        run: |
+          sed 's/-p "\$2"/-p 1/' scripts/create_topics.sh > /tmp/create_topics.sh
+          docker cp /tmp/create_topics.sh redpanda:/tmp/create_topics.sh
+          docker exec redpanda bash /tmp/create_topics.sh
+          uv sync
+          make register SR_URL=http://localhost:8081
+
+      - name: bootstrap the production image as production does
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for i in $(seq 1 30); do
+            psql -h localhost -p 5443 -U supabase_admin -d mytheus -c "select 1" >/dev/null 2>&1 && break
+            sleep 2
+          done
+          psql -v ON_ERROR_STOP=1 -h localhost -p 5443 -U supabase_admin -d mytheus \
+            -c "ALTER USER postgres WITH PASSWORD 'postgres';" \
+            -c "ALTER SCHEMA public OWNER TO postgres;" \
+            -c "GRANT ALL ON SCHEMA public TO postgres;"
+
+      - name: mytheus-backend migrations (the shared database's public schema)
+        # This repo's tables live in `intelligence`, but the database is shared, and the suite
+        # asserts it never touches mytheus-backend's `public.outbox`, which must exist.
+        env:
+          BOOTSTRAP_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5443/mytheus
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5443/mytheus
+        run: |
+          git clone --depth 1 https://github.com/Mytheus-AI/mytheus-backend.git _backend
+          cd _backend && uv sync && uv run alembic -c migrations/alembic.ini upgrade head
+
+      - name: pytest (database, Redis, Qdrant and registry tests MUST run, not skip)
+        env:
+          MYTHEUS_REQUIRE_DB: "1"
+          MYTHEUS_REQUIRE_REDIS: "1"
+          MYTHEUS_REQUIRE_QDRANT: "1"
+          MYTHEUS_REQUIRE_REGISTRY: "1"
+        run: uv run pytest -q -rs
+
+      - name: assert the isolation and adversarial tests actually executed
+        # Belt and braces, as in mytheus-backend: if these are renamed, marked xfail or start
+        # skipping, the count stops matching and the build fails loudly.
+        env:
+          MYTHEUS_REQUIRE_DB: "1"
+          MYTHEUS_REQUIRE_REDIS: "1"
+          MYTHEUS_REQUIRE_QDRANT: "1"
+          MYTHEUS_REQUIRE_REGISTRY: "1"
+        run: |
+          uv run pytest -q --no-header \
+            tests/test_migration_rls_grants.py \
+            tests/test_db_role_guard.py \
+            tests/test_qdrant_tenancy.py \
+            tests/test_qdrant_api_key_isolation.py \
+            tests/test_index_guard.py \
+            tests/test_context_gap_bus_live.py \
+            tests/test_context_gap_agent.py \
+            tests/test_delegated_answers.py \
+            tests/test_never_record_redteam.py \
+            tests/test_service_caller_auth.py \
+            | tee /tmp/isolation.txt
+          if grep -qE "[0-9]+ (failed|skipped|error)" /tmp/isolation.txt; then
+            echo "::error::an isolation or adversarial test failed or skipped"; exit 1
+          fi
+          grep -qE "[0-9]+ passed" /tmp/isolation.txt
