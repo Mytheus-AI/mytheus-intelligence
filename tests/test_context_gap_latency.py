@@ -22,6 +22,8 @@ import time
 import uuid
 from typing import Any
 
+import pytest
+
 from services.agent_runtime_service.a2a.pep import Pep
 from tests.a2a_helpers import (
     FakePdp,
@@ -42,6 +44,14 @@ class SlowPdp(FakePdp):
     async def authorize(self, org_id: uuid.UUID, role: str, qc: str, scope: str) -> str | None:
         await asyncio.sleep(0.015)
         return await super().authorize(org_id, role, qc, scope)
+
+
+@pytest.fixture(autouse=True)
+def _grant_cache_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The PEP decision cache is HMAC-sealed (A2A_GRANT_CACHE_HMAC, on by default); with no key
+    # configured it fails safe and never caches, which this test's cache assertion would
+    # misread as a regression. Give it a key, as production must.
+    monkeypatch.setenv("A2A_GRANT_CACHE_SECRET", "t" * 40)
 
 
 async def _meeting(rng: random.Random, samples: list[float]) -> None:
