@@ -134,7 +134,7 @@ jobs:
           MYTHEUS_REQUIRE_REDIS: "1"
           MYTHEUS_REQUIRE_QDRANT: "1"
           MYTHEUS_REQUIRE_REGISTRY: "1"
-        run: uv run pytest -q -rs
+        run: uv run pytest -q -rs --ignore=_backend
 
       - name: assert the isolation and adversarial tests actually executed
         # Belt and braces, as in mytheus-backend: if these are renamed, marked xfail or start
@@ -145,7 +145,7 @@ jobs:
           MYTHEUS_REQUIRE_QDRANT: "1"
           MYTHEUS_REQUIRE_REGISTRY: "1"
         run: |
-          uv run pytest -q --no-header \
+          uv run pytest -q --no-header --ignore=_backend \
             tests/test_migration_rls_grants.py \
             tests/test_db_role_guard.py \
             tests/test_qdrant_tenancy.py \
