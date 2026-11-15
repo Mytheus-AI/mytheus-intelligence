@@ -168,10 +168,24 @@ class BatchLLM:
     # --- batches ---------------------------------------------------------------------------
 
     def estimate(self, requests: list[Request]) -> float:
+        """Dollars for these requests: the mean measured batch cost per request of the same
+        model in the response store, times 1.5, once there are at least 5 answers of that
+        model; before that, a pessimistic bound (every input token uncached, 700 output
+        tokens for Sonnet). The first estimate of the baseline run used the bound and was
+        about five times the real cost (README)."""
         budget = budget_module(self.metrics_root)
+        seen: dict[str, list[float]] = {}
+        for a in self.answers.values():
+            model = budget._norm(a["model"])
+            seen.setdefault(model, []).append(budget.cost(a["usage"], model, batch=True))
         total = 0.0
         for r in requests:
-            pin, pout, _read, _write = budget.PRICES[budget._norm(r.params["model"])]
+            model = budget._norm(r.params["model"])
+            history = seen.get(model, [])
+            if len(history) >= 5:
+                total += 1.5 * sum(history) / len(history)
+                continue
+            pin, pout, _read, _write = budget.PRICES[model]
             total += (r.est_in * pin + r.est_out * pout) / 1e6 * 0.5
         return total
 

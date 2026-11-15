@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 NS = uuid.UUID("6a1f0c8e-2d4b-5e7a-9c31-0f5b8d2e7a64")
 ORG_ID = uuid.uuid5(NS, "org:halyard")
@@ -43,7 +44,7 @@ class User:
     def id(self) -> uuid.UUID:
         return uid("user", self.key)
 
-    def context(self) -> dict[str, object]:
+    def context(self) -> dict[str, Any]:
         """The UserContext fields the PEP reads (rbac_tier, team_ids, department_id)."""
         return {
             "user_id": str(self.id),

@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import fakeredis
+
 from libs.shared.prompts import PromptLoader
 from libs.shared.router import EXTRACT_MAX_TOKENS, SYNTHESIS_EFFORT, LiteLLMRouter
 from libs.shared.state import AgentState, TranscriptWindow, Turn
@@ -72,6 +74,7 @@ class Condition:
     class_filter: bool = True
     as_requester: bool = False
     env: tuple[tuple[str, str], ...] = ()  # code flags (the fixes), set while the condition runs
+    pins: tuple[tuple[str, str], ...] = ()  # prompt version pins for the org (spotlight off)
     note: str = ""
 
 
@@ -170,7 +173,7 @@ class RecordingGapAgent(ContextGapAgent):
         super().__init__(*a, **kw)
         self.shown: dict[UUID, Winner] = {}
 
-    async def _synthesize(  # type: ignore[override]
+    async def _synthesize(
         self,
         window: TranscriptWindow,
         requester: UUID,
@@ -219,14 +222,20 @@ class Harness:
                 rag=rag,
                 a2a=loop.client,
                 pep=loop.pep,
-                related=related,
+                related=related,  # type: ignore[arg-type]
                 user_context=loop.user_context,
             ),
-            settings=replace(ContextGapSettings(), a2a=cond.a2a, deadline_ms=self.deadline_ms),
+            settings=replace(
+                ContextGapSettings.from_env(), a2a=cond.a2a, deadline_ms=self.deadline_ms
+            ),
         )
+        if hasattr(agent._deps, "redis"):  # the post-fix agent's rate-limit / cap counters
+            agent._deps.redis = fakeredis.aioredis.FakeRedis()
         meeting = org.uid("meeting-live", inst.id)
         await agent.spawn(org_id=org.ORG_ID, meeting_id=meeting, user_id=meeting)
-        people = {org.USERS[k].id: contexts[org.USERS[k].id] for k in inst.participants}
+        people: dict[UUID, dict[str, Any] | None] = {
+            org.USERS[k].id: contexts[org.USERS[k].id] for k in inst.participants
+        }
         emitted = await agent.process_meeting(window_of(inst, meeting), people)
         await drain(loop)
         by_id = {u.id: k for k, u in org.USERS.items()}
@@ -277,8 +286,14 @@ class Harness:
             async with sem:
                 return await self.gap_one(inst, cond, run)
 
-        with applied(cond):
-            return list(await asyncio.gather(*(one(i) for i in instances)))
+        pins = self.loader._pins
+        saved = dict(pins.get(str(org.ORG_ID), {}))
+        pins[str(org.ORG_ID)] = {**saved, **dict(cond.pins)}
+        try:
+            with applied(cond):
+                return list(await asyncio.gather(*(one(i) for i in instances)))
+        finally:
+            pins[str(org.ORG_ID)] = saved
 
     # --- DecisionAgent / ActionAgent (T4 candidates) -------------------------------------------
 
