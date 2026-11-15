@@ -248,12 +248,25 @@ async def test_every_intelligence_tenant_policy_is_in_initplan_form(migrated_db)
 
 async def test_transcript_search_uses_its_gin_index_under_rls(migrated_db):
     """Journal plan Part 3 fix 1. Under RLS the GIN index was unreachable for every tenant (the
-    `@@` operator was not leakproof), so search read the tenant's whole slice. With the
-    composite (org_id, tsv) index and a leakproof `ts_match_vq`, the plan uses the index."""
-    engine = await _engine(APP_URL)
+    `@@` operator was not leakproof), so search read the tenant's whole slice. With a leakproof
+    `ts_match_vq` the `@@` qual becomes an INDEX CONDITION on the composite (org_id, tsv) index.
+
+    On a near-empty table the planner rightly prefers the org_id btree, so the competing org_id
+    indexes are dropped inside a rolled-back transaction; the assertion is that `tsv @@` is an
+    index condition (with a non-leakproof `@@` it can only ever be a filter)."""
+    engine = await _engine(migrated_db)
     org = uuid.uuid4()
     try:
-        async with engine.begin() as conn:
+        async with engine.connect() as conn:
+            trans = await conn.begin()
+            for ddl in (
+                "DROP INDEX intelligence.ix_intelligence_transcript_chunk_search_org_id",
+                "DROP INDEX intelligence.ix_intelligence_transcript_chunk_search_org_meeting",
+                "ALTER TABLE intelligence.transcript_chunk_search "
+                "DROP CONSTRAINT transcript_chunk_search_org_chunk_uq",
+            ):
+                await conn.execute(text(ddl))
+            await conn.execute(text("SET LOCAL ROLE mytheus_ai_app"))
             await conn.execute(
                 text("SELECT set_config('app.current_org', :o, true)"), {"o": str(org)}
             )
@@ -268,7 +281,9 @@ async def test_transcript_search_uses_its_gin_index_under_rls(migrated_db):
                     {"o": str(org)},
                 )
             )
+            await trans.rollback()
     finally:
         await engine.dispose()
     assert "ix_intelligence_transcript_chunk_search_org_tsv" in plan, plan
-    assert "tsv @@" in plan.split("Index Cond:", 1)[-1], plan
+    index_conds = [line for line in plan.splitlines() if "Index Cond:" in line]
+    assert any("tsv @@" in line for line in index_conds), plan
