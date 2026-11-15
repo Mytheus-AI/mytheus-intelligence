@@ -38,7 +38,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: the test suite runs this in-process (the migrated_db
+    # fixture), and the default disabled every logger created before it, so any later test that
+    # asserts on a log line (caplog) failed depending on test order.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Raw SQL migrations (schema/role/RLS DDL is not autogenerate-friendly); no ORM metadata here.
 target_metadata = None

@@ -71,8 +71,10 @@ async def test_two_independent_alembic_version_tables(migrated_db):
     # top of that (down_revision = b3f7a1c9e402), so head moved again — updating this to the new
     # head is the correct, expected consequence of a later migration landing, not a regression;
     # the test's actual intent ("this repo's own history advanced to head, the backend's did
-    # not move") is unchanged. The polish plan added "e7c1a9d2b4f5" (the FTS confidential flag).
-    assert mine == "e7c1a9d2b4f5"
+    # not move") is unchanged. The polish plan added "e7c1a9d2b4f5" (the FTS confidential flag);
+    # journal plan Part 3 added "f2a6c8e1b3d5" (InitPlan policies, FTS under RLS) and
+    # "a3c5e7f9b1d2" (relay column grants).
+    assert mine == "a3c5e7f9b1d2"
     # mytheus-backend's own alembic_version table exists independently, if that repo's
     # migrations have ever run against this database. This repo does not touch it either way.
     assert backend_exists in (True, False)
@@ -155,3 +157,133 @@ async def test_relay_role_drains_across_tenants_but_has_no_other_grant(migrated_
         with pytest.raises(sa.exc.DBAPIError, match="permission denied"):
             await conn.execute(text("SELECT count(*) FROM intelligence.inbox"))
     await engine.dispose()
+
+
+async def test_relay_can_update_only_the_drain_columns(migrated_db):
+    """Journal plan Part 3 fix 4, migration `a3c5e7f9b1d2`. The drain policy reaches every
+    tenant, so a table-level UPDATE let the relay re-key a pending event into another tenant
+    (`org_id`), retarget it (`topic`) or forge it (`payload`) before publishing. Only
+    `published_at` and `attempts` may change."""
+    org, other = uuid.uuid4(), uuid.uuid4()
+    idem = f"relaycol-{org}"
+    app = await _engine(APP_URL)
+    try:
+        async with app.begin() as conn:
+            await conn.execute(
+                text("SELECT set_config('app.current_org', :o, true)"), {"o": str(org)}
+            )
+            await conn.execute(_INSERT_OUTBOX_ROW, {"org_id": str(org), "idem": idem})
+    finally:
+        await app.dispose()
+
+    relay = await _engine(RELAY_URL)
+    try:
+        for column, value in (
+            ("org_id", f"'{other}'"),
+            ("topic", "'decisions'"),
+            ("payload", "'{\"forged\": true}'::jsonb"),
+            ("partition_key", "'x'"),
+            ("idempotency_key", "'x'"),
+            ("schema_subject", "'x'"),
+        ):
+            with pytest.raises(sa.exc.DBAPIError, match="permission denied"):
+                async with relay.begin() as conn:
+                    await conn.execute(
+                        text(  # noqa: S608 - fixed list above
+                            f"UPDATE intelligence.outbox SET {column} = {value} "
+                            "WHERE idempotency_key = :k"
+                        ),
+                        {"k": idem},
+                    )
+        async with relay.begin() as conn:
+            locked = (
+                await conn.execute(
+                    text(
+                        "SELECT id FROM intelligence.outbox WHERE idempotency_key = :k "
+                        "FOR UPDATE SKIP LOCKED"
+                    ),
+                    {"k": idem},
+                )
+            ).scalar_one()
+            result = await conn.execute(
+                text(
+                    "UPDATE intelligence.outbox SET published_at = now(), "
+                    "attempts = attempts + 1 WHERE id = :id"
+                ),
+                {"id": locked},
+            )
+            assert result.rowcount == 1
+    finally:
+        await relay.dispose()
+
+
+async def test_every_intelligence_tenant_policy_is_in_initplan_form(migrated_db):
+    """Journal plan Part 3 fix 1, migration `f2a6c8e1b3d5`: the tenant predicate is evaluated
+    once per statement (InitPlan), never per row; the fail-closed NULLIF is unchanged."""
+    engine = await _engine(migrated_db)
+    try:
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        "SELECT tablename, policyname, coalesce(qual, '') || ' ' || "
+                        "coalesce(with_check, '') AS expr FROM pg_policies "
+                        "WHERE schemaname = 'intelligence' AND (coalesce(qual, '') || "
+                        "coalesce(with_check, '')) LIKE '%app.current_org%'"
+                    )
+                )
+            ).all()
+    finally:
+        await engine.dispose()
+    assert rows, "no tenant policies found"
+    for table, policy, expr in rows:
+        assert "SELECT (NULLIF(current_setting('app.current_org'" in expr, (table, policy)
+        bare = expr.replace(
+            "( SELECT (NULLIF(current_setting('app.current_org'::text, true), ''::text))::uuid "
+            'AS "nullif")',
+            "",
+        )
+        assert "current_setting('app.current_org'" not in bare, (table, policy, expr)
+
+
+async def test_transcript_search_uses_its_gin_index_under_rls(migrated_db):
+    """Journal plan Part 3 fix 1. Under RLS the GIN index was unreachable for every tenant (the
+    `@@` operator was not leakproof), so search read the tenant's whole slice. With a leakproof
+    `ts_match_vq` the `@@` qual becomes an INDEX CONDITION on the composite (org_id, tsv) index.
+
+    On a near-empty table the planner rightly prefers the org_id btree, so the competing org_id
+    indexes are dropped inside a rolled-back transaction; the assertion is that `tsv @@` is an
+    index condition (with a non-leakproof `@@` it can only ever be a filter)."""
+    engine = await _engine(migrated_db)
+    org = uuid.uuid4()
+    try:
+        async with engine.connect() as conn:
+            trans = await conn.begin()
+            for ddl in (
+                "DROP INDEX intelligence.ix_intelligence_transcript_chunk_search_org_id",
+                "DROP INDEX intelligence.ix_intelligence_transcript_chunk_search_org_meeting",
+                "ALTER TABLE intelligence.transcript_chunk_search "
+                "DROP CONSTRAINT transcript_chunk_search_org_chunk_uq",
+            ):
+                await conn.execute(text(ddl))
+            await conn.execute(text("SET LOCAL ROLE mytheus_ai_app"))
+            await conn.execute(
+                text("SELECT set_config('app.current_org', :o, true)"), {"o": str(org)}
+            )
+            await conn.execute(text("SET LOCAL enable_seqscan = off"))
+            plan = "\n".join(
+                r[0]
+                for r in await conn.execute(
+                    text(
+                        "EXPLAIN SELECT chunk_id FROM intelligence.transcript_chunk_search "
+                        "WHERE org_id = :o AND tsv @@ websearch_to_tsquery('english', 'kestrel')"
+                    ),
+                    {"o": str(org)},
+                )
+            )
+            await trans.rollback()
+    finally:
+        await engine.dispose()
+    assert "ix_intelligence_transcript_chunk_search_org_tsv" in plan, plan
+    index_conds = [line for line in plan.splitlines() if "Index Cond:" in line]
+    assert any("tsv @@" in line for line in index_conds), plan

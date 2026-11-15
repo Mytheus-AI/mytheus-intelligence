@@ -64,6 +64,10 @@ os.environ["MINIO_SECRET_KEY"] = "mytheus-dev-secret"
 
 BOOTSTRAP_URL = os.environ.get("BOOTSTRAP_DATABASE_URL") or _DEFAULT_BOOTSTRAP
 os.environ.setdefault("DATABASE_URL", BOOTSTRAP_URL)
+# The process-wide database role guard (libs/shared/db_guard.py) refuses the schema owner, which
+# these fixtures connect as on purpose. It is switched off for the suite and switched back on by
+# tests/test_db_role_guard.py, which proves it refuses every way of bypassing RLS.
+os.environ["MYTHEUS_DB_ROLE_GUARD"] = "off"
 _SYNC_URL = BOOTSTRAP_URL.replace("+asyncpg", "")
 
 # Dev-only passwords, same convention as mytheus-backend: the migration creates these roles

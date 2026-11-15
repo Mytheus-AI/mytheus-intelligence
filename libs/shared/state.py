@@ -122,6 +122,10 @@ class AgentResult:
     # Overrides the window's id on `agent-results` (and in the idempotency key). ProactiveAgent
     # sets `proactive:{alert_type}:{subject}` so a replay of any trigger yields the same key.
     window_id: str | None = None
+    # Attribution on `agent-results` (journal plan Part 3 fix 11): the prompt `key@version` and
+    # the exact model id(s) the result came from. BaseAgent.process fills them; None = unknown.
+    prompt_version: str | None = None
+    model_id: str | None = None
 
 
 @dataclass

@@ -627,6 +627,49 @@ async def test_a_blocked_budget_returns_nothing(prompts):
     assert agent.blocked and llm.calls == []
 
 
+async def test_a_result_names_the_prompt_version_and_the_models_it_came_from(prompts):
+    """Journal plan Part 3 fix 11 (attribution): every card says which prompt key@version and
+    which exact model id(s) produced it, so it is reproducible and attributable."""
+    from libs.shared.router import TIER_MODELS
+
+    user = uuid.uuid4()
+    agent = TwoStepAgent(
+        prompts, LiteLLMRouter(budget_gate(fakeredis.aioredis.FakeRedis()), Sink(), FakeLLM("0.9"))
+    )
+    await agent.spawn(org_id=ORG, meeting_id=MEETING, user_id=user)
+    result = await agent.process(await _window_state(user))
+    assert result is not None
+    assert result.prompt_version == "two_step@v2"  # ORG is pinned to v2 in the registry
+    assert result.model_id == ",".join([TIER_MODELS["triage"], TIER_MODELS["extract"]])
+
+
+async def test_the_emitter_puts_attribution_on_agent_results():
+    seen: list[dict[str, Any]] = []
+
+    class Capture:
+        def serialize_for(self, topic: str, value: dict[str, Any]) -> bytes:
+            seen.append(value)
+            return b"x"
+
+    e = Emitter(FakeProducer(), Capture())  # type: ignore[arg-type]
+    state = await _window_state(uuid.uuid4())
+    result = AgentResult(
+        kind="note",
+        content="c",
+        relevance_score=0.9,
+        confidence=0.9,
+        source_chunk_ids=[],
+        prompt_version="personal_listener@v4",
+        model_id="claude-haiku-5-5",
+    )
+    await e.result(
+        window=state.chunk, user_id=state.user_id, agent="PersonalListenerAgent", result=result
+    )
+    payload = seen[-1].get("payload", seen[-1])
+    assert payload["prompt_version"] == "personal_listener@v4"
+    assert payload["model_id"] == "claude-haiku-5-5"
+
+
 # --- 5. spawner ----------------------------------------------------------------------------
 
 

@@ -226,12 +226,14 @@ async def test_generated_tsv_column_and_gin_index_are_real(migrated_db):
                     text(
                         "SELECT indexdef FROM pg_indexes WHERE schemaname = 'intelligence' "
                         "AND tablename = 'transcript_chunk_search' "
-                        "AND indexname = 'ix_intelligence_transcript_chunk_search_tsv'"
+                        # 0005 (f2a6c8e1b3d5) replaced the plain tsv GIN with a composite
+                        # (org_id, tsv) GIN, the only shape usable under RLS per tenant.
+                        "AND indexname = 'ix_intelligence_transcript_chunk_search_org_tsv'"
                     )
                 )
             ).all()
             assert len(index_rows) == 1
-            assert "gin" in index_rows[0].indexdef.lower()
+            assert "gin (org_id, tsv)" in index_rows[0].indexdef.lower()
 
             await _set_org(conn, org_id)
             await conn.execute(

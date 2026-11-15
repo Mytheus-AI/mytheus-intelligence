@@ -57,6 +57,7 @@ import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 from uuid import UUID
@@ -87,6 +88,20 @@ TIER_MODELS: dict[str, str] = {
     "extract": "anthropic/claude-sonnet-5-5",
 }
 TIER_NAMES: dict[str, str] = {"triage": "haiku", "extract": "sonnet", "high_stakes": "opus"}
+
+
+# Attribution (journal plan Part 3 fix 11). BaseAgent.process opens a recorder before running
+# an agent's graph; every model this router resolves for that run is appended to it, so the
+# `agent-results` record can name the exact model id the card came from. A mutable holder in a
+# ContextVar (not the value itself) because LangGraph runs nodes in child tasks, whose own
+# ContextVar writes would never reach the parent.
+MODELS_USED: ContextVar[list[str] | None] = ContextVar("mytheus_models_used", default=None)
+
+
+def _record_model(model: str) -> None:
+    used = MODELS_USED.get()
+    if used is not None and model not in used:
+        used.append(model)
 
 
 class BudgetBlocked(Exception):
@@ -257,6 +272,7 @@ class LiteLLMRouter:
         if decision == "throttle":
             tier = "triage"
         model = self._models[tier]
+        _record_model(model)
         key = None
         if self._cache is not None and prompt_ref:
             key = cache_key(
@@ -458,6 +474,7 @@ class LiteLLMRouter:
         if decision == "throttle":
             tier = "triage"
         model = self._models[tier]
+        _record_model(model)
         system_blocks: list[dict[str, Any]] = [
             {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
         ]
