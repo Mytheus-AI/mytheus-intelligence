@@ -36,6 +36,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run black --check .
@@ -80,6 +82,8 @@ jobs:
           repository: Mytheus-AI/mytheus-events
           path: _events
       - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
       - run: uv sync
 
       - name: start Redpanda with a Schema Registry
