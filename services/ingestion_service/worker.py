@@ -20,6 +20,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from libs.shared.avro_codec import AvroCodec
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.object_storage import get_client
 from services.ingestion_service.consumer import IntegrationEventConsumer
 
@@ -40,7 +41,7 @@ def main() -> None:
         redis=Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6390")),
         codec=AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085")),
         dlq_producer=Producer(
-            {"bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092")}
+            kafka_conf({"bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092")})
         ),
     )
     consumer.run_forever(brokers=os.environ.get("REDPANDA_BROKERS", "localhost:9092"))

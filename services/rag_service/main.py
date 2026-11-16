@@ -53,6 +53,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from libs.shared.app import create_app
 from libs.shared.auth import _bearer, org_id_from, verify_token
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.service_auth import SERVICE_HEADER, ServiceAuthError, authenticate
 from services.agent_runtime_service.promises import PromiseExtractor
 from services.rag_service.clients import ScopeUnavailable
@@ -250,12 +251,14 @@ def _wire_from_env() -> (
     redis = from_url(os.environ.get("REDIS_URL", "redis://localhost:6390"))
     gate = BudgetGate(redis, BillingRefresher(service="rag-service", token=token))
     producer = Producer(
-        {
-            "bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092"),
-            "acks": "all",
-            "enable.idempotence": True,
-            "linger.ms": 5,
-        }
+        kafka_conf(
+            {
+                "bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092"),
+                "acks": "all",
+                "enable.idempotence": True,
+                "linger.ms": 5,
+            }
+        )
     )
     usage = UsageEmitter(
         producer, AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085"))

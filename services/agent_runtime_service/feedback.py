@@ -23,6 +23,7 @@ import socket
 from typing import Any, Protocol
 from uuid import UUID
 
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.tenancy import parse_org_id
 
 logger = logging.getLogger(__name__)
@@ -39,12 +40,14 @@ def feedback_group(hostname: str | None = None) -> str:
 
 
 def consumer_config(brokers: str, hostname: str | None = None) -> dict[str, Any]:
-    return {
-        "bootstrap.servers": brokers,
-        "group.id": feedback_group(hostname),
-        "auto.offset.reset": "latest",
-        "enable.auto.commit": True,
-    }
+    return kafka_conf(
+        {
+            "bootstrap.servers": brokers,
+            "group.id": feedback_group(hostname),
+            "auto.offset.reset": "latest",
+            "enable.auto.commit": True,
+        }
+    )
 
 
 class FeedbackListener:

@@ -52,6 +52,7 @@ from uuid import UUID
 
 import httpx
 
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import CompanyContext
 from libs.shared.prompts import PromptLoader
@@ -878,12 +879,14 @@ async def run_minutes_loop(
 
 
 def consumer_config(brokers: str) -> dict[str, Any]:
-    return {
-        "bootstrap.servers": brokers,
-        "group.id": GROUP,
-        "enable.auto.commit": False,
-        # A new group starts at the end: no minutes (and no model calls) for historic meetings.
-        "auto.offset.reset": "latest",
-        # One meeting's minutes take a minute or two of model time: keep the group alive.
-        "max.poll.interval.ms": 900_000,
-    }
+    return kafka_conf(
+        {
+            "bootstrap.servers": brokers,
+            "group.id": GROUP,
+            "enable.auto.commit": False,
+            # A new group starts at the end: no minutes (and no model calls) for historic meetings.
+            "auto.offset.reset": "latest",
+            # One meeting's minutes take a minute or two of model time: keep the group alive.
+            "max.poll.interval.ms": 900_000,
+        }
+    )

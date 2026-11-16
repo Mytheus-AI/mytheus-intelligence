@@ -75,6 +75,7 @@ import httpx
 
 from libs.shared.index_guard import RouterClassifier
 from libs.shared.json_answer import json_object
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.kg_client import KgClient
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import CompanyContext, Goal
@@ -1540,12 +1541,14 @@ async def run_assumption_watch_loop(
 
 
 def consumer_config(brokers: str) -> dict[str, Any]:
-    return {
-        "bootstrap.servers": brokers,
-        "group.id": GROUP,
-        "enable.auto.commit": False,
-        # A new group starts at the end: no checks (and no model calls) for historic meetings.
-        "auto.offset.reset": "latest",
-        # One check is one model call over a whole meeting: keep the group alive.
-        "max.poll.interval.ms": 900_000,
-    }
+    return kafka_conf(
+        {
+            "bootstrap.servers": brokers,
+            "group.id": GROUP,
+            "enable.auto.commit": False,
+            # A new group starts at the end: no checks (and no model calls) for historic meetings.
+            "auto.offset.reset": "latest",
+            # One check is one model call over a whole meeting: keep the group alive.
+            "max.poll.interval.ms": 900_000,
+        }
+    )

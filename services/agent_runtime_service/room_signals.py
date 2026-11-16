@@ -56,6 +56,7 @@ from uuid import UUID
 import httpx
 
 from libs.shared.json_answer import json_object
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.org_context import CompanyContext
 from libs.shared.prompts import Prompt, PromptLoader
@@ -872,11 +873,13 @@ async def run_room_signals_loop(
 
 
 def consumer_config(brokers: str) -> dict[str, Any]:
-    return {
-        "bootstrap.servers": brokers,
-        "group.id": GROUP,
-        "enable.auto.commit": False,
-        # A new group starts at the end: no historic meeting is analysed (or billed).
-        "auto.offset.reset": "latest",
-        "max.poll.interval.ms": 900_000,
-    }
+    return kafka_conf(
+        {
+            "bootstrap.servers": brokers,
+            "group.id": GROUP,
+            "enable.auto.commit": False,
+            # A new group starts at the end: no historic meeting is analysed (or billed).
+            "auto.offset.reset": "latest",
+            "max.poll.interval.ms": 900_000,
+        }
+    )

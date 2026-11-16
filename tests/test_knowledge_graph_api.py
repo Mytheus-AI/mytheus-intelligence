@@ -145,8 +145,11 @@ async def test_lineage_over_http_is_scoped_to_the_header_org(client: TestClient)
 
 
 @needs_age
-def test_bad_requests(client: TestClient) -> None:
+def test_bad_requests(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     org = uuid.uuid4()
+    ok_off = {"cypher": "MATCH (d:Decision {org_id: $org_id}) RETURN count(d)", "columns": ["n"]}
+    assert client.post("/graph/cypher", json=ok_off, headers=_h(org)).status_code == 404
+    monkeypatch.setenv("KG_ADHOC_CYPHER", "1")
     assert client.post("/graph/query/nope", json={}, headers=_h(org)).status_code == 404
     bad = {"params": {"decision_id": "x"}}
     assert (

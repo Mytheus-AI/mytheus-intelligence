@@ -73,6 +73,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.tenancy import parse_org_id
 from services.agent_runtime_service.runtime import AgentRuntime, as_user_id
 from services.agent_runtime_service.windowing import (
@@ -443,7 +444,14 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     brokers = os.environ.get("REDPANDA_BROKERS", "localhost:9092")
     codec = AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085"))
     producer = Producer(
-        {"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True, "linger.ms": 5}
+        kafka_conf(
+            {
+                "bootstrap.servers": brokers,
+                "acks": "all",
+                "enable.idempotence": True,
+                "linger.ms": 5,
+            }
+        )
     )
     emitter = Emitter(producer, codec)
     redis = from_url(os.environ.get("REDIS_URL", "redis://localhost:6390"))
@@ -462,12 +470,14 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     # delivery errors never fail a window commit (the window emitter has its own error list).
     a2a_emitter = Emitter(
         Producer(
-            {
-                "bootstrap.servers": brokers,
-                "acks": "all",
-                "enable.idempotence": True,
-                "linger.ms": 0,
-            }
+            kafka_conf(
+                {
+                    "bootstrap.servers": brokers,
+                    "acks": "all",
+                    "enable.idempotence": True,
+                    "linger.ms": 0,
+                }
+            )
         ),
         codec,
         on_error=lambda err: logger.warning("a2a delivery failed: %s", err),
@@ -574,7 +584,11 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         proactive_consumer.subscribe(PROACTIVE_TOPICS)
         a2a_consumers.append(proactive_consumer)
         alert_emitter = Emitter(
-            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            Producer(
+                kafka_conf(
+                    {"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}
+                )
+            ),
             codec,
         )
         proactive_loop = ProactiveLoop(
@@ -601,7 +615,11 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         minutes_consumer.subscribe([MINUTES_TOPIC])
         a2a_consumers.append(minutes_consumer)
         minutes_emitter = Emitter(
-            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            Producer(
+                kafka_conf(
+                    {"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}
+                )
+            ),
             codec,
         )
         minutes_loop = MinutesLoop(
@@ -628,7 +646,11 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         room_consumer.subscribe([ROOM_SIGNALS_TOPIC])
         a2a_consumers.append(room_consumer)
         room_emitter = Emitter(
-            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            Producer(
+                kafka_conf(
+                    {"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}
+                )
+            ),
             codec,
         )
         room_loop = RoomSignalsLoop(
@@ -663,7 +685,11 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         watch_consumer.subscribe([MINUTES_TOPIC])
         a2a_consumers.append(watch_consumer)
         watch_emitter = Emitter(
-            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            Producer(
+                kafka_conf(
+                    {"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}
+                )
+            ),
             codec,
         )
         watch_loop = AssumptionWatchLoop(
@@ -684,7 +710,11 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         bets_consumer.subscribe([BETS_TOPIC])
         a2a_consumers.append(bets_consumer)
         bets_emitter = Emitter(
-            Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+            Producer(
+                kafka_conf(
+                    {"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}
+                )
+            ),
             codec,
         )
         bets_loop = BetsLoop(
@@ -709,12 +739,14 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
         a2a_consumers.append(translation_consumer)
     loop = Loop(runtime, emitter, Windower(WindowSettings.from_env()))
     consumer = Consumer(
-        {
-            "bootstrap.servers": brokers,
-            "group.id": GROUP,
-            "enable.auto.commit": False,
-            "auto.offset.reset": "earliest",
-        }
+        kafka_conf(
+            {
+                "bootstrap.servers": brokers,
+                "group.id": GROUP,
+                "enable.auto.commit": False,
+                "auto.offset.reset": "earliest",
+            }
+        )
     )
     consumer.subscribe(TOPICS)
     committed: dict[tuple[str, int], int] = {}

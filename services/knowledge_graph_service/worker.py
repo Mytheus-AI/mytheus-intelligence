@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from libs.shared.age import age_database_url
 from libs.shared.avro_codec import AvroCodec
+from libs.shared.kafka_auth import kafka_conf
 from services.knowledge_graph_service.connection import age_connection
 from services.knowledge_graph_service.consumer import TenantTopicSeedConsumer
 from services.knowledge_graph_service.erasure_consumer import (
@@ -57,7 +58,7 @@ def _deps() -> dict[str, Any]:
         "session_factory": async_sessionmaker(engine, expire_on_commit=False),
         "redis": Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6390")),
         "codec": AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085")),
-        "dlq_producer": Producer({"bootstrap.servers": brokers}),
+        "dlq_producer": Producer(kafka_conf({"bootstrap.servers": brokers})),
     }
 
 

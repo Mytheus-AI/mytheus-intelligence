@@ -31,6 +31,7 @@ import logging
 from typing import Any, Protocol
 from uuid import UUID
 
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.state import AgentResult
 from services.agent_runtime_service import decision_why
 from services.agent_runtime_service.agents.proactive_agent import (
@@ -160,11 +161,13 @@ async def run_proactive_loop(
 
 
 def consumer_config(brokers: str) -> dict[str, Any]:
-    return {
-        "bootstrap.servers": brokers,
-        "group.id": GROUP,
-        "enable.auto.commit": False,
-        # A new group starts at the end: replaying every historic decision on first deploy
-        # would flood users with stale alerts and bill a model call per old decision.
-        "auto.offset.reset": "latest",
-    }
+    return kafka_conf(
+        {
+            "bootstrap.servers": brokers,
+            "group.id": GROUP,
+            "enable.auto.commit": False,
+            # A new group starts at the end: replaying every historic decision on first deploy
+            # would flood users with stale alerts and bill a model call per old decision.
+            "auto.offset.reset": "latest",
+        }
+    )

@@ -26,10 +26,12 @@ from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer, AvroSerializer
 from confluent_kafka.serialization import MessageField, SerializationContext
 
+from libs.shared.kafka_auth import registry_conf
+
 
 class AvroCodec:
     def __init__(self, schema_registry_url: str) -> None:
-        self._client = SchemaRegistryClient({"url": schema_registry_url})
+        self._client = SchemaRegistryClient(registry_conf({"url": schema_registry_url}))
         self._serializers: dict[str, AvroSerializer] = {}
         self._deserializers: dict[str, AvroDeserializer] = {}
 
