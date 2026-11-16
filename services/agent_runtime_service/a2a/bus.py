@@ -59,6 +59,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.rag_client import RagClient, RagPassage
 from services.agent_runtime_service.a2a.collab import (
     AGENT,
@@ -700,7 +701,7 @@ async def run_response_loop(
 
 
 def consumer_configs(brokers: str, hostname: str | None = None) -> dict[str, dict[str, Any]]:
-    common = {"bootstrap.servers": brokers, "enable.auto.commit": True}
+    common = kafka_conf({"bootstrap.servers": brokers, "enable.auto.commit": True})
     return {
         "requests": {**common, "group.id": RESPONDER_GROUP, "auto.offset.reset": "latest"},
         "responses": {

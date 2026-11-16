@@ -51,6 +51,7 @@ from uuid import UUID
 
 import httpx
 
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.metrics import record_off_record_skip
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.off_record import is_off_record
@@ -307,11 +308,13 @@ def router_from_env(service: str, redis: Any) -> Any:
     from libs.shared.usage import UsageEmitter
 
     producer = Producer(
-        {
-            "bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092"),
-            "acks": "all",
-            "enable.idempotence": True,
-        }
+        kafka_conf(
+            {
+                "bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092"),
+                "acks": "all",
+                "enable.idempotence": True,
+            }
+        )
     )
     codec = AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085"))
     return LiteLLMRouter(

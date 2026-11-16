@@ -8,6 +8,7 @@ the only `org_id` any Cypher ever binds. Secrets: `MYTHEUS_KG_CALLER_TOKENS`.
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
@@ -90,8 +91,16 @@ async def query_template(
     return TemplateResponse(template=template, nodes=[NodeOut(**n.as_dict()) for n in nodes])
 
 
+def adhoc_enabled() -> bool:
+    """The free-form Cypher route is a debugging surface with no production caller; it answers
+    404 unless an operator turns it on with KG_ADHOC_CYPHER=1."""
+    return os.environ.get("KG_ADHOC_CYPHER", "").strip() == "1"
+
+
 @router.post("/cypher", response_model=CypherResponse)
 async def query_cypher(body: CypherRequest, caller: Caller, conn: Conn) -> CypherResponse:
+    if not adhoc_enabled():
+        raise HTTPException(status_code=404, detail="ad-hoc Cypher is disabled")
     try:
         rows = await run_adhoc(conn, caller.org_id, body.cypher, body.params, body.columns)
     except AgeQueryRejected as exc:

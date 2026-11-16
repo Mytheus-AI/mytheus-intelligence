@@ -147,6 +147,59 @@ def encode_params(org_id: UUID, params: Mapping[str, Any] | None = None) -> str:
     return json.dumps(merged, separators=(",", ":"), sort_keys=True)
 
 
+_COMMENT_OR_STRING = re.compile(
+    r"//[^\n]*|/\*.*?\*/|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"", re.DOTALL
+)
+
+
+def cypher_code(cypher: str) -> str:
+    """The statement with comments removed and every string literal emptied, so that tenant
+    checks look only at what the engine executes."""
+    return _COMMENT_OR_STRING.sub(lambda m: "''" if m.group(0)[0] in "'\"" else " ", cypher)
+
+
+_SCOPED_MAP = re.compile(r"\borg_id\s*:\s*\$org_id\b")
+# A node pattern: `(`, optional variable, optional label, optional property map, `)`. The
+# look-behind keeps function calls such as `count(d)` and grouping parentheses out.
+_NODE = re.compile(r"(?<![\w\])])\(\s*([A-Za-z_]\w*)?\s*(?::\s*[A-Za-z_]\w*\s*)?(\{[^{}]*\})?\s*\)")
+# A relationship pattern in brackets: `[`, optional variable, optional type(s), optional map, `]`.
+_REL = re.compile(r"\[\s*([A-Za-z_]\w*)?\s*(?::\s*[A-Za-z_][\w|:]*\s*)?(\{[^{}]*\})?\s*\]")
+_VAR_LENGTH = re.compile(r"\[[^\]]*\*[^\]]*\]")
+_BARE_REL = re.compile(r"\)\s*<?-{1,2}>?\s*\(")
+
+
+def require_fully_scoped(cypher: str) -> None:
+    """Strict tenant check for caller-supplied (ad-hoc) Cypher: EVERY node and relationship the
+    statement matches must carry `{org_id: $org_id}` in its own pattern, or reuse a variable that
+    was bound by such a pattern. Variable-length paths and bracketless relationships are refused,
+    because their intermediate nodes and edges cannot carry the filter. Binding `$org_id` once
+    (on an anchor only, or in a WHERE) is not enough: traversal from a scoped anchor across a
+    cross-tenant edge reaches another tenant (cross-store study G1). The shipped templates are
+    code-reviewed constants that already scope every element; this check is for text that
+    arrives over the wire."""
+    code = cypher_code(cypher)
+    if _VAR_LENGTH.search(code):
+        raise AgeQueryRejected("ad-hoc Cypher may not use variable-length relationships")
+    if _BARE_REL.search(code):
+        raise AgeQueryRejected("ad-hoc Cypher relationships must be written [r {org_id: $org_id}]")
+    patterns = [("node", m) for m in _NODE.finditer(code)] + [
+        ("relationship", m) for m in _REL.finditer(code)
+    ]
+    if not any(kind == "node" for kind, _ in patterns):
+        raise AgeQueryRejected("ad-hoc Cypher must match at least one node pattern")
+    scoped = {
+        m.group(1) for _, m in patterns if m.group(1) and _SCOPED_MAP.search(m.group(2) or "")
+    }
+    for kind, m in patterns:
+        var, props = m.group(1), m.group(2) or ""
+        if _SCOPED_MAP.search(props) or (var is not None and var in scoped):
+            continue
+        raise AgeQueryRejected(
+            f"ad-hoc Cypher: every {kind} pattern must carry {{org_id: $org_id}} "
+            f"(offending pattern {m.group(0).strip()!r})"
+        )
+
+
 def build_cypher_sql(cypher: str, columns: Sequence[str]) -> str:
     """Wrap a code-authored Cypher statement in AGE's `cypher()` SQL function.
 
@@ -156,7 +209,9 @@ def build_cypher_sql(cypher: str, columns: Sequence[str]) -> str:
     parameter, so it is not cast."""
     if "$$" in cypher:
         raise AgeQueryRejected("Cypher text may not contain '$$'")
-    if not re.search(r"\$org_id\b", cypher):
+    # Look for the binding in the CODE only: `$org_id` inside a comment or a string literal binds
+    # nothing (cross-store study G1: both passed the old substring test).
+    if not re.search(r"\$org_id\b", cypher_code(cypher)):
         raise AgeQueryRejected("every nexus_knowledge statement must bind $org_id")
     if not columns:
         raise AgeQueryRejected("at least one result column is required")

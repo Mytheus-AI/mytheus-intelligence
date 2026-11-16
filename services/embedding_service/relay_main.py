@@ -22,6 +22,7 @@ from confluent_kafka import Producer
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from libs.shared.avro_codec import AvroCodec
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.relay import RelayProducer, relay_once
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ async def run_forever() -> None:
     engine = create_async_engine(relay_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     producer: RelayProducer = _KafkaAvroProducer(
-        Producer({"bootstrap.servers": brokers}), AvroCodec(registry_url)
+        Producer(kafka_conf({"bootstrap.servers": brokers})), AvroCodec(registry_url)
     )
 
     logger.info("embedding-service relay: draining intelligence.outbox -> %s", brokers)

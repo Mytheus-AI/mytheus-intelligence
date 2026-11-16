@@ -29,7 +29,13 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
-from libs.shared.age import AgeConnection, AgeQueryRejected, build_cypher_sql, encode_params
+from libs.shared.age import (
+    AgeConnection,
+    AgeQueryRejected,
+    build_cypher_sql,
+    encode_params,
+    require_fully_scoped,
+)
 
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 50
@@ -254,11 +260,14 @@ async def run_adhoc(
     params: Mapping[str, Any] | None,
     columns: Sequence[str],
 ) -> list[list[Any]]:
-    """`POST /graph/cypher`: internal-only, read-only, fail-closed. Refused unless the text binds
-    `$org_id` (checked by `build_cypher_sql`); refused on any write clause; and run inside a READ
-    ONLY transaction anyway, so a clause the regex misses still cannot write."""
+    """`POST /graph/cypher`: internal-only, read-only, fail-closed. Refused on any write clause;
+    refused unless every node and relationship pattern carries `{org_id: $org_id}`
+    (`require_fully_scoped`, which also ignores `$org_id` inside comments and strings); and run
+    inside a READ ONLY transaction anyway, so a clause the regex misses still cannot write. The
+    HTTP route is off unless `KG_ADHOC_CYPHER=1` (no production caller uses it)."""
     if _WRITE_CLAUSE.search(cypher):
         raise AgeQueryRejected("ad-hoc Cypher is read-only")
+    require_fully_scoped(cypher)
     sql = build_cypher_sql(cypher, columns)
     await _read_only(conn)
     try:

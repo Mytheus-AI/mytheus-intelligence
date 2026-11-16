@@ -49,6 +49,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from libs.shared.index_guard import WINDOW_MS, mark_key
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.metrics import record_caption_translation, record_off_record_skip
 from libs.shared.never_record import NeverRecordPolicy
 from libs.shared.off_record import is_off_record
@@ -347,12 +348,14 @@ def enabled() -> bool:
 
 
 def consumer_config(brokers: str) -> dict[str, Any]:
-    return {
-        "bootstrap.servers": brokers,
-        "group.id": GROUP,
-        "enable.auto.commit": True,
-        "auto.offset.reset": "latest",
-    }
+    return kafka_conf(
+        {
+            "bootstrap.servers": brokers,
+            "group.id": GROUP,
+            "enable.auto.commit": True,
+            "auto.offset.reset": "latest",
+        }
+    )
 
 
 async def run_translation_loop(
@@ -392,7 +395,7 @@ def start_translation(
     consumer = Consumer(consumer_config(brokers))
     consumer.subscribe([TOPIC])
     sink = Emitter(
-        Producer({"bootstrap.servers": brokers, "acks": "all", "linger.ms": 0}),
+        Producer(kafka_conf({"bootstrap.servers": brokers, "acks": "all", "linger.ms": 0})),
         codec,
         on_error=lambda err: logger.warning("caption translation delivery failed: %s", err),
     )
@@ -420,7 +423,9 @@ async def run() -> None:  # pragma: no cover - the confluent-kafka harness
     codec = AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085"))
     redis = from_url(os.environ.get("REDIS_URL", "redis://localhost:6390"))
     usage = Emitter(
-        Producer({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True}),
+        Producer(
+            kafka_conf({"bootstrap.servers": brokers, "acks": "all", "enable.idempotence": True})
+        ),
         codec,
         on_error=lambda err: logger.error("usage-events delivery failed: %s", err),
     )

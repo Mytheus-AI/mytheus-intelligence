@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from libs.shared.avro_codec import AvroCodec
 from libs.shared.consumer import BaseConsumer
 from libs.shared.index_guard import guard_from_env
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.qdrant import write_client
 from services.embedding_service.erasure_consumer import (
     ErasureAwareDecisionEmbeddingConsumer,
@@ -47,7 +48,7 @@ def _deps() -> dict[str, Any]:
         "redis": Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6390")),
         "codec": AvroCodec(os.environ.get("SCHEMA_REGISTRY_URL", "http://localhost:8085")),
         "dlq_producer": Producer(
-            {"bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092")}
+            kafka_conf({"bootstrap.servers": os.environ.get("REDPANDA_BROKERS", "localhost:9092")})
         ),
     }
 

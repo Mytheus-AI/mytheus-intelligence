@@ -48,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from libs.shared.avro_codec import AvroCodec
 from libs.shared.events import EventEnvelope
 from libs.shared.inbox import already_recorded, dedupe_key, is_duplicate, record_consumed
+from libs.shared.kafka_auth import kafka_conf
 from libs.shared.metrics import (
     observe_consumer_lag,
     record_dlq,
@@ -329,12 +330,14 @@ class BaseConsumer(ABC):
         (`tests/test_embedding_sustained_load.py`).
         """
         consumer = Consumer(
-            {
-                "bootstrap.servers": brokers,
-                "group.id": self.group,
-                "enable.auto.commit": False,
-                "auto.offset.reset": "earliest",
-            }
+            kafka_conf(
+                {
+                    "bootstrap.servers": brokers,
+                    "group.id": self.group,
+                    "enable.auto.commit": False,
+                    "auto.offset.reset": "earliest",
+                }
+            )
         )
         if service_name() == "unknown":
             set_service(self.producer_name)
